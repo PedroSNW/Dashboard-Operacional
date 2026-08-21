@@ -563,6 +563,20 @@
                     </select>
                 </div>
 
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Terceiro Indicador (Opcional - Comparativo/Eixo Y3)</label>
+                    <select id="chartConfigInd3" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <option value="">Nenhum</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Quarto Indicador (Opcional - Comparativo/Eixo Y4)</label>
+                    <select id="chartConfigInd4" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <option value="">Nenhum</option>
+                    </select>
+                </div>
+
                 <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
                     <button type="button" onclick="closeModal('modalChartConfig')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl">Cancelar</button>
                     <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-5 py-2 rounded-xl">Gerar Gráfico</button>
@@ -1140,6 +1154,8 @@
                 document.getElementById('chartConfigSpan').value = chartObj.span;
                 document.getElementById('chartConfigInd1').value = chartObj.ind1;
                 document.getElementById('chartConfigInd2').value = chartObj.ind2 || '';
+                document.getElementById('chartConfigInd3').value = chartObj.ind3 ?? '';
+                document.getElementById('chartConfigInd4').value = chartObj.ind4 ?? '';
             } else {
                 document.getElementById('modalChartHeading').innerHTML = '<i class="fa-solid fa-chart-line text-amber-400"></i> Criar Gráfico Personalizado';
                 document.getElementById('chartConfigId').value = '';
@@ -1149,6 +1165,8 @@
                 document.getElementById('chartConfigSpan').value = '6';
                 document.getElementById('chartConfigInd1').selectedIndex = 0;
                 document.getElementById('chartConfigInd2').value = '';
+                document.getElementById('chartConfigInd3').value = '';
+                document.getElementById('chartConfigInd4').value = '';
             }
 
             document.getElementById('modalChartConfig').classList.remove('hidden');
@@ -1157,9 +1175,13 @@
         function populateChartConfigDropdowns() {
             const select1 = document.getElementById('chartConfigInd1');
             const select2 = document.getElementById('chartConfigInd2');
+            const select3 = document.getElementById('chartConfigInd3');
+            const select4 = document.getElementById('chartConfigInd4');
 
             select1.innerHTML = '';
             select2.innerHTML = '<option value="">Nenhum (Gráfico Único)</option>';
+            select3.innerHTML = '<option value="">Nenhum</option>';
+            select4.innerHTML = '<option value="">Nenhum</option>';
 
             currentData.forEach((item, index) => {
                 const opt1 = document.createElement('option');
@@ -1171,6 +1193,8 @@
                 opt2.value = index;
                 opt2.textContent = `[${item.setor}] ${item.indicador}`;
                 select2.appendChild(opt2);
+                select3.appendChild(opt2.cloneNode(true));
+                select4.appendChild(opt2.cloneNode(true));
             });
         }
 
@@ -1185,8 +1209,12 @@
             const ind1 = parseInt(document.getElementById('chartConfigInd1').value);
             const ind2Val = document.getElementById('chartConfigInd2').value;
             const ind2 = ind2Val !== '' ? parseInt(ind2Val) : null;
+            const ind3Val = document.getElementById('chartConfigInd3').value;
+            const ind3 = ind3Val !== '' ? parseInt(ind3Val) : null;
+            const ind4Val = document.getElementById('chartConfigInd4').value;
+            const ind4 = ind4Val !== '' ? parseInt(ind4Val) : null;
 
-            const chartObject = { id, title, desc, type, span, ind1, ind2 };
+            const chartObject = { id, title, desc, type, span, ind1, ind2, ind3, ind4 };
 
             const existingIdx = customCharts.findIndex(c => c.id === id);
             if (existingIdx !== -1) {
@@ -1226,11 +1254,12 @@
                 const indObj1 = currentData[c.ind1];
                 if (!indObj1) return;
 
-                const indObj2 = c.ind2 !== null ? currentData[c.ind2] : null;
+                const indicatorIndexes = [c.ind1, c.ind2, c.ind3, c.ind4]
+                    .filter(index => index !== null && index !== undefined && !isNaN(index));
+                const indicatorObjects = indicatorIndexes.map(index => currentData[index]).filter(Boolean);
+                const indObj2 = indicatorObjects[1] || null;
                 const chartMonthData = getChartMonthData(indObj1);
                 const chartLabels = chartMonthData.labels.length > 0 ? chartMonthData.labels : mesesLabels;
-                const chartValues1 = chartMonthData.values;
-                const chartValues2 = indObj2 ? getChartMonthData(indObj2).values : [];
 
                 const wrapper = document.createElement('div');
                 wrapper.className = `lg:col-span-${c.span} glass-card rounded-2xl p-5 flex flex-col`;
@@ -1260,38 +1289,35 @@
 
                 container.appendChild(wrapper);
 
-                const datasets = [
-                    {
-                        label: indObj1.indicador,
-                        data: chartValues1,
-                        borderColor: '#eab308',
-                        backgroundColor: c.type === 'doughnut' ? ['#eab308', '#10b981', '#38bdf8', '#f59e0b', '#f43f5e', '#a855f7', '#ec4899', '#06b6d4', '#84cc16'] : 'rgba(234, 179, 8, 0.2)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        yAxisID: indObj2 ? 'y1' : 'y'
-                    }
-                ];
-
-                if (indObj2) {
-                    datasets.push({
-                        label: indObj2.indicador,
-                        data: chartValues2,
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        yAxisID: 'y2'
-                    });
-                }
+                const datasetColors = ['#eab308', '#10b981', '#38bdf8', '#f43f5e'];
+                const datasets = indicatorObjects.map((indicator, index) => ({
+                    label: indicator.indicador,
+                    data: getChartMonthData(indicator).values,
+                    borderColor: datasetColors[index],
+                    backgroundColor: c.type === 'doughnut'
+                        ? ['#eab308', '#10b981', '#38bdf8', '#f43f5e']
+                        : `${datasetColors[index]}33`,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    yAxisID: indicatorObjects.length > 1 ? `y${index + 1}` : 'y'
+                }));
 
                 const scalesObj = {
                     x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
                 };
 
                 if (c.type !== 'radar' && c.type !== 'doughnut') {
-                    if (indObj2) {
-                        scalesObj.y1 = { type: 'linear', position: 'left', min: 0, beginAtZero: true, ticks: { color: '#eab308' } };
-                        scalesObj.y2 = { type: 'linear', position: 'right', min: 0, beginAtZero: true, ticks: { color: '#34d399' }, grid: { drawOnChartArea: false } };
+                    if (indicatorObjects.length > 1) {
+                        indicatorObjects.forEach((_, index) => {
+                            scalesObj[`y${index + 1}`] = {
+                                type: 'linear',
+                                position: index % 2 === 0 ? 'left' : 'right',
+                                min: 0,
+                                beginAtZero: true,
+                                ticks: { color: datasetColors[index] },
+                                grid: { drawOnChartArea: index === 0 }
+                            };
+                        });
                     } else {
                         scalesObj.y = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } };
                     }
