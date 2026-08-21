@@ -584,6 +584,9 @@
         const DATA_LABELS_STORAGE_KEY = 'dgranel_show_chart_data_labels_2026';
         const GITHUB_CSV_URL = 'https://raw.githubusercontent.com/PedroSNW/Dashboard-Operacional/main/Controle%20de%20resultados%20por%20departamentos(in).csv';
         const GITHUB_REFRESH_INTERVAL = 5 * 60 * 1000;
+        const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
+        const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w6wowhTeTPXuDiZTgSjCgA_pw_5UuQO';
+        const SUPABASE_STATE_ENDPOINT = `${SUPABASE_URL}/rest/v1/dashboard_state`;
         const DEFAULT_LOGO_SRC = 'logo.png';
 
         const BASE_MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -594,6 +597,7 @@
         let chart1Inst = null, chart2Inst = null, chart3Inst = null, chart4Inst = null, modalChartInst = null;
         let dynamicChartInstances = {};
         let showDataLabels = localStorage.getItem(DATA_LABELS_STORAGE_KEY) === 'true';
+        let supabaseReady = false;
 
         Chart.register(ChartDataLabels);
         Chart.defaults.plugins.datalabels = {
@@ -611,8 +615,9 @@
             loadStoredData();
             loadStoredCharts();
             setupDragAndDrop();
-            initSystem(true);
-            setInterval(() => carregarDadosGithub(true), GITHUB_REFRESH_INTERVAL);
+            initSystem();
+            carregarDadosCompartilhados();
+            setInterval(() => carregarDadosCompartilhados(true), GITHUB_REFRESH_INTERVAL);
         });
 
         // ================= LÓGICA DE GERENCIAMENTO DE LOGO =================
@@ -739,11 +744,65 @@
             }
         }
 
+        async function salvarDadosSupabase(data) {
+            const response = await fetch(SUPABASE_STATE_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_PUBLISHABLE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates,return=minimal'
+                },
+                body: JSON.stringify({ id: 1, data, updated_at: new Date().toISOString() })
+            });
+
+            if (!response.ok) throw new Error(`Supabase HTTP ${response.status}`);
+            supabaseReady = true;
+        }
+
+        async function carregarDadosSupabase(silencioso = false) {
+            const response = await fetch(`${SUPABASE_STATE_ENDPOINT}?id=eq.1&select=data,updated_at`, {
+                headers: {
+                    'apikey': SUPABASE_PUBLISHABLE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+                }
+            });
+
+            if (!response.ok) throw new Error(`Supabase HTTP ${response.status}`);
+            const rows = await response.json();
+            supabaseReady = true;
+            return rows[0] || null;
+        }
+
+        async function carregarDadosCompartilhados(silencioso = false) {
+            try {
+                const sharedState = await carregarDadosSupabase(silencioso);
+                if (sharedState?.data && Array.isArray(sharedState.data) && sharedState.data.length > 0) {
+                    currentData = sharedState.data;
+                    syncMonthLabels();
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
+                    initSystem();
+                    return;
+                }
+
+                if (!silencioso) await carregarDadosGithub(true);
+            } catch (error) {
+                supabaseReady = false;
+                console.error('Erro ao carregar dados compartilhados:', error);
+                if (!silencioso) alert('Não foi possível acessar o Supabase. Os dados locais continuam disponíveis.');
+            }
+        }
+
         function saveData(data) {
             currentData = data;
             syncMonthLabels();
             localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
             document.getElementById('lastUpdatedTag').textContent = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+            salvarDadosSupabase(currentData).catch(error => {
+                supabaseReady = false;
+                console.error('Erro ao salvar dados no Supabase:', error);
+                alert('Os dados foram salvos apenas neste navegador. Não foi possível sincronizar com o Supabase.');
+            });
         }
 
         function saveCustomChartsStorage() {
