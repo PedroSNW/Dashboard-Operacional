@@ -136,8 +136,8 @@
 
             <!-- AÇÕES GERAIS DE DADOS -->
             <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
-                <button onclick="carregarDadosSharePoint()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center gap-2">
-                    <i class="fa-solid fa-rotate text-slate-950"></i> Sincronizar SharePoint
+                <button onclick="carregarDadosGithub()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center gap-2">
+                    <i class="fa-brands fa-github text-slate-950"></i> Sincronizar Dados
                 </button>
 
                 <button onclick="openChartModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
@@ -582,6 +582,7 @@
         const MONTHS_STORAGE_KEY = 'dgranel_custom_months_2026';
         const LOGO_STORAGE_KEY = 'dgranel_custom_logo_2026';
         const DATA_LABELS_STORAGE_KEY = 'dgranel_show_chart_data_labels_2026';
+        const GITHUB_CSV_URL = 'https://raw.githubusercontent.com/PedroSNW/Dashboard-Operacional/main/Controle%20de%20resultados%20por%20deparatementos%20-%20JULHO%20ATUALIZADA%28Planilha1%29%28in%29%201%28in%29.csv';
         const DEFAULT_LOGO_SRC = 'logo.png';
 
         const BASE_MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -609,7 +610,7 @@
             loadStoredData();
             loadStoredCharts();
             setupDragAndDrop();
-            initSystem();
+            initSystem(true);
         });
 
         // ================= LÓGICA DE GERENCIAMENTO DE LOGO =================
@@ -747,7 +748,7 @@
             localStorage.setItem(CHARTS_STORAGE_KEY, JSON.stringify(customCharts));
         }
 
-        function initSystem() {
+        function initSystem(sincronizarGithub = false) {
             syncMonthLabels();
             updateDataLabelsButton();
             populateSetoresDropdown();
@@ -757,6 +758,7 @@
             renderDynamicCharts();
             renderTable();
             updateJSONEditor();
+            if (sincronizarGithub) carregarDadosGithub(true);
         }
 
         function toggleDataLabels() {
@@ -1528,20 +1530,18 @@
             }
         }
 
-        // FUNÇÃO DE BUSCA E LEITURA DIRETA DO SHAREPOINT COM DETECÇÃO DINÂMICA DE COLUNAS
-        async function carregarDadosSharePoint() {
-            const urlSharePoint = 'https://dgraneltransporte.sharepoint.com/:x:/s/SINAVI/IQCuHWhcv-b4Q4VyNI2L8YHSAWW8qbNFpCq9D_Vm8ddyNyA?download=1';
-
+        // BUSCA E LEITURA DIRETA DO CSV NO GITHUB
+        async function carregarDadosGithub(silencioso = false) {
             try {
-                const response = await fetch(urlSharePoint);
+                const response = await fetch(`${GITHUB_CSV_URL}?t=${Date.now()}`);
                 if (!response.ok) throw new Error(`Erro HTTP! Status: ${response.status}`);
 
                 const csvText = await response.text();
-                parseCSVContent(csvText, "SharePoint");
+                parseCSVContent(csvText, "GitHub");
 
             } catch (erro) {
-                console.error("Erro ao buscar dados do SharePoint:", erro);
-                alert("Erro de acesso/CORS ao tentar buscar o arquivo do SharePoint.");
+                console.error("Erro ao buscar dados do GitHub:", erro);
+                if (!silencioso) alert("Não foi possível carregar a planilha do GitHub. Os dados locais continuam disponíveis.");
             }
         }
 
