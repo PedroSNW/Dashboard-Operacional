@@ -1,0 +1,1763 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D'Granel - Dashboard Operacional & Segurança de Frota</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dgranel: {
+                            bg: '#070D1E',
+                            card: '#111C38',
+                            border: 'rgba(234, 179, 8, 0.15)',
+                            gold: '#EAB308',
+                            goldDark: '#CA8A04',
+                            navyLight: '#1A2A4A'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <!-- PapaParse for CSV Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #070D1E;
+            color: #f8fafc;
+        }
+        .glass-card {
+            background: rgba(17, 28, 56, 0.75);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(234, 179, 8, 0.15);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+        .glass-card:hover {
+            border-color: rgba(234, 179, 8, 0.35);
+        }
+        .tab-btn.active {
+            background-color: #CA8A04;
+            color: #ffffff;
+            border-color: #EAB308;
+            box-shadow: 0 4px 12px rgba(202, 138, 4, 0.25);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #070D1E;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1A2A4A;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #CA8A04;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-12 flex flex-col">
+
+    <!-- HEADER / NAVEGAÇÃO PRINCIPAL -->
+    <header class="border-b border-amber-500/20 bg-[#0A1329]/95 sticky top-0 z-40 backdrop-blur-md px-4 sm:px-8 py-3.5 shadow-lg">
+        <div class="max-w-[1600px] mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
+            
+            <!-- BRANDING & LOGO D'GRANEL (COM UPLOAD DE IMAGEM) -->
+            <div class="flex items-center gap-4 w-full lg:w-auto justify-between lg:justify-start">
+                <div class="flex items-center gap-3">
+                    
+                    <!-- Container Interativo da Logo -->
+                    <div 
+                        class="relative group cursor-pointer h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 p-0.5 shadow-md flex items-center justify-center overflow-hidden hover:opacity-90 transition-all border border-amber-500/30"
+                    >
+                        <img 
+                            id="dashboardLogo" 
+                            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&s=10.png" 
+                            alt="D'Granel Logo" 
+                            class="h-full w-full object-cover rounded-[10px]"
+                        >
+                    </div>
+
+                    <!-- Input Oculto de Arquivo -->
+                    <input 
+                        type="file" 
+                        id="logoInput" 
+                        accept="image/*" 
+                        class="hidden" 
+                        onchange="handleLogoUpload(event)"
+                    >
+
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-lg font-black tracking-wider uppercase text-white">D'GRANEL</h1>
+                            <span class="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30">Gestão de Transportes</span>
+                            
+                            <!-- Botão para Resetar Logo -->
+                            <button 
+                                id="removeLogoBtn" 
+                                onclick="resetLogo()" 
+                                class="hidden text-[10px] text-slate-400 hover:text-rose-400 transition-colors ml-1 font-semibold flex items-center gap-1" 
+                                title="Restaurar logo padrão"
+                            >
+                                <i class="fa-solid fa-xmark"></i> Resetar Logo
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-400">Dashboard Operacional & Controle de Segurança Viária</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NAVEGAÇÃO DE ABAS -->
+            <div class="flex items-center gap-1.5 bg-[#050A17]/80 p-1.5 rounded-xl border border-amber-500/20 w-full lg:w-auto justify-center">
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn active text-xs font-semibold px-4 py-2 rounded-lg transition flex items-center gap-2 text-slate-300 hover:text-white">
+                    <i class="fa-solid fa-chart-pie text-amber-400"></i> Executive Dashboard
+                </button>
+                <button onclick="switchTab('datagrid')" id="tab-datagrid" class="tab-btn text-xs font-semibold px-4 py-2 rounded-lg transition flex items-center gap-2 text-slate-300 hover:text-white">
+                    <i class="fa-solid fa-table"></i> Consulta & Repositório
+                </button>
+                <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn text-xs font-semibold px-4 py-2 rounded-lg transition flex items-center gap-2 text-slate-300 hover:text-white">
+                    <i class="fa-solid fa-code"></i> Auditoria & JSON Raw
+                </button>
+            </div>
+
+            <!-- AÇÕES GERAIS DE DADOS -->
+            <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                <button onclick="carregarDadosSharePoint()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center gap-2">
+                    <i class="fa-solid fa-rotate text-slate-950"></i> Sincronizar SharePoint
+                </button>
+
+                <button onclick="openChartModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-amber-400"></i> + Criar Gráfico
+                </button>
+
+                <button id="toggleDataLabelsBtn" onclick="toggleDataLabels()" title="Ativar rótulos de dados nos gráficos" aria-pressed="false" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-tags text-amber-400"></i> <span>Mostrar Rótulos</span>
+                </button>
+
+                <button onclick="openNewIndicatorModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus text-amber-400"></i> Novo Indicador
+                </button>
+                
+                <label for="csvFileInput" class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-csv text-amber-400"></i> Importar CSV
+                </label>
+                <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
+
+                <button onclick="exportToCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-download text-emerald-400"></i> Exportar
+                </button>
+
+                <button onclick="resetData()" title="Restaurar dados padrões" class="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-medium text-xs px-2.5 py-2 rounded-xl border border-rose-800/40 transition">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <main class="max-w-[1600px] mx-auto px-4 sm:px-8 pt-6 space-y-6 flex-1 w-full">
+
+        <!-- ================= Aba 1: DASHBOARD EXECUTIVO ================= -->
+        <div id="view-dashboard" class="space-y-6">
+            <!-- ALERTA / RESUMO DE DESTAQUES -->
+            <section class="glass-card rounded-2xl p-5 border-l-4 border-l-amber-500 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
+                        <i class="fa-solid fa-bullhorn"></i> Resumo D'Granel Operacional
+                    </div>
+                    <h2 class="text-lg font-bold text-white">Panorama de Performance e Análise de Risco Viário</h2>
+                    <p class="text-xs text-slate-300 max-w-5xl leading-relaxed">
+                        A base monitora <span class="text-amber-400 font-bold" id="kpiTotalCount">0</span> indicadores operacionais ao longo de <span class="text-amber-400 font-bold" id="kpiMonthsCount">0</span> meses mapeados. 
+                        Acompanhamento automatizado e atualizado em tempo real.
+                    </p>
+                </div>
+                <div class="flex items-center gap-4 border-t lg:border-t-0 lg:border-l border-slate-800 pt-3 lg:pt-0 lg:pl-6">
+                    <div>
+                        <div class="text-[10px] uppercase font-semibold text-slate-400">Última Modificação</div>
+                        <div class="text-xs font-bold text-slate-200" id="lastUpdatedTag">Hoje</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- KPI CARDS -->
+            <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="kpiContainer">
+                <!-- Gerado via JS -->
+            </section>
+
+            <!-- BARRA DE AÇÕES DO DASHBOARD -->
+            <div class="flex justify-between items-center bg-[#0A1329]/80 p-3.5 rounded-xl border border-amber-500/20">
+                <div class="text-xs font-bold text-slate-300 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column text-amber-400"></i> Painel Visual de Indicadores Frota D'Granel
+                </div>
+                <button onclick="openChartModal()" class="bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 border border-amber-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Adicionar Gráfico Personalizado
+                </button>
+            </div>
+
+            <!-- SEÇÃO DE GRÁFICOS PADRÃO -->
+            <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- GRÁFICO 1 -->
+                <div class="lg:col-span-8 glass-card rounded-2xl p-5 flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                                Evolução de Documentação, Score vs Acidentes & Multas
+                            </h4>
+                            <p class="text-xs text-slate-400">Acompanhamento temporal dos indicadores críticos D'Granel</p>
+                        </div>
+                    </div>
+                    <div class="relative flex-1 min-h-[320px]">
+                        <canvas id="chart1"></canvas>
+                    </div>
+                </div>
+
+                <!-- GRÁFICO 3 (RADAR) -->
+                <div class="lg:col-span-4 glass-card rounded-2xl p-5 flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                                Matriz de Eficiência (%)
+                            </h4>
+                            <p class="text-xs text-slate-400" id="radarSubTitle">Comparativo Mês Inicial vs Mais Recente</p>
+                        </div>
+                    </div>
+                    <div class="relative flex-1 min-h-[320px] flex items-center justify-center">
+                        <canvas id="chart3"></canvas>
+                    </div>
+                </div>
+
+                <!-- GRÁFICO 2 -->
+                <div class="lg:col-span-6 glass-card rounded-2xl p-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                                Dimensionamento da Frota
+                            </h4>
+                            <p class="text-xs text-slate-400">Evolução do volume de frota ativa</p>
+                        </div>
+                    </div>
+                    <div class="relative min-h-[280px]">
+                        <canvas id="chart2"></canvas>
+                    </div>
+                </div>
+
+                <!-- GRÁFICO 4 (CORRELAÇÃO DE SINISTROS E VELOCIDADE) -->
+                <div class="lg:col-span-6 glass-card rounded-2xl p-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                                Correlação: Sinistros vs Excesso de Velocidade
+                            </h4>
+                            <p class="text-xs text-slate-400">Análise de impacto direto: Picos de velocidade vs acidentes</p>
+                        </div>
+                    </div>
+                    <div class="relative min-h-[280px]">
+                        <canvas id="chart4"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SEÇÃO DE GRÁFICOS DINÂMICOS / PERSONALIZADOS CRIADOS PELO USUÁRIO -->
+            <section class="grid grid-cols-1 lg:grid-cols-12 gap-6" id="dynamicChartsContainer">
+                <!-- Gráficos criados pelo usuário serão renderizados aqui via JS -->
+            </section>
+        </div>
+
+
+        <!-- ================= Aba 2: CENTRAL DE CONSULTA E REPOSITÓRIO ================= -->
+        <div id="view-datagrid" class="space-y-6 hidden">
+            
+            <!-- PAINEL DE CONTROLE DE BUSCA E MÉTRICAS DA BASE -->
+            <div class="glass-card rounded-2xl p-5 space-y-4">
+                
+                <!-- MÉTRICAS RÁPIDAS DA BASE -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 border-b border-slate-800/80 pb-4">
+                    <div class="bg-[#0A1329]/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] font-medium text-slate-400">Total de Indicadores</div>
+                        <div class="text-xl font-bold text-white" id="statTotalRows">0</div>
+                    </div>
+                    <div class="bg-[#0A1329]/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] font-medium text-emerald-400">Dentro da Meta (em %)</div>
+                        <div class="text-xl font-bold text-emerald-400" id="statMetaOk">0</div>
+                    </div>
+                    <div class="bg-[#0A1329]/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] font-medium text-rose-400">Abaixo da Meta</div>
+                        <div class="text-xl font-bold text-rose-400" id="statMetaOff">0</div>
+                    </div>
+                    <div class="bg-[#0A1329]/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] font-medium text-amber-400">Setores Mapeados</div>
+                        <div class="text-xl font-bold text-amber-300" id="statSetoresCount">0</div>
+                    </div>
+                </div>
+
+                <!-- FILTROS AVANÇADOS -->
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
+                        <!-- Busca por Texto -->
+                        <div class="relative flex-1 min-w-[220px]">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" id="searchInput" placeholder="Buscar por indicador ou setor..." oninput="renderTable()" class="w-full bg-[#070D1E] border border-slate-700 text-slate-200 text-xs rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:border-amber-500">
+                        </div>
+
+                        <!-- Filtro Setor -->
+                        <select id="setorFilter" onchange="renderTable()" class="bg-[#070D1E] border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500 min-w-[160px]">
+                            <option value="TODOS">Todos os Setores</option>
+                        </select>
+
+                        <!-- Filtro Status -->
+                        <select id="statusFilter" onchange="renderTable()" class="bg-[#070D1E] border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500 min-w-[150px]">
+                            <option value="TODOS">Todos os Status</option>
+                            <option value="OK">Meta OK</option>
+                            <option value="ACOMPANHAR">Abaixo da Meta</option>
+                            <option value="N/A">Sem classificação</option>
+                        </select>
+
+                        <!-- Filtro Unidade -->
+                        <select id="unitFilter" onchange="renderTable()" class="bg-[#070D1E] border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500 min-w-[130px]">
+                            <option value="TODOS">Todas Unidades</option>
+                            <option value="%">% (Percentual)</option>
+                            <option value="Numeral">Numeral</option>
+                        </select>
+                    </div>
+
+                    <div class="text-xs text-slate-400">
+                        Exibindo <span id="filteredCount" class="font-bold text-white">0</span> resultados
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- AREA DRAG AND DROP CSV -->
+            <div id="dropZone" class="border-2 border-dashed border-amber-500/30 hover:border-amber-400 rounded-xl p-4 text-center transition bg-[#0A1329]/40 cursor-pointer" onclick="document.getElementById('csvFileInput').click()">
+                <i class="fa-solid fa-cloud-arrow-up text-amber-400 text-lg mb-1"></i>
+                <p class="text-xs font-medium text-slate-300">Arraste e solte seu arquivo CSV atualizado aqui para carregar instantaneamente</p>
+            </div>
+
+            <!-- TABELA COMPLETA COM CÁLCULOS ANALÍTICOS DINÂMICOS -->
+            <div class="glass-card rounded-2xl overflow-hidden border border-slate-800">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr id="tableHeaderRow" class="bg-[#0A1329] text-amber-400 font-semibold border-b border-amber-500/20">
+                                <!-- Gerado dinamicamente via JS -->
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody" class="divide-y divide-slate-800/60 text-slate-300">
+                            <!-- Linhas geradas dinamicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- ================= Aba 3: AUDITORIA & JSON RAW ================= -->
+        <div id="view-audit" class="space-y-6 hidden">
+            <div class="glass-card rounded-2xl p-6 space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-code text-amber-400"></i> Editor e Inspeção de Dados em Nível de Código (JSON)
+                        </h3>
+                        <p class="text-xs text-slate-400">Você pode copiar, fazer backup ou editar diretamente a estrutura dos dados em formato JSON abaixo.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="copyRawJSON()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700 transition">
+                            <i class="fa-solid fa-copy mr-1"></i> Copiar JSON
+                        </button>
+                        <button onclick="applyRawJSON()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs px-3.5 py-2 rounded-xl transition font-bold">
+                            <i class="fa-solid fa-check mr-1"></i> Aplicar Alterações JSON
+                        </button>
+                    </div>
+                </div>
+
+                <textarea id="jsonEditor" class="w-full h-[500px] bg-[#050A17] text-amber-400 font-mono text-xs p-4 rounded-xl border border-slate-800 focus:outline-none focus:border-amber-500 leading-relaxed"></textarea>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL 1: INSPEÇÃO DETALHADA DO INDICADOR -->
+    <div id="modalDetail" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card w-full max-w-3xl rounded-2xl p-6 border border-slate-700 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-start border-b border-slate-800 pb-4">
+                <div>
+                    <span id="modalDetailSetor" class="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">SETOR</span>
+                    <h3 id="modalDetailTitle" class="text-lg font-bold text-white mt-1">Nome do Indicador</h3>
+                </div>
+                <button onclick="closeModal('modalDetail')" class="text-slate-400 hover:text-white p-2">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- METRICAS DETALHADAS -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-[#0A1329] p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] text-slate-400">Meta Definida</div>
+                    <div id="modalDetailMeta" class="text-base font-bold text-white">-</div>
+                </div>
+                <div class="bg-[#0A1329] p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] text-slate-400" id="modalDetailLastLabel">Último Valor</div>
+                    <div id="modalDetailLast" class="text-base font-bold text-amber-400">-</div>
+                </div>
+                <div class="bg-[#0A1329] p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] text-slate-400">Média no Período</div>
+                    <div id="modalDetailAvg" class="text-base font-bold text-slate-200">-</div>
+                </div>
+                <div class="bg-[#0A1329] p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] text-slate-400" id="modalDetailDiffLabel">Variação Total</div>
+                    <div id="modalDetailDiff" class="text-base font-bold text-slate-200">-</div>
+                </div>
+            </div>
+
+            <!-- GRÁFICO INDIVIDUAL DO INDICADOR -->
+            <div class="bg-[#0A1329]/60 p-4 rounded-xl border border-slate-800">
+                <h4 class="text-xs font-bold text-slate-300 mb-3">Histórico Mensal em Gráfico</h4>
+                <div class="h-48 relative">
+                    <canvas id="modalDetailChart"></canvas>
+                </div>
+            </div>
+
+            <!-- HISTÓRICO EM TABELA -->
+            <div class="overflow-x-auto rounded-xl border border-slate-800">
+                <table class="w-full text-xs text-left">
+                    <thead class="bg-[#0A1329] text-amber-400 font-semibold" id="modalDetailTableHead">
+                        <!-- Gerado via JS -->
+                    </thead>
+                    <tbody id="modalDetailTable" class="divide-y divide-slate-800 font-mono">
+                        <!-- Gerado via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: CRIAR / EDITAR INDICADOR -->
+    <div id="modalEdit" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card w-full max-w-2xl rounded-2xl p-6 border border-slate-700 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 id="modalEditHeading" class="text-base font-bold text-white">Editar Indicador</h3>
+                <button onclick="closeModal('modalEdit')" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="editForm" onsubmit="saveIndicatorForm(event)" class="space-y-4">
+                <input type="hidden" id="editIndex" value="-1">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Setor</label>
+                        <input type="text" id="editSetor" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Unidade de Medida</label>
+                        <select id="editUnd" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                            <option value="Numeral">Numeral</option>
+                            <option value="%">%</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Nome do Indicador</label>
+                    <input type="text" id="editIndicador" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div class="w-1/2">
+                    <label class="block text-xs text-slate-400 mb-1">Meta Desejada</label>
+                    <input type="number" step="any" id="editMeta" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <!-- VALORES MENSAIS DINÂMICOS -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-2">Valores Mensais</label>
+                    <div id="monthlyInputsContainer" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1">
+                        <!-- Gerado via JS -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closeModal('modalEdit')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl">Cancelar</button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-5 py-2 rounded-xl">Salvar Indicador</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: SISTEMA DE CRIAR / EDITAR GRÁFICOS PERSONALIZADOS -->
+    <div id="modalChartConfig" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card w-full max-w-xl rounded-2xl p-6 border border-slate-700 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 id="modalChartHeading" class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-amber-400"></i> Criar Gráfico Personalizado
+                </h3>
+                <button onclick="closeModal('modalChartConfig')" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="chartConfigForm" onsubmit="saveCustomChart(event)" class="space-y-4">
+                <input type="hidden" id="chartConfigId" value="">
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Título do Gráfico</label>
+                    <input type="text" id="chartConfigTitle" required placeholder="Ex: Comparativo de Multas vs Treinamentos" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Subtítulo / Descrição Breve</label>
+                    <input type="text" id="chartConfigDesc" placeholder="Ex: Acompanhamento mensal dos setores X e Y" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Tipo de Gráfico</label>
+                        <select id="chartConfigType" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                            <option value="line">Linha</option>
+                            <option value="bar">Barra</option>
+                            <option value="doughnut">Rosca / Pizza</option>
+                            <option value="radar">Radar</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Largura no Dashboard</label>
+                        <select id="chartConfigSpan" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                            <option value="6">Metade da Tela (50%)</option>
+                            <option value="12">Largura Total (100%)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Indicador Principal (Eixo Y1)</label>
+                    <select id="chartConfigInd1" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <!-- Opções geradas via JS -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Segundo Indicador (Opcional - Comparativo/Eixo Y2)</label>
+                    <select id="chartConfigInd2" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <option value="">Nenhum (Gráfico Único)</option>
+                        <!-- Opções geradas via JS -->
+                    </select>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closeModal('modalChartConfig')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl">Cancelar</button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-5 py-2 rounded-xl">Gerar Gráfico</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
+    <script>
+        // DADOS PADRÃO (INICIALIZAÇÃO)
+        const initialData = [{"setor": "Controle de Sinistro", "indicador": "ACIDENTE POR (MILHAO) DE KM RODADO - Mensal", "meta": 0.0, "und": "%", "valores": [3.5, 4.43, 4.17, 5.51, 3.58, 4.09, null]}, {"setor": "Controlde de Sinistro", "indicador": "Acidentes com culpa - Mensal", "meta": 0.0, "und": "Numeral", "valores": [11.0, 12.0, 8.0, 17.0, 21.0, 13.0, 16.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de acidentes com lesões - veículos proprios - Mensal", "meta": 0.0, "und": "Numeral", "valores": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de acidentes com lesões envolvendo Terceiros - Mensal", "meta": 0.0, "und": "Numeral", "valores": [0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1.0]}, {"setor": "Controle de Sinistro", "indicador": "Numero de mortes - proprios - Mensal", "meta": 0.0, "und": "Numeral", "valores": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de mortes -Terceiros - Mensal", "meta": 0.0, "und": "Numeral", "valores": [0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 1.0]}, {"setor": "Controle de Sinistro", "indicador": "Total de acidentes - Mensal", "meta": 40.0, "und": "Numeral", "valores": [26.0, 33.0, 38.0, 49.0, 32.0, 38.0, 43.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "VEÍCULOS ATIVOS (semirreboques)", "meta": 2500.0, "und": "Numeral", "valores": [2015.0, 1972.0, 1968.0, 1959.0, 1947.0, 1947.0, 1932.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "VEÍCULOS ATIVOS (cavalo mecânico)", "meta": 1300.0, "und": "Numeral", "valores": [1234.0, 1208.0, 1223.0, 1231.0, 1221.0, 1204.0, 1190.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Cronotacógrafo - Mensal", "meta": 100.0, "und": "%", "valores": [62.25, 64.29, 64.37, 97.44, 98.61, 98.51, 98.43]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Veículos emplacados - Mensal", "meta": 0.0, "und": "Numeral", "valores": [68.0, 36.0, 36.0, 31.0, 31.0, 23.0, 11.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Veículos Vendidos", "meta": 0.0, "und": "Numeral", "valores": [27.0, 24.0, 35.0, 35.0, 23.0, 45.0, 49.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "% CRLV LIBERADOS - Mensal", "meta": 100.0, "und": "%", "valores": [5.13, 79.45, 91.9, 96.51, 97.3, 99.18, 99.59]}, {"setor": "Controle de Penalidade/Autuações", "indicador": "Redução quantidade de multas por frota - Mensal", "meta": 0.35, "und": "%", "valores": [0.59, 0.46, 0.5, 0.58, 0.35, 0.55, null]}, {"setor": "Controle de Penalidade", "indicador": "% de multas pagas com 20% de desconto - Mensal", "meta": 20.0, "und": "%", "valores": [20.0, 18.0, 15.0, 23.0, 16.0, 10.67, 12.08]}, {"setor": "Controle de Penalidade", "indicador": "% de multas pagas com 40% de desconto - Mensal", "meta": 10.0, "und": "%", "valores": [42.0, 39.0, 56.0, 38.0, 55.0, 48.71, 47.35]}, {"setor": "Controle de Penalidade", "indicador": "Multas Cobradas Motoristas - Mensal", "meta": 50000.0, "und": "Numeral", "valores": [159.0, 161.0, 188.0, 99.0, 185.0, 245.0, 297.0]}, {"setor": "Controle de Penalidade", "indicador": "Multas Mapeadas Mês - Mensal", "meta": 0.0, "und": "Numeral", "valores": [595.0, 528.0, 651.0, 924.0, 407.0, 644.0, 478.0]}, {"setor": "Controle de Penalidade", "indicador": "Multas Pagas Mês - Mensal", "meta": 0.0, "und": "Numeral", "valores": [843.0, 707.0, 602.0, 556.0, 854.0, 1199.0, 1134.0]}, {"setor": "Controle de de Autuações", "indicador": "Defesas administrativas", "meta": 50000.0, "und": "Numeral", "valores": [3.0, 16.0, 6.0, 2.0, 29.0, 35.0, 13.0]}, {"setor": "Controle de de Autuações", "indicador": "Autuações tratadas", "meta": 50000.0, "und": "Numeral", "valores": [267.0, 100.0, 229.0, 278.0, 262.0, 278.0, 246.0]}, {"setor": "Controle de de Autuações", "indicador": "Responsabilidade da empresa", "meta": 50000.0, "und": "Numeral", "valores": [96.0, 28.0, 70.0, 30.0, 30.0, 37.0, 13.0]}, {"setor": "Controle de de Autuações", "indicador": "Já identificado pelo agente", "meta": 50000.0, "und": "Numeral", "valores": [17.0, 4.0, 5.0, 14.0, 6.0, 12.0, 16.0]}, {"setor": "Controle de de Autuações", "indicador": "Identificar (solicitou ser identificado, mas não possui termo)", "meta": 50000.0, "und": "Numeral", "valores": [27.0, 36.0, 46.0, 40.0, 42.0, 39.0, 32.0]}, {"setor": "Controle de de Autuações", "indicador": "PRF", "meta": 50000.0, "und": "Numeral", "valores": [42.0, 12.0, 47.0, 65.0, 84.0, 93.0, 72.0]}, {"setor": "Controle de de Autuações", "indicador": "Identificado", "meta": 50000.0, "und": "Numeral", "valores": [27.0, 36.0, 46.0, 40.0, 42.0, 43.0, 49.0]}, {"setor": "Controle de de Autuações", "indicador": "Agregados Identificados", "meta": 50000.0, "und": "Numeral", "valores": [1.0, null, 1.0, 2.0, 8.0, 3.0, 6.0]}, {"setor": "Controle de de Autuações", "indicador": "Agregados não Identificado", "meta": 50000.0, "und": "Numeral", "valores": [null, null, 15.0, 7.0, 14.0, 2.0, 8.0]}, {"setor": "Controle de de Autuações", "indicador": "Não Identificado frota", "meta": 50000.0, "und": "Numeral", "valores": [33.0, 3.0, 13.0, 47.0, 22.0, 32.0, 28.0]}, {"setor": "Controle de de Autuações", "indicador": "Não Identificado 24h", "meta": 50000.0, "und": "Numeral", "valores": [12.0, 1.0, 11.0, 19.0, 14.0, 17.0, 22.0]}, {"setor": "Controle de de Autuações", "indicador": "Defesas ANTT", "meta": 50000.0, "und": "Numeral", "valores": [null, null, null, null, 28.0, 29.0, null]}, {"setor": "Controle de SCORE do motorista", "indicador": "SCORE - Mensal", "meta": 600.0, "und": "Numeral", "valores": [249.0, 318.0, 405.0, 460.0, 497.0, 589.0, null]}, {"setor": "Controle de Velocidade", "indicador": "Numero de motoristas com ocorrencias acima da velocidade permitida - Mensal", "meta": 0.0, "und": "Numeral", "valores": [542.0, 580.0, 673.0, 640.0, 584.0, 597.0, 540.0]}];
+
+        const STORAGE_KEY = 'dgranel_fleet_records_2026';
+        const CHARTS_STORAGE_KEY = 'dgranel_custom_charts_2026';
+        const MONTHS_STORAGE_KEY = 'dgranel_custom_months_2026';
+        const LOGO_STORAGE_KEY = 'dgranel_custom_logo_2026';
+        const DATA_LABELS_STORAGE_KEY = 'dgranel_show_chart_data_labels_2026';
+        const DEFAULT_LOGO_SRC = 'logo.png';
+
+        const BASE_MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        let mesesLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
+
+        let currentData = [];
+        let customCharts = [];
+        let chart1Inst = null, chart2Inst = null, chart3Inst = null, chart4Inst = null, modalChartInst = null;
+        let dynamicChartInstances = {};
+        let showDataLabels = localStorage.getItem(DATA_LABELS_STORAGE_KEY) === 'true';
+
+        Chart.register(ChartDataLabels);
+        Chart.defaults.plugins.datalabels = {
+            display: () => showDataLabels,
+            color: '#f8fafc',
+            anchor: 'end',
+            align: 'bottom',
+            clamp: true,
+            font: { size: 10, weight: 'bold' },
+            formatter: value => value === null || value === undefined ? '' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+        };
+
+        // CARREGAMENTO INICIAL
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStoredData();
+            loadStoredCharts();
+            setupDragAndDrop();
+            initSystem();
+        });
+
+        // ================= LÓGICA DE GERENCIAMENTO DE LOGO =================
+        function handleLogoError(img) {
+            img.onerror = null;
+            img.parentElement.innerHTML = `
+                <div class="w-full h-full flex items-center justify-center font-black text-slate-950 text-xl tracking-tighter bg-amber-400 rounded-[10px]">D'</div>
+                <div class="absolute inset-0 bg-slate-950/80 text-amber-400 text-[9px] font-bold uppercase tracking-tighter flex items-center justify-center text-center opacity-0 group-hover:opacity-100 transition-opacity p-1 select-none">Alterar<br>Logo</div>
+            `;
+        }
+
+        function handleLogoUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                alert('Por favor, selecione um arquivo de imagem válido (PNG, JPG, SVG, WebP, etc).');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64Image = e.target.result;
+                setDashboardLogo(base64Image);
+                localStorage.setItem(LOGO_STORAGE_KEY, base64Image);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function setDashboardLogo(src) {
+            const logoImg = document.getElementById('dashboardLogo');
+            if (logoImg) {
+                logoImg.src = src;
+            } else {
+                const container = document.querySelector('.relative.group.cursor-pointer');
+                if (container) {
+                    container.innerHTML = `
+                        <img id="dashboardLogo" src="${src}" alt="D'Granel Logo" class="h-full w-full object-cover rounded-[10px]" onerror="handleLogoError(this)">
+                        <div class="absolute inset-0 bg-slate-950/80 text-amber-400 text-[9px] font-bold uppercase tracking-tighter flex items-center justify-center text-center opacity-0 group-hover:opacity-100 transition-opacity p-1 select-none">Alterar<br>Logo</div>
+                    `;
+                }
+            }
+            document.getElementById('removeLogoBtn')?.classList.remove('hidden');
+        }
+
+        function resetLogo() {
+            localStorage.removeItem(LOGO_STORAGE_KEY);
+            
+            const logoInput = document.getElementById('logoInput');
+            if (logoInput) logoInput.value = '';
+
+            const logoImg = document.getElementById('dashboardLogo');
+            if (logoImg) {
+                logoImg.src = DEFAULT_LOGO_SRC;
+            } else {
+                setDashboardLogo(DEFAULT_LOGO_SRC);
+            }
+
+            document.getElementById('removeLogoBtn')?.classList.add('hidden');
+        }
+
+        function loadSavedLogo() {
+            const savedLogo = localStorage.getItem(LOGO_STORAGE_KEY);
+            if (savedLogo) {
+                setDashboardLogo(savedLogo);
+            }
+        }
+
+        // DETECÇÃO E SINCRONIZAÇÃO DINÂMICA DE MESES
+        function syncMonthLabels(customHeaderMonths = null) {
+            if (customHeaderMonths && customHeaderMonths.length > 0) {
+                mesesLabels = customHeaderMonths.filter(isMonthLabel);
+                localStorage.setItem(MONTHS_STORAGE_KEY, JSON.stringify(mesesLabels));
+                return;
+            }
+
+            const storedMonths = localStorage.getItem(MONTHS_STORAGE_KEY);
+            if (storedMonths) {
+                try {
+                    mesesLabels = JSON.parse(storedMonths).filter(isMonthLabel);
+                } catch(e){}
+            }
+
+            let maxLen = 0;
+            currentData.forEach(d => {
+                if (d.valores && d.valores.length > maxLen) {
+                    maxLen = d.valores.length;
+                }
+            });
+
+            if (maxLen > mesesLabels.length) {
+                mesesLabels = [];
+                for (let i = 0; i < maxLen; i++) {
+                    const mName = BASE_MONTHS[i % 12];
+                    const yearOffset = Math.floor(i / 12);
+                    mesesLabels.push(yearOffset > 0 ? `${mName}/${26 + yearOffset}` : mName);
+                }
+            }
+        }
+
+        function loadStoredData() {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                try {
+                    currentData = JSON.parse(stored);
+                } catch(e) {
+                    currentData = JSON.parse(JSON.stringify(initialData));
+                }
+            } else {
+                currentData = JSON.parse(JSON.stringify(initialData));
+            }
+        }
+
+        function loadStoredCharts() {
+            const stored = localStorage.getItem(CHARTS_STORAGE_KEY);
+            if (stored) {
+                try {
+                    customCharts = JSON.parse(stored);
+                } catch(e) {
+                    customCharts = [];
+                }
+            } else {
+                customCharts = [];
+            }
+        }
+
+        function saveData(data) {
+            currentData = data;
+            syncMonthLabels();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
+            document.getElementById('lastUpdatedTag').textContent = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+        }
+
+        function saveCustomChartsStorage() {
+            localStorage.setItem(CHARTS_STORAGE_KEY, JSON.stringify(customCharts));
+        }
+
+        function initSystem() {
+            syncMonthLabels();
+            updateDataLabelsButton();
+            populateSetoresDropdown();
+            renderTableHeader();
+            renderKPIs();
+            renderCharts();
+            renderDynamicCharts();
+            renderTable();
+            updateJSONEditor();
+        }
+
+        function toggleDataLabels() {
+            showDataLabels = !showDataLabels;
+            localStorage.setItem(DATA_LABELS_STORAGE_KEY, String(showDataLabels));
+            updateDataLabelsButton();
+
+            [chart1Inst, chart2Inst, chart3Inst, chart4Inst, modalChartInst, ...Object.values(dynamicChartInstances)]
+                .filter(Boolean)
+                .forEach(chart => chart.update());
+        }
+
+        function updateDataLabelsButton() {
+            const button = document.getElementById('toggleDataLabelsBtn');
+            if (!button) return;
+
+            button.setAttribute('aria-pressed', String(showDataLabels));
+            button.title = showDataLabels ? 'Desativar rótulos de dados nos gráficos' : 'Ativar rótulos de dados nos gráficos';
+            button.innerHTML = showDataLabels
+                ? '<i class="fa-solid fa-tags text-emerald-400"></i> <span>Ocultar Rótulos</span>'
+                : '<i class="fa-solid fa-tags text-amber-400"></i> <span>Mostrar Rótulos</span>';
+            button.classList.toggle('border-emerald-500/50', showDataLabels);
+            button.classList.toggle('text-emerald-300', showDataLabels);
+        }
+
+        // NAVEGAÇÃO DE ABAS
+        function switchTab(tabName) {
+            ['dashboard', 'datagrid', 'audit'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).classList.remove('active');
+            });
+
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            if (tabName === 'dashboard') {
+                setTimeout(() => { 
+                    renderCharts(); 
+                    renderDynamicCharts();
+                }, 100);
+            } else if (tabName === 'audit') {
+                updateJSONEditor();
+            }
+        }
+
+        // RETORNA ÚLTIMO VALOR VÁLIDO E SEU ÍNDICE
+        function getLastValid(arr, labels = mesesLabels) {
+            if (!arr || !arr.length) return { val: null, idx: -1, month: '-' };
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i] !== null && arr[i] !== undefined && !isNaN(arr[i])) {
+                    return { val: arr[i], idx: i, month: labels[i] || `Mês ${i+1}` };
+                }
+            }
+            return { val: null, idx: -1, month: '-' };
+        }
+
+        function isMonthLabel(label) {
+            return /^(jan|janeiro|fev|fevereiro|mar|março|marco|abr|abril|mai|maio|jun|junho|jul|julho|ago|agosto|set|setembro|out|outubro|nov|novembro|dez|dezembro|\d{1,2}\/\d{2,4})/i.test(String(label).normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+        }
+
+        function getMonthlyData(item) {
+            const labels = mesesLabels
+                .map(label => String(label))
+                .filter(isMonthLabel);
+            const values = item?.valores || [];
+            const valueOffset = values.length > labels.length ? values.length - labels.length : 0;
+
+            return {
+                labels: labels.length ? labels : BASE_MONTHS.slice(0, values.length),
+                values: values.slice(valueOffset)
+            };
+        }
+
+        const getChartMonthData = getMonthlyData;
+
+        // CÁLCULOS ANALÍTICOS DINÂMICOS
+        function calcMetrics(item) {
+            const monthly = getMonthlyData(item);
+            const valid = monthly.values.filter(v => v !== null && v !== undefined && !isNaN(v));
+            if (valid.length === 0) return { avg: null, min: null, max: null, last: null, lastMonth: '-', status: 'N/A', diff: 0 };
+            
+            const sum = valid.reduce((a, b) => a + b, 0);
+            const avg = sum / valid.length;
+            const min = Math.min(...valid);
+            const max = Math.max(...valid);
+            
+            const lastObj = getLastValid(monthly.values, monthly.labels);
+            const last = lastObj.val;
+            const first = valid[0] ?? last;
+            const diff = (last !== null && first !== null) ? last - first : 0;
+            const meta = item.meta === null || item.meta === undefined || item.meta === '' ? NaN : Number(item.meta);
+            const lowerIsBetter = /acidente|sinistro|morte|multa|autua[cç][aã]o|velocidade|ocorr[eê]ncia|redu[cç][aã]o|n[aã]o identificado/i.test(item.indicador);
+            const status = !Number.isFinite(meta) ? 'N/A' : (lowerIsBetter ? last <= meta : last >= meta) ? 'OK' : 'ACOMPANHAR';
+
+            return { avg, min, max, last, lastMonth: lastObj.month, status, diff };
+        }
+
+        function fmtVal(val, unit = '') {
+            if (val === null || val === undefined || isNaN(val)) return '-';
+            let formatted = val.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+            return unit === '%' ? formatted + '%' : formatted;
+        }
+
+        // RENDERIZAÇÃO DOS KPIS D'GRANEL
+        function renderKPIs() {
+            const kpiContainer = document.getElementById('kpiContainer');
+            kpiContainer.innerHTML = '';
+
+            document.getElementById('kpiTotalCount').textContent = currentData.length;
+            document.getElementById('kpiMonthsCount').textContent = mesesLabels.length;
+
+            const crlv = currentData.find(d => d.indicador.includes('% CRLV LIBERADOS')) || currentData[12] || { valores: [] };
+            const score = currentData.find(d => d.indicador.includes('SCORE')) || currentData[31] || { valores: [] };
+            const velocidade = currentData.find(d => d.indicador.includes('velocidade permitida')) || currentData[32] || { valores: [] };
+            const multas = currentData.find(d => d.indicador.includes('Multas Cobradas Motoristas')) || currentData[16] || { valores: [] };
+
+            const crlvData = getMonthlyData(crlv);
+            const scoreData = getMonthlyData(score);
+            const velData = getMonthlyData(velocidade);
+            const multasData = getMonthlyData(multas);
+            const crlvLast = getLastValid(crlvData.values, crlvData.labels);
+            const scoreLast = getLastValid(scoreData.values, scoreData.labels);
+            const velLast = getLastValid(velData.values, velData.labels);
+            const multasLast = getLastValid(multasData.values, multasData.labels);
+
+            const cards = [
+                { title: '% CRLV Liberados', val: fmtVal(crlvLast.val, '%'), desc: `Meta: 100% (${crlvLast.month})`, badge: 'Regularização OK', color: 'emerald', icon: 'fa-file-check' },
+                { title: 'Score do Motorista', val: `${fmtVal(scoreLast.val)} pts`, desc: `Meta: 600 pts (${scoreLast.month})`, badge: 'Em Elevação', color: 'amber', icon: 'fa-star' },
+                { title: 'Excesso de Velocidade', val: fmtVal(velLast.val), desc: `Ocorrências (${velLast.month})`, badge: 'Risco Operacional', color: 'rose', icon: 'fa-gauge-high' },
+                { title: 'Multas Cobradas', val: fmtVal(multasLast.val), desc: `Cobranças (${multasLast.month})`, badge: 'Atenção Elevada', color: 'amber', icon: 'fa-receipt' }
+            ];
+
+            cards.forEach(c => {
+                const el = document.createElement('div');
+                el.className = 'glass-card rounded-2xl p-5 flex flex-col justify-between';
+                el.innerHTML = `
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs text-slate-400 font-medium">${c.title}</span>
+                            <div class="text-2xl font-extrabold text-white mt-1">${c.val}</div>
+                        </div>
+                        <div class="p-3 rounded-xl bg-${c.color}-500/10 text-${c.color}-400 border border-${c.color}-500/20">
+                            <i class="fa-solid ${c.icon} text-lg"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
+                        <span class="text-slate-400">${c.desc}</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-${c.color}-500/10 text-${c.color}-400 border border-${c.color}-500/20">${c.badge}</span>
+                    </div>
+                `;
+                kpiContainer.appendChild(el);
+            });
+        }
+
+        // RENDERIZAÇÃO DOS GRÁFICOS PADRÃO
+        function renderCharts() {
+            const crlvObj = currentData.find(d => d.indicador.includes('% CRLV LIBERADOS')) || { valores: [] };
+            const scoreObj = currentData.find(d => d.indicador.includes('SCORE')) || { valores: [] };
+            const multasObj = currentData.find(d => d.indicador.includes('Multas Cobradas Motoristas')) || { valores: [] };
+            const acidentesObj = currentData.find(d => d.indicador.includes('Total de acidentes')) || { valores: [] };
+            const velObj = currentData.find(d => d.indicador.includes('velocidade permitida')) || { valores: [] };
+            const chartMonths = getChartMonthData(crlvObj).labels.length > 0
+                ? getChartMonthData(crlvObj).labels
+                : mesesLabels;
+            const monthlyValues = item => getChartMonthData(item).values;
+
+            // Chart 1
+            const ctx1 = document.getElementById('chart1').getContext('2d');
+            if (chart1Inst) chart1Inst.destroy();
+            chart1Inst = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: chartMonths,
+                    datasets: [
+                        { label: '% CRLV', data: monthlyValues(crlvObj), type: 'line', borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3, yAxisID: 'y1' },
+                        { label: 'Score Motorista', data: monthlyValues(scoreObj), type: 'line', borderColor: '#eab308', borderDash: [5, 5], tension: 0.3, yAxisID: 'y2' },
+                        { label: 'Acidentes', data: monthlyValues(acidentesObj), backgroundColor: 'rgba(244, 63, 94, 0.8)', borderRadius: 6, yAxisID: 'y3' },
+                        { label: 'Multas Motorista', data: monthlyValues(multasObj), backgroundColor: 'rgba(234, 179, 8, 0.7)', borderRadius: 6, yAxisID: 'y3' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94a3b8' } } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y1: { position: 'left', min: 0, beginAtZero: true, max: 100, ticks: { color: '#10b981' } },
+                        y2: { position: 'right', min: 0, beginAtZero: true, ticks: { color: '#eab308' }, grid: { drawOnChartArea: false } },
+                        y3: { position: 'right', min: 0, beginAtZero: true, ticks: { color: '#f43f5e' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+
+            // Chart 2 (Evolução da Frota)
+            const cavaloObj = currentData.find(d => d.indicador.includes('cavalo mecânico')) || { valores: [] };
+            const reboqueObj = currentData.find(d => d.indicador.includes('semirreboques')) || { valores: [] };
+            const frotaTotal = chartMonths.map((_, i) => ((monthlyValues(cavaloObj)[i] || 0) + (monthlyValues(reboqueObj)[i] || 0)));
+
+            const ctx2 = document.getElementById('chart2').getContext('2d');
+            if (chart2Inst) chart2Inst.destroy();
+            chart2Inst = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: chartMonths,
+                    datasets: [
+                        { label: 'Frota Ativa Total', data: frotaTotal, backgroundColor: 'rgba(56, 189, 248, 0.6)', borderRadius: 6 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94a3b8' } } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { min: 0, beginAtZero: true, ticks: { color: '#38bdf8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+
+            // Chart 3 (Radar D'Granel)
+            const tacoObj = currentData.find(d => d.indicador.includes('Cronotacógrafo')) || { valores: [] };
+            const desc40Obj = currentData.find(d => d.indicador.includes('40% de desconto')) || { valores: [] };
+
+            const crlvValues = monthlyValues(crlvObj);
+            const tacoValues = monthlyValues(tacoObj);
+            const desc40Values = monthlyValues(desc40Obj);
+            const crlvFirst = crlvValues[0] ?? 0;
+            const tacoFirst = tacoValues[0] ?? 0;
+            const descFirst = desc40Values[0] ?? 0;
+
+            const crlvLastVal = getLastValid(crlvValues);
+            const tacoLastVal = getLastValid(tacoValues);
+            const descLastVal = getLastValid(desc40Values);
+
+            const lastMonthLabel = crlvLastVal.month !== '-' ? crlvLastVal.month : mesesLabels[mesesLabels.length - 1];
+            document.getElementById('radarSubTitle').textContent = `Comparativo ${chartMonths[0]} vs ${lastMonthLabel}`;
+
+            const ctx3 = document.getElementById('chart3').getContext('2d');
+            if (chart3Inst) chart3Inst.destroy();
+            chart3Inst = new Chart(ctx3, {
+                type: 'radar',
+                data: {
+                    labels: ['CRLV (%)', 'Cronotacógrafo (%)', 'Multa Desc. 40% (%)'],
+                    datasets: [
+                        { label: chartMonths[0], data: [crlvFirst, tacoFirst, descFirst], borderColor: '#94a3b8', backgroundColor: 'rgba(148, 163, 184, 0.15)' },
+                        { label: lastMonthLabel, data: [crlvLastVal.val || 0, tacoLastVal.val || 0, descLastVal.val || 0], borderColor: '#eab308', backgroundColor: 'rgba(234, 179, 8, 0.25)' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94a3b8' } } },
+                    scales: { r: { min: 0, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, pointLabels: { color: '#cbd5e1' }, ticks: { display: false } } }
+                }
+            });
+
+            // Chart 4 (Sinistros vs Velocidade)
+            const ctx4 = document.getElementById('chart4').getContext('2d');
+            if (chart4Inst) chart4Inst.destroy();
+            chart4Inst = new Chart(ctx4, {
+                type: 'line',
+                data: {
+                    labels: chartMonths,
+                    datasets: [
+                        {
+                            label: 'Excessos de Velocidade',
+                            data: monthlyValues(velObj),
+                            borderColor: '#eab308',
+                            backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                            borderDash: [5, 5],
+                            tension: 0.3,
+                            yAxisID: 'yVel',
+                            fill: true,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Total de Sinistros',
+                            data: monthlyValues(acidentesObj),
+                            borderColor: '#f43f5e',
+                            backgroundColor: '#f43f5e',
+                            tension: 0.3,
+                            yAxisID: 'ySin',
+                            borderWidth: 3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94a3b8' } } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        ySin: {
+                            type: 'linear', position: 'left', min: 0, beginAtZero: true,
+                            ticks: { color: '#f43f5e' },
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            title: { display: true, text: 'Acidentes (Vol.)', color: '#f43f5e', font: { size: 10 } }
+                        },
+                        yVel: {
+                            type: 'linear', position: 'right', min: 0, beginAtZero: true,
+                            ticks: { color: '#eab308' },
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: 'Infrações de Velocidade', color: '#eab308', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ================= SISTEMA DE GRÁFICOS PERSONALIZADOS =================
+        function openChartModal(chartId = null) {
+            populateChartConfigDropdowns();
+
+            if (chartId) {
+                const chartObj = customCharts.find(c => c.id === chartId);
+                if (!chartObj) return;
+                document.getElementById('modalChartHeading').innerHTML = '<i class="fa-solid fa-pen-to-square text-amber-400"></i> Editar Gráfico';
+                document.getElementById('chartConfigId').value = chartObj.id;
+                document.getElementById('chartConfigTitle').value = chartObj.title;
+                document.getElementById('chartConfigDesc').value = chartObj.desc || '';
+                document.getElementById('chartConfigType').value = chartObj.type;
+                document.getElementById('chartConfigSpan').value = chartObj.span;
+                document.getElementById('chartConfigInd1').value = chartObj.ind1;
+                document.getElementById('chartConfigInd2').value = chartObj.ind2 || '';
+            } else {
+                document.getElementById('modalChartHeading').innerHTML = '<i class="fa-solid fa-chart-line text-amber-400"></i> Criar Gráfico Personalizado';
+                document.getElementById('chartConfigId').value = '';
+                document.getElementById('chartConfigTitle').value = '';
+                document.getElementById('chartConfigDesc').value = '';
+                document.getElementById('chartConfigType').value = 'line';
+                document.getElementById('chartConfigSpan').value = '6';
+                document.getElementById('chartConfigInd1').selectedIndex = 0;
+                document.getElementById('chartConfigInd2').value = '';
+            }
+
+            document.getElementById('modalChartConfig').classList.remove('hidden');
+        }
+
+        function populateChartConfigDropdowns() {
+            const select1 = document.getElementById('chartConfigInd1');
+            const select2 = document.getElementById('chartConfigInd2');
+
+            select1.innerHTML = '';
+            select2.innerHTML = '<option value="">Nenhum (Gráfico Único)</option>';
+
+            currentData.forEach((item, index) => {
+                const opt1 = document.createElement('option');
+                opt1.value = index;
+                opt1.textContent = `[${item.setor}] ${item.indicador}`;
+                select1.appendChild(opt1);
+
+                const opt2 = document.createElement('option');
+                opt2.value = index;
+                opt2.textContent = `[${item.setor}] ${item.indicador}`;
+                select2.appendChild(opt2);
+            });
+        }
+
+        function saveCustomChart(e) {
+            e.preventDefault();
+
+            const id = document.getElementById('chartConfigId').value || 'chart_' + Date.now();
+            const title = document.getElementById('chartConfigTitle').value;
+            const desc = document.getElementById('chartConfigDesc').value;
+            const type = document.getElementById('chartConfigType').value;
+            const span = document.getElementById('chartConfigSpan').value;
+            const ind1 = parseInt(document.getElementById('chartConfigInd1').value);
+            const ind2Val = document.getElementById('chartConfigInd2').value;
+            const ind2 = ind2Val !== '' ? parseInt(ind2Val) : null;
+
+            const chartObject = { id, title, desc, type, span, ind1, ind2 };
+
+            const existingIdx = customCharts.findIndex(c => c.id === id);
+            if (existingIdx !== -1) {
+                customCharts[existingIdx] = chartObject;
+            } else {
+                customCharts.push(chartObject);
+            }
+
+            saveCustomChartsStorage();
+            closeModal('modalChartConfig');
+            renderDynamicCharts();
+        }
+
+        function deleteCustomChart(chartId) {
+            if (confirm('Deseja realmente remover este gráfico personalizado?')) {
+                customCharts = customCharts.filter(c => c.id !== chartId);
+                saveCustomChartsStorage();
+                renderDynamicCharts();
+            }
+        }
+
+        function renderDynamicCharts() {
+            const container = document.getElementById('dynamicChartsContainer');
+            
+            Object.keys(dynamicChartInstances).forEach(key => {
+                if (dynamicChartInstances[key]) {
+                    dynamicChartInstances[key].destroy();
+                }
+            });
+            dynamicChartInstances = {};
+
+            container.innerHTML = '';
+
+            if (customCharts.length === 0) return;
+
+            customCharts.forEach(c => {
+                const indObj1 = currentData[c.ind1];
+                if (!indObj1) return;
+
+                const indObj2 = c.ind2 !== null ? currentData[c.ind2] : null;
+                const chartMonthData = getChartMonthData(indObj1);
+                const chartLabels = chartMonthData.labels.length > 0 ? chartMonthData.labels : mesesLabels;
+                const chartValues1 = chartMonthData.values;
+                const chartValues2 = indObj2 ? getChartMonthData(indObj2).values : [];
+
+                const wrapper = document.createElement('div');
+                wrapper.className = `lg:col-span-${c.span} glass-card rounded-2xl p-5 flex flex-col`;
+                
+                wrapper.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                                ${c.title}
+                            </h4>
+                            <p class="text-xs text-slate-400">${c.desc || 'Gráfico Personalizado'}</p>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="openChartModal('${c.id}')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="deleteCustomChart('${c.id}')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="relative flex-1 min-h-[280px]">
+                        <canvas id="canvas_${c.id}"></canvas>
+                    </div>
+                `;
+
+                container.appendChild(wrapper);
+
+                const datasets = [
+                    {
+                        label: indObj1.indicador,
+                        data: chartValues1,
+                        borderColor: '#eab308',
+                        backgroundColor: c.type === 'doughnut' ? ['#eab308', '#10b981', '#38bdf8', '#f59e0b', '#f43f5e', '#a855f7', '#ec4899', '#06b6d4', '#84cc16'] : 'rgba(234, 179, 8, 0.2)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        yAxisID: indObj2 ? 'y1' : 'y'
+                    }
+                ];
+
+                if (indObj2) {
+                    datasets.push({
+                        label: indObj2.indicador,
+                        data: chartValues2,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        yAxisID: 'y2'
+                    });
+                }
+
+                const scalesObj = {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                };
+
+                if (c.type !== 'radar' && c.type !== 'doughnut') {
+                    if (indObj2) {
+                        scalesObj.y1 = { type: 'linear', position: 'left', min: 0, beginAtZero: true, ticks: { color: '#eab308' } };
+                        scalesObj.y2 = { type: 'linear', position: 'right', min: 0, beginAtZero: true, ticks: { color: '#34d399' }, grid: { drawOnChartArea: false } };
+                    } else {
+                        scalesObj.y = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } };
+                    }
+                } else if (c.type === 'radar') {
+                    scalesObj.r = { min: 0, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, pointLabels: { color: '#cbd5e1' }, ticks: { display: false } };
+                }
+
+                const ctx = document.getElementById(`canvas_${c.id}`).getContext('2d');
+                dynamicChartInstances[c.id] = new Chart(ctx, {
+                    type: c.type,
+                    data: {
+                        labels: chartLabels,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: '#94a3b8' } } },
+                        scales: scalesObj
+                    }
+                });
+            });
+        }
+
+        // POPULAR DROPDOWN SETORES
+        function populateSetoresDropdown() {
+            const select = document.getElementById('setorFilter');
+            select.innerHTML = '<option value="TODOS">Todos os Setores</option>';
+            const setores = [...new Set(currentData.map(item => item.setor))];
+            setores.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                select.appendChild(opt);
+            });
+
+            document.getElementById('statSetoresCount').textContent = setores.length;
+        }
+
+        // GERAR CABEÇALHO DINÂMICO DA TABELA
+        function renderTableHeader() {
+            const headerRow = document.getElementById('tableHeaderRow');
+            let html = `
+                <th class="py-3 px-3">Ações</th>
+                <th class="py-3 px-3">Setor</th>
+                <th class="py-3 px-3">Indicador</th>
+                <th class="py-3 px-2 text-center">Meta</th>
+                <th class="py-3 px-2 text-center">Unid.</th>
+            `;
+
+            mesesLabels.forEach((m, idx) => {
+                const isLast = idx === mesesLabels.length - 1;
+                html += `<th class="py-3 px-2 text-right ${isLast ? 'text-amber-300 font-bold' : ''}">${m}</th>`;
+            });
+
+            html += `
+                <th class="py-3 px-3 text-right bg-amber-950/20">Média</th>
+                <th class="py-3 px-3 text-center bg-amber-950/20">Min / Max</th>
+                <th class="py-3 px-3 text-center">Tendência</th>
+                <th class="py-3 px-3 text-center">Status</th>
+            `;
+
+            headerRow.innerHTML = html;
+        }
+
+        // RENDERIZAÇÃO DA TABELA DE CONSULTA COM MESES DINÂMICOS
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const setorSel = document.getElementById('setorFilter').value;
+            const statusSel = document.getElementById('statusFilter').value;
+            const unitSel = document.getElementById('unitFilter').value;
+
+            let okCount = 0;
+            let offCount = 0;
+
+            const filtered = currentData.filter((item) => {
+                const m = calcMetrics(item);
+                if (m.status === 'OK') okCount++;
+                if (m.status === 'ACOMPANHAR') offCount++;
+
+                const matchSearch = item.indicador.toLowerCase().includes(search) || item.setor.toLowerCase().includes(search);
+                const matchSetor = setorSel === 'TODOS' || item.setor === setorSel;
+                const matchStatus = statusSel === 'TODOS' || m.status === statusSel;
+                const matchUnit = unitSel === 'TODOS' || item.und === unitSel;
+
+                return matchSearch && matchSetor && matchStatus && matchUnit;
+            });
+
+            document.getElementById('statTotalRows').textContent = currentData.length;
+            document.getElementById('statMetaOk').textContent = `${((okCount / (currentData.length || 1)) * 100).toFixed(0)}%`;
+            document.getElementById('statMetaOff').textContent = offCount;
+            document.getElementById('filteredCount').textContent = filtered.length;
+
+            filtered.forEach(item => {
+                const origIndex = currentData.indexOf(item);
+                const m = calcMetrics(item);
+                const monthly = getMonthlyData(item);
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/50 transition border-b border-slate-800/40';
+
+                let trendIcon = '<i class="fa-solid fa-minus text-slate-500"></i>';
+                if (m.diff > 0) trendIcon = `<span class="text-emerald-400 font-bold"><i class="fa-solid fa-arrow-trend-up"></i> +${fmtVal(m.diff)}</span>`;
+                if (m.diff < 0) trendIcon = `<span class="text-rose-400 font-bold"><i class="fa-solid fa-arrow-trend-down"></i> ${fmtVal(m.diff)}</span>`;
+
+                let badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">N/A</span>';
+                if (m.status === 'OK') badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">OK</span>';
+                if (m.status === 'ACOMPANHAR') badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20 font-semibold">ABAIXO</span>';
+
+                let valoresTdHtml = '';
+                monthly.labels.forEach((_, idx) => {
+                    const val = monthly.values[idx] !== undefined ? monthly.values[idx] : null;
+                    const isLast = idx === monthly.labels.length - 1;
+                    valoresTdHtml += `<td class="py-2.5 px-2 text-right font-mono text-[11px] ${isLast ? 'font-bold text-amber-300' : ''}">${fmtVal(val)}</td>`;
+                });
+
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3">
+                        <div class="flex items-center gap-1">
+                            <button onclick="openDetailModal(${origIndex})" title="Inspecionar" class="p-1.5 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-300 rounded-lg transition"><i class="fa-solid fa-eye"></i></button>
+                            <button onclick="openEditModal(${origIndex})" title="Editar" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteIndicator(${origIndex})" title="Excluir" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </td>
+                    <td class="py-2.5 px-3 font-medium text-slate-400 text-[11px]">${item.setor}</td>
+                    <td class="py-2.5 px-3 font-semibold text-white text-[11px]">${item.indicador}</td>
+                    <td class="py-2.5 px-2 text-center font-mono text-slate-400 text-[11px]">${item.meta !== null ? fmtVal(item.meta, item.und) : '-'}</td>
+                    <td class="py-2.5 px-2 text-center text-slate-400 text-[11px]">${item.und}</td>
+                    ${valoresTdHtml}
+                    <td class="py-2.5 px-3 text-right font-mono font-semibold bg-amber-950/20 text-slate-200 text-[11px]">${fmtVal(m.avg, item.und)}</td>
+                    <td class="py-2.5 px-3 text-center font-mono text-[10px] text-slate-400 bg-amber-950/20">${fmtVal(m.min)} / ${fmtVal(m.max)}</td>
+                    <td class="py-2.5 px-3 text-center text-[10px]">${trendIcon}</td>
+                    <td class="py-2.5 px-3 text-center">${badge}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // INSPEÇÃO DETALHADA
+        function openDetailModal(index) {
+            const item = currentData[index];
+            const m = calcMetrics(item);
+            const chartMonthData = getMonthlyData(item);
+            const chartLabels = chartMonthData.labels;
+
+            document.getElementById('modalDetailSetor').textContent = item.setor;
+            document.getElementById('modalDetailTitle').textContent = item.indicador;
+            document.getElementById('modalDetailMeta').textContent = fmtVal(item.meta, item.und);
+            document.getElementById('modalDetailLastLabel').textContent = `Último Valor (${m.lastMonth})`;
+            document.getElementById('modalDetailLast').textContent = fmtVal(m.last, item.und);
+            document.getElementById('modalDetailAvg').textContent = fmtVal(m.avg, item.und);
+            document.getElementById('modalDetailDiffLabel').textContent = `Variação (${mesesLabels[0]} -> ${m.lastMonth})`;
+            document.getElementById('modalDetailDiff').textContent = fmtVal(m.diff, item.und);
+
+            const ctx = document.getElementById('modalDetailChart').getContext('2d');
+            if (modalChartInst) modalChartInst.destroy();
+            modalChartInst = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: item.indicador,
+                        data: chartMonthData.values,
+                        borderColor: '#eab308',
+                        backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                        fill: true,
+                        tension: 0.3,
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { 
+                        x: { ticks: { color: '#94a3b8' } }, 
+                        y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } } 
+                    }
+                }
+            });
+
+            // Tabela do Modal
+            const head = document.getElementById('modalDetailTableHead');
+            head.innerHTML = `<tr>${chartLabels.map(m => `<th class="p-2.5 text-center">${m}</th>`).join('')}</tr>`;
+
+            const tbl = document.getElementById('modalDetailTable');
+            tbl.innerHTML = `<tr>${chartMonthData.values.map(value => `<td class="p-2.5 text-center text-slate-200">${fmtVal(value)}</td>`).join('')}</tr>`;
+
+            document.getElementById('modalDetail').classList.remove('hidden');
+        }
+
+        // GERAR CAMPOS DE INPUT MENSAIS NO FORMULÁRIO DE EDIÇÃO
+        function renderMonthlyInputs(valoresArray = []) {
+            const container = document.getElementById('monthlyInputsContainer');
+            container.innerHTML = '';
+
+            mesesLabels.forEach((mes, idx) => {
+                const val = (valoresArray[idx] !== undefined && valoresArray[idx] !== null) ? valoresArray[idx] : '';
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <span class="text-[10px] text-slate-400 block mb-0.5">${mes}</span>
+                    <input type="number" step="any" id="val_${idx}" value="${val}" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-lg p-2 font-mono">
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // CRIAR / EDITAR INDICADOR
+        function openNewIndicatorModal() {
+            document.getElementById('modalEditHeading').textContent = 'Novo Indicador';
+            document.getElementById('editIndex').value = '-1';
+            document.getElementById('editSetor').value = '';
+            document.getElementById('editIndicador').value = '';
+            document.getElementById('editMeta').value = '';
+            document.getElementById('editUnd').value = 'Numeral';
+            
+            renderMonthlyInputs([]);
+            document.getElementById('modalEdit').classList.remove('hidden');
+        }
+
+        function openEditModal(index) {
+            const item = currentData[index];
+            const monthly = getMonthlyData(item);
+            document.getElementById('modalEditHeading').textContent = 'Editar Indicador';
+            document.getElementById('editIndex').value = index;
+            document.getElementById('editSetor').value = item.setor;
+            document.getElementById('editIndicador').value = item.indicador;
+            document.getElementById('editMeta').value = item.meta ?? '';
+            document.getElementById('editUnd').value = item.und;
+            
+            renderMonthlyInputs(monthly.values);
+            document.getElementById('modalEdit').classList.remove('hidden');
+        }
+
+        function saveIndicatorForm(e) {
+            e.preventDefault();
+            const idx = parseInt(document.getElementById('editIndex').value);
+            const vals = [];
+
+            mesesLabels.forEach((_, i) => {
+                const inputEl = document.getElementById(`val_${i}`);
+                const v = inputEl ? inputEl.value : '';
+                vals.push(v !== '' ? parseFloat(v) : null);
+            });
+
+            const newItem = {
+                setor: document.getElementById('editSetor').value,
+                indicador: document.getElementById('editIndicador').value,
+                meta: parseFloat(document.getElementById('editMeta').value) || 0,
+                und: document.getElementById('editUnd').value,
+                valores: vals
+            };
+
+            if (idx === -1) {
+                currentData.push(newItem);
+            } else {
+                currentData[idx] = newItem;
+            }
+
+            saveData(currentData);
+            closeModal('modalEdit');
+            initSystem();
+        }
+
+        function deleteIndicator(index) {
+            if (confirm(`Tem certeza que deseja excluir o indicador "${currentData[index].indicador}"?`)) {
+                currentData.splice(index, 1);
+                saveData(currentData);
+                initSystem();
+            }
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        // AUDITORIA JSON
+        function updateJSONEditor() {
+            document.getElementById('jsonEditor').value = JSON.stringify(currentData, null, 2);
+        }
+
+        function copyRawJSON() {
+            navigator.clipboard.writeText(document.getElementById('jsonEditor').value);
+            alert('JSON copiado para a área de transferência!');
+        }
+
+        function applyRawJSON() {
+            try {
+                const parsed = JSON.parse(document.getElementById('jsonEditor').value);
+                saveData(parsed);
+                initSystem();
+                alert('Alterações salvas com sucesso!');
+            } catch(e) {
+                alert('Erro na validação do JSON. Verifique a sintaxe.');
+            }
+        }
+
+        // FUNÇÃO DE BUSCA E LEITURA DIRETA DO SHAREPOINT COM DETECÇÃO DINÂMICA DE COLUNAS
+        async function carregarDadosSharePoint() {
+            const urlSharePoint = 'https://dgraneltransporte.sharepoint.com/:x:/s/SINAVI/IQCuHWhcv-b4Q4VyNI2L8YHSAWW8qbNFpCq9D_Vm8ddyNyA?download=1';
+
+            try {
+                const response = await fetch(urlSharePoint);
+                if (!response.ok) throw new Error(`Erro HTTP! Status: ${response.status}`);
+
+                const csvText = await response.text();
+                parseCSVContent(csvText, "SharePoint");
+
+            } catch (erro) {
+                console.error("Erro ao buscar dados do SharePoint:", erro);
+                alert("Erro de acesso/CORS ao tentar buscar o arquivo do SharePoint.");
+            }
+        }
+
+        function parseCSVContent(csvText, sourceName = "CSV") {
+    Papa.parse(csvText, {
+        encoding: "ISO-8859-1",
+        skipEmptyLines: 'greedy',
+        complete: function(results) {
+            const rows = results.data;
+            let newParsed = [];
+            let headerIndex = -1;
+
+            // Localiza a linha de cabeçalho
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i].map(c => String(c).trim());
+                if (r[0] === 'Setor' && r.includes('Indicador')) {
+                    headerIndex = i;
+                    break;
+                }
+            }
+
+            if (headerIndex === -1) {
+                alert("Erro: Não foi possível localizar o cabeçalho no arquivo CSV.");
+                return;
+            }
+
+            const headerRow = rows[headerIndex].map(c => String(c).trim());
+            
+            const metaCols = ['Setor', 'Indicador', 'Meta', 'Und.', 'Und', 'Unidade', 'Direção', 'Direcao', 'Ano'];
+
+            let valStartIdx = 6;
+
+            // Identifica dinamicamente onde começam os meses ignorando colunas de cadastro
+            for (let c = 7; c < headerRow.length; c++) {
+                const col = headerRow[c].toLowerCase();
+                
+                // Pula colunas fixas (evita que 'Setor' seja lido como 'Setembro')
+                if (metaCols.includes(col)) continue;
+
+                if (BASE_MONTHS.some(bm => col.startsWith(bm.toLowerCase()))) {
+                    valStartIdx = c;
+                    break;
+                }
+            }
+
+            // Extrai apenas os nomes dos meses
+            const monthIndexes = headerRow
+                .map((header, index) => ({ header, index }))
+                .filter(({ header, index }) => index >= valStartIdx && isMonthLabel(header));
+            const extractedMonths = monthIndexes.map(({ header }) => header);
+            if (extractedMonths.length > 0 && typeof syncMonthLabels === 'function') {
+                syncMonthLabels(extractedMonths);
+            }
+
+            // Mapeia os dados do indicador apontando os valores apenas a partir da coluna de meses
+            for (let i = headerIndex + 1; i < rows.length; i++) {
+                const row = rows[i].map(c => String(c).trim());
+                if (row.length > 1 && row[0] !== '') {
+                    newParsed.push({
+                        setor: row[0],
+                        indicador: row[1] || '',
+                        meta: parsePtNum(row[2]),
+                        und: row[3] || 'Numeral',
+                        valores: monthIndexes.map(({ index }) => parsePtNum(row[index]))
+                    });
+                }
+            }
+
+            if (newParsed.length > 0) {
+                if (typeof saveData === 'function') saveData(newParsed);
+                if (typeof initSystem === 'function') initSystem();
+                alert(`Sucesso! ${newParsed.length} indicadores sincronizados de [${sourceName}] com ${extractedMonths.length} meses.`);
+            } else {
+                alert("Planilha lida, mas nenhum dado válido foi encontrado.");
+            }
+        }
+    });
+}
+
+        // IMPORTAR / EXPORTAR DADOS
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('csvFileInput');
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, p => { p.preventDefault(); p.stopPropagation(); }));
+            dropZone.addEventListener('drop', e => { if (e.dataTransfer.files.length) processCSV(e.dataTransfer.files[0]); });
+            fileInput.addEventListener('change', e => { if (e.target.files.length) processCSV(e.target.files[0]); });
+        }
+
+        // Limpeza de caracteres invisíveis e BOM do Excel
+function cleanStr(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/^\ufeff/, '').trim();
+}
+
+// Leitor numérico flexível (suporta %, R$, vírgula e ponto)
+function parsePtNum(val) {
+    if (val === null || val === undefined) return null;
+    let str = cleanStr(val).replace(/%/g, '').replace(/R\$/g, '').trim();
+    if (str === '' || str === '-' || str.toLowerCase() === 'none' || str.startsWith('#')) return null;
+    
+    // Converte formato brasileiro (1.234,56) para float padrão (1234.56)
+    if (str.includes(',')) {
+        str = str.replace(/\./g, '').replace(',', '.');
+    }
+    let num = parseFloat(str);
+    return isNaN(num) ? null : num;
+}
+
+// Processador de arquivo com detecção de encoding UTF-8 / ISO
+function processCSV(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        let content = e.target.result;
+        if (content.includes('')) {
+            const r2 = new FileReader();
+            r2.onload = (e2) => parseCSVContent(e2.target.result, file.name);
+            r2.readAsText(file, "ISO-8859-1");
+        } else {
+            parseCSVContent(content, file.name);
+        }
+    };
+    reader.readAsText(file, "UTF-8");
+}
+
+// Parser universal flexível
+function parseCSVContent(csvText, sourceName = "CSV") {
+    Papa.parse(csvText, {
+        skipEmptyLines: 'greedy',
+        complete: function(results) {
+            const rows = results.data;
+            let newParsed = [];
+            let headerIndex = -1;
+
+            // Busca inteligente pelo cabeçalho (independe de acento ou caixa alta/baixa)
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i].map(c => cleanStr(c).toLowerCase());
+                const temSetor = r.some(c => c === 'setor');
+                const temIndicador = r.some(c => c.includes('indicador'));
+                
+                if (temSetor && temIndicador) {
+                    headerIndex = i;
+                    break;
+                }
+            }
+
+            if (headerIndex === -1) {
+                alert("Erro: Não foi possível identificar o cabeçalho com 'Setor' e 'Indicador' na planilha.");
+                return;
+            }
+
+            const headerRow = rows[headerIndex].map(c => cleanStr(c));
+            
+            // Identifica onde começam os meses sem tratar a coluna Ano como dado mensal
+            const metadataHeaders = new Set([
+                'setor', 'indicador', 'meta', 'und', 'unidade', 'direcao', 'direção', 'ano'
+            ]);
+            const monthRegex = /^(jan|janeiro|fev|fevereiro|mar|março|marco|abr|abril|mai|maio|jun|junho|jul|julho|ago|agosto|setembro|out|outubro|nov|novembro|dez|dezembro|\d{1,2}\/\d{2,4})/i;
+            let valStartIdx = -1;
+            let lastMetadataIdx = -1;
+
+            headerRow.forEach((header, index) => {
+                const normalizedHeader = header.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (metadataHeaders.has(normalizedHeader)) lastMetadataIdx = index;
+                if (valStartIdx === -1 && monthRegex.test(normalizedHeader)) valStartIdx = index;
+            });
+
+            // A planilha sem nomes de mês ainda deve ignorar todas as colunas de cadastro.
+            if (valStartIdx === -1) valStartIdx = lastMetadataIdx + 1;
+
+            const monthIndexes = headerRow
+                .map((header, index) => ({ header, index }))
+                .filter(({ header, index }) => index >= valStartIdx && isMonthLabel(header));
+            const extractedMonths = monthIndexes.map(({ header }) => header);
+            if (extractedMonths.length > 0) {
+                syncMonthLabels(extractedMonths);
+            }
+
+            // Extrai as linhas de dados
+            for (let i = headerIndex + 1; i < rows.length; i++) {
+                const row = rows[i].map(c => cleanStr(c));
+                if (row.length > 1 && row[0] !== '') {
+                    newParsed.push({
+                        setor: row[0],
+                        indicador: row[1] || '',
+                        meta: parsePtNum(row[2]),
+                        und: row[3] || 'Numeral',
+                        valores: monthIndexes.map(({ index }) => parsePtNum(row[index]))
+                    });
+                }
+            }
+
+            if (newParsed.length > 0) {
+                saveData(newParsed);
+                initSystem();
+                alert(`Sucesso! ${newParsed.length} indicadores atualizados com ${mesesLabels.length} meses.`);
+            } else {
+                alert("Nenhum dado válido encontrado abaixo da linha de cabeçalho.");
+            }
+        }
+    });
+}
+
+
+        function resetData() {
+            if (confirm('Deseja restaurar os dados padrões originais da D\'Granel? (A logo personalizada também será resetada)')) {
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(CHARTS_STORAGE_KEY);
+                localStorage.removeItem(MONTHS_STORAGE_KEY);
+                resetLogo();
+                mesesLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
+                loadStoredData();
+                loadStoredCharts();
+                initSystem();
+            }
+        }
+    </script>
+</body>
+</html>
