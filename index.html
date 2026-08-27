@@ -198,6 +198,12 @@
                 <!-- Gerado via JS -->
             </section>
 
+            <div class="flex justify-end -mt-3">
+                <button onclick="openKpiModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus text-amber-400"></i> Adicionar Balão
+                </button>
+            </div>
+
             <!-- BARRA DE AÇÕES DO DASHBOARD -->
             <div class="flex justify-between items-center bg-[#0A1329]/80 p-3.5 rounded-xl border border-amber-500/20">
                 <div class="text-xs font-bold text-slate-300 flex items-center gap-2">
@@ -604,6 +610,42 @@
         </div>
     </div>
 
+    <div id="modalKpiConfig" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card w-full max-w-xl rounded-2xl p-6 border border-slate-700 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 id="modalKpiHeading" class="text-base font-bold text-white"><i class="fa-solid fa-chart-simple text-amber-400"></i> Configurar Balão</h3>
+                <button onclick="closeModal('modalKpiConfig')" class="text-slate-400 hover:text-white p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="saveKpiConfig(event)" class="space-y-4">
+                <input type="hidden" id="kpiConfigId" value="">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Título</label>
+                    <input type="text" id="kpiConfigTitle" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Estatística / Indicador</label>
+                    <select id="kpiConfigIndicator" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500"></select>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Texto da unidade</label>
+                        <input type="text" id="kpiConfigUnit" placeholder="Ex: pts, %, ocorrências" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Cor</label>
+                        <select id="kpiConfigColor" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                            <option value="emerald">Verde</option><option value="amber">Âmbar</option><option value="rose">Vermelho</option><option value="sky">Azul</option><option value="violet">Violeta</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closeModal('modalKpiConfig')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl">Cancelar</button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-5 py-2 rounded-xl">Salvar Balão</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
     <script>
@@ -612,6 +654,7 @@
 
         const STORAGE_KEY = 'dgranel_fleet_records_2026';
         const CHARTS_STORAGE_KEY = 'dgranel_custom_charts_2026';
+        const KPI_STORAGE_KEY = 'dgranel_kpi_cards_2026';
         const DEFAULT_CHARTS_STORAGE_KEY = 'dgranel_default_charts_2026';
         const MONTHS_STORAGE_KEY = 'dgranel_custom_months_2026';
         const LOGO_STORAGE_KEY = 'dgranel_custom_logo_2026';
@@ -628,6 +671,7 @@
 
         let currentData = [];
         let customCharts = [];
+        let kpiCards = [];
         let defaultChartConfigs = {};
         let editingDefaultChartId = null;
         let chart1Inst = null, chart2Inst = null, chart3Inst = null, chart4Inst = null, modalChartInst = null;
@@ -650,6 +694,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadStoredData();
             loadStoredCharts();
+            loadStoredKpis();
             loadStoredDefaultCharts();
             setupDragAndDrop();
             initSystem();
@@ -781,6 +826,19 @@
             }
         }
 
+        function loadStoredKpis() {
+            try {
+                kpiCards = JSON.parse(localStorage.getItem(KPI_STORAGE_KEY) || '[]');
+            } catch (e) {
+                kpiCards = [];
+            }
+        }
+
+        function saveKpis() {
+            localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(kpiCards));
+            salvarEstadoSupabase().catch(error => console.error('Erro ao sincronizar balões:', error));
+        }
+
         function loadStoredDefaultCharts() {
             try {
                 defaultChartConfigs = JSON.parse(localStorage.getItem(DEFAULT_CHARTS_STORAGE_KEY) || '{}');
@@ -870,7 +928,7 @@
                 },
                 body: JSON.stringify({
                     id: 1,
-                    data: { indicadores: currentData, graficos: customCharts, graficosPadrao: defaultChartConfigs },
+                    data: { indicadores: currentData, graficos: customCharts, graficosPadrao: defaultChartConfigs, kpis: kpiCards },
                     updated_at: new Date().toISOString()
                 })
             });
@@ -903,6 +961,7 @@
                     ? sharedState.data.graficos
                     : null;
                 const sharedDefaultCharts = sharedState?.data?.graficosPadrao;
+                const sharedKpis = sharedState?.data?.kpis;
 
                 if (sharedIndicators && sharedIndicators.length > 0) {
                     currentData = sharedIndicators;
@@ -913,6 +972,10 @@
                     if (sharedDefaultCharts && typeof sharedDefaultCharts === 'object' && Object.keys(sharedDefaultCharts).length > 0) {
                         defaultChartConfigs = sharedDefaultCharts;
                         localStorage.setItem(DEFAULT_CHARTS_STORAGE_KEY, JSON.stringify(defaultChartConfigs));
+                    }
+                    if (Array.isArray(sharedKpis) && sharedKpis.length > 0) {
+                        kpiCards = sharedKpis;
+                        localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(kpiCards));
                     }
                     syncMonthLabels();
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
@@ -1071,47 +1134,117 @@
             document.getElementById('kpiTotalCount').textContent = currentData.length;
             document.getElementById('kpiMonthsCount').textContent = mesesLabels.length;
 
-            const crlv = currentData.find(d => d.indicador.includes('% CRLV LIBERADOS')) || currentData[12] || { valores: [] };
-            const score = currentData.find(d => d.indicador.includes('SCORE')) || currentData[31] || { valores: [] };
-            const velocidade = currentData.find(d => d.indicador.includes('velocidade permitida')) || currentData[32] || { valores: [] };
-            const multas = currentData.find(d => d.indicador.includes('Multas Cobradas Motoristas')) || currentData[16] || { valores: [] };
-
-            const crlvData = getMonthlyData(crlv);
-            const scoreData = getMonthlyData(score);
-            const velData = getMonthlyData(velocidade);
-            const multasData = getMonthlyData(multas);
-            const crlvLast = getLastValid(crlvData.values, crlvData.labels);
-            const scoreLast = getLastValid(scoreData.values, scoreData.labels);
-            const velLast = getLastValid(velData.values, velData.labels);
-            const multasLast = getLastValid(multasData.values, multasData.labels);
-
-            const cards = [
-                { title: '% CRLV Liberados', val: fmtVal(crlvLast.val, '%'), desc: `Meta: 100% (${crlvLast.month})`, badge: 'Regularização OK', color: 'emerald', icon: 'fa-file-check' },
-                { title: 'Score do Motorista', val: `${fmtVal(scoreLast.val)} pts`, desc: `Meta: 600 pts (${scoreLast.month})`, badge: 'Em Elevação', color: 'amber', icon: 'fa-star' },
-                { title: 'Excesso de Velocidade', val: fmtVal(velLast.val), desc: `Ocorrências (${velLast.month})`, badge: 'Risco Operacional', color: 'rose', icon: 'fa-gauge-high' },
-                { title: 'Multas Cobradas', val: fmtVal(multasLast.val), desc: `Cobranças (${multasLast.month})`, badge: 'Atenção Elevada', color: 'amber', icon: 'fa-receipt' }
+            const findIndicator = text => currentData.findIndex(item => item.indicador.includes(text));
+            const defaults = [
+                { id: 'kpi1', title: '% CRLV Liberados', indicator: findIndicator('% CRLV LIBERADOS'), unit: '%', color: 'emerald', icon: 'fa-file-check', badge: 'Regularização OK' },
+                { id: 'kpi2', title: 'Score do Motorista', indicator: findIndicator('SCORE'), unit: 'pts', color: 'amber', icon: 'fa-star', badge: 'Em Elevação' },
+                { id: 'kpi3', title: 'Excesso de Velocidade', indicator: findIndicator('velocidade permitida'), unit: '', color: 'rose', icon: 'fa-gauge-high', badge: 'Risco Operacional' },
+                { id: 'kpi4', title: 'Multas Cobradas', indicator: findIndicator('Multas Cobradas Motoristas'), unit: '', color: 'amber', icon: 'fa-receipt', badge: 'Atenção Elevada' }
             ];
+            const savedById = Object.fromEntries(kpiCards.map(card => [card.id, card]));
+            const cards = [...defaults.map(card => ({ ...card, ...savedById[card.id] })), ...kpiCards.filter(card => !defaults.some(item => item.id === card.id))]
+                .filter(card => !card.deleted);
 
             cards.forEach(c => {
+                const indicator = currentData[c.indicator] || { valores: [] };
+                const monthly = getMonthlyData(indicator);
+                const last = getLastValid(monthly.values, monthly.labels);
+                const unit = c.unit || indicator.und || '';
                 const el = document.createElement('div');
                 el.className = 'glass-card rounded-2xl p-5 flex flex-col justify-between';
                 el.innerHTML = `
                     <div class="flex items-start justify-between">
                         <div>
                             <span class="text-xs text-slate-400 font-medium">${c.title}</span>
-                            <div class="text-2xl font-extrabold text-white mt-1">${c.val}</div>
+                            <div class="text-2xl font-extrabold text-white mt-1">${fmtVal(last.val, unit === '%' ? '%' : '')}${unit && unit !== '%' ? ` ${unit}` : ''}</div>
                         </div>
                         <div class="p-3 rounded-xl bg-${c.color}-500/10 text-${c.color}-400 border border-${c.color}-500/20">
                             <i class="fa-solid ${c.icon} text-lg"></i>
                         </div>
                     </div>
-                    <div class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
-                        <span class="text-slate-400">${c.desc}</span>
+                    <div class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center gap-2 text-xs">
+                        <span class="text-slate-400">Último: ${last.month}</span>
+                        <span class="text-slate-300">Meta: ${fmtVal(indicator.meta, unit === '%' ? '%' : '')}${unit && unit !== '%' && indicator.meta !== null && indicator.meta !== undefined ? ` ${unit}` : ''}</span>
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-${c.color}-500/10 text-${c.color}-400 border border-${c.color}-500/20">${c.badge}</span>
+                    </div>
+                    <div class="flex justify-end gap-1 mt-3">
+                        <button onclick="openKpiModal('${c.id}')" title="Editar Balão" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="deleteKpi('${c.id}')" title="Excluir Balão" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 `;
                 kpiContainer.appendChild(el);
             });
+        }
+
+        function populateKpiIndicators(selectedIndex = null) {
+            const select = document.getElementById('kpiConfigIndicator');
+            select.innerHTML = '';
+            currentData.forEach((item, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `[${item.setor}] ${item.indicador}`;
+                option.selected = String(index) === String(selectedIndex);
+                select.appendChild(option);
+            });
+        }
+
+        function getKpiConfig(kpiId) {
+            const defaults = {
+                kpi1: { title: '% CRLV Liberados', indicator: currentData.findIndex(item => item.indicador.includes('% CRLV LIBERADOS')), unit: '%', color: 'emerald', icon: 'fa-file-check', badge: 'Regularização OK' },
+                kpi2: { title: 'Score do Motorista', indicator: currentData.findIndex(item => item.indicador.includes('SCORE')), unit: 'pts', color: 'amber', icon: 'fa-star', badge: 'Em Elevação' },
+                kpi3: { title: 'Excesso de Velocidade', indicator: currentData.findIndex(item => item.indicador.includes('velocidade permitida')), unit: '', color: 'rose', icon: 'fa-gauge-high', badge: 'Risco Operacional' },
+                kpi4: { title: 'Multas Cobradas', indicator: currentData.findIndex(item => item.indicador.includes('Multas Cobradas Motoristas')), unit: '', color: 'amber', icon: 'fa-receipt', badge: 'Atenção Elevada' }
+            };
+            return { ...(defaults[kpiId] || {}), ...(kpiCards.find(card => card.id === kpiId) || {}) };
+        }
+
+        function openKpiModal(kpiId = null) {
+            const config = kpiId ? getKpiConfig(kpiId) : { id: `kpi_${Date.now()}`, title: '', indicator: 0, unit: '', color: 'sky', icon: 'fa-chart-simple', badge: 'Personalizado' };
+            document.getElementById('kpiConfigId').value = config.id;
+            document.getElementById('kpiConfigTitle').value = config.title;
+            document.getElementById('kpiConfigUnit').value = config.unit || '';
+            document.getElementById('kpiConfigColor').value = config.color || 'sky';
+            populateKpiIndicators(config.indicator);
+            document.getElementById('modalKpiHeading').innerHTML = kpiId
+                ? '<i class="fa-solid fa-pen-to-square text-amber-400"></i> Editar Balão'
+                : '<i class="fa-solid fa-chart-simple text-amber-400"></i> Criar Balão';
+            document.getElementById('modalKpiConfig').classList.remove('hidden');
+        }
+
+        function saveKpiConfig(event) {
+            event.preventDefault();
+            const id = document.getElementById('kpiConfigId').value;
+            const config = {
+                id,
+                title: document.getElementById('kpiConfigTitle').value,
+                indicator: parseInt(document.getElementById('kpiConfigIndicator').value),
+                unit: document.getElementById('kpiConfigUnit').value,
+                color: document.getElementById('kpiConfigColor').value,
+                icon: id === 'kpi1' ? 'fa-file-check' : id === 'kpi2' ? 'fa-star' : id === 'kpi3' ? 'fa-gauge-high' : id === 'kpi4' ? 'fa-receipt' : 'fa-chart-simple',
+                badge: id.startsWith('kpi_') ? 'Personalizado' : getKpiConfig(id).badge
+            };
+            const index = kpiCards.findIndex(card => card.id === id);
+            if (index >= 0) kpiCards[index] = config;
+            else kpiCards.push(config);
+            saveKpis();
+            closeModal('modalKpiConfig');
+            renderKPIs();
+        }
+
+        function deleteKpi(kpiId) {
+            if (!confirm('Deseja realmente excluir este balão?')) return;
+            const defaultKpi = ['kpi1', 'kpi2', 'kpi3', 'kpi4'].includes(kpiId);
+            if (defaultKpi) {
+                const existing = getKpiConfig(kpiId);
+                const index = kpiCards.findIndex(card => card.id === kpiId);
+                const deleted = { ...existing, id: kpiId, deleted: true };
+                if (index >= 0) kpiCards[index] = deleted;
+                else kpiCards.push(deleted);
+            } else {
+                kpiCards = kpiCards.filter(card => card.id !== kpiId);
+            }
+            saveKpis();
+            renderKPIs();
         }
 
         // RENDERIZAÇÃO DOS GRÁFICOS PADRÃO
