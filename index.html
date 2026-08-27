@@ -211,7 +211,7 @@
             <!-- SEÇÃO DE GRÁFICOS PADRÃO -->
             <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <!-- GRÁFICO 1 -->
-                <div class="lg:col-span-8 glass-card rounded-2xl p-5 flex flex-col">
+                <div id="defaultChartCard1" class="lg:col-span-8 glass-card rounded-2xl p-5 flex flex-col">
                     <div class="flex justify-between items-center mb-4">
                         <div>
                             <h4 class="text-sm font-bold text-white flex items-center gap-2">
@@ -220,6 +220,10 @@
                             </h4>
                             <p class="text-xs text-slate-400">Acompanhamento temporal dos indicadores críticos D'Granel</p>
                         </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="openDefaultChartModal('chart1')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteDefaultChart('chart1')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                        </div>
                     </div>
                     <div class="relative flex-1 min-h-[320px]">
                         <canvas id="chart1"></canvas>
@@ -227,7 +231,7 @@
                 </div>
 
                 <!-- GRÁFICO 3 (RADAR) -->
-                <div class="lg:col-span-4 glass-card rounded-2xl p-5 flex flex-col">
+                <div id="defaultChartCard3" class="lg:col-span-4 glass-card rounded-2xl p-5 flex flex-col">
                     <div class="flex justify-between items-center mb-4">
                         <div>
                             <h4 class="text-sm font-bold text-white flex items-center gap-2">
@@ -236,6 +240,10 @@
                             </h4>
                             <p class="text-xs text-slate-400" id="radarSubTitle">Comparativo Mês Inicial vs Mais Recente</p>
                         </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="openDefaultChartModal('chart3')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteDefaultChart('chart3')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                        </div>
                     </div>
                     <div class="relative flex-1 min-h-[320px] flex items-center justify-center">
                         <canvas id="chart3"></canvas>
@@ -243,7 +251,7 @@
                 </div>
 
                 <!-- GRÁFICO 2 -->
-                <div class="lg:col-span-6 glass-card rounded-2xl p-5">
+                <div id="defaultChartCard2" class="lg:col-span-6 glass-card rounded-2xl p-5">
                     <div class="flex justify-between items-center mb-4">
                         <div>
                             <h4 class="text-sm font-bold text-white flex items-center gap-2">
@@ -252,6 +260,10 @@
                             </h4>
                             <p class="text-xs text-slate-400">Evolução do volume de frota ativa</p>
                         </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="openDefaultChartModal('chart2')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteDefaultChart('chart2')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                        </div>
                     </div>
                     <div class="relative min-h-[280px]">
                         <canvas id="chart2"></canvas>
@@ -259,7 +271,7 @@
                 </div>
 
                 <!-- GRÁFICO 4 (CORRELAÇÃO DE SINISTROS E VELOCIDADE) -->
-                <div class="lg:col-span-6 glass-card rounded-2xl p-5">
+                <div id="defaultChartCard4" class="lg:col-span-6 glass-card rounded-2xl p-5">
                     <div class="flex justify-between items-center mb-4">
                         <div>
                             <h4 class="text-sm font-bold text-white flex items-center gap-2">
@@ -267,6 +279,10 @@
                                 Correlação: Sinistros vs Excesso de Velocidade
                             </h4>
                             <p class="text-xs text-slate-400">Análise de impacto direto: Picos de velocidade vs acidentes</p>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="openDefaultChartModal('chart4')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteDefaultChart('chart4')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
                     <div class="relative min-h-[280px]">
@@ -535,8 +551,11 @@
                         <select id="chartConfigType" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
                             <option value="line">Linha</option>
                             <option value="bar">Barra</option>
+                            <option value="horizontalBar">Barra horizontal</option>
+                            <option value="area">Área preenchida</option>
                             <option value="doughnut">Rosca / Pizza</option>
                             <option value="radar">Radar</option>
+                            <option value="polarArea">Polar</option>
                         </select>
                     </div>
                     <div>
@@ -593,6 +612,7 @@
 
         const STORAGE_KEY = 'dgranel_fleet_records_2026';
         const CHARTS_STORAGE_KEY = 'dgranel_custom_charts_2026';
+        const DEFAULT_CHARTS_STORAGE_KEY = 'dgranel_default_charts_2026';
         const MONTHS_STORAGE_KEY = 'dgranel_custom_months_2026';
         const LOGO_STORAGE_KEY = 'dgranel_custom_logo_2026';
         const DATA_LABELS_STORAGE_KEY = 'dgranel_show_chart_data_labels_2026';
@@ -608,6 +628,8 @@
 
         let currentData = [];
         let customCharts = [];
+        let defaultChartConfigs = {};
+        let editingDefaultChartId = null;
         let chart1Inst = null, chart2Inst = null, chart3Inst = null, chart4Inst = null, modalChartInst = null;
         let dynamicChartInstances = {};
         let showDataLabels = localStorage.getItem(DATA_LABELS_STORAGE_KEY) === 'true';
@@ -628,6 +650,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadStoredData();
             loadStoredCharts();
+            loadStoredDefaultCharts();
             setupDragAndDrop();
             initSystem();
             carregarDadosCompartilhados();
@@ -758,6 +781,84 @@
             }
         }
 
+        function loadStoredDefaultCharts() {
+            try {
+                defaultChartConfigs = JSON.parse(localStorage.getItem(DEFAULT_CHARTS_STORAGE_KEY) || '{}');
+            } catch (e) {
+                defaultChartConfigs = {};
+            }
+        }
+
+        function getDefaultChartConfig(chartId) {
+            const findIndicator = text => currentData.findIndex(item => item.indicador.includes(text));
+            const defaults = {
+                chart1: { title: 'Evolução de Documentação, Score vs Acidentes & Multas', desc: 'Acompanhamento temporal dos indicadores críticos D\'Granel', type: 'bar', ind1: findIndicator('% CRLV LIBERADOS'), ind2: findIndicator('SCORE'), ind3: findIndicator('Total de acidentes'), ind4: findIndicator('Multas Cobradas Motoristas') },
+                chart2: { title: 'Dimensionamento da Frota', desc: 'Evolução do volume de frota ativa', type: 'bar', ind1: findIndicator('cavalo mecânico'), ind2: findIndicator('semirreboques') },
+                chart3: { title: 'Matriz de Eficiência (%)', desc: 'Comparativo Mês Inicial vs Mais Recente', type: 'radar', ind1: findIndicator('% CRLV LIBERADOS'), ind2: findIndicator('Cronotacógrafo'), ind3: findIndicator('40% de desconto') },
+                chart4: { title: 'Correlação: Sinistros vs Excesso de Velocidade', desc: 'Análise de impacto direto: Picos de velocidade vs acidentes', type: 'line', ind1: findIndicator('velocidade permitida'), ind2: findIndicator('Total de acidentes') }
+            };
+            return { ...defaults[chartId], ...(defaultChartConfigs[chartId] || {}) };
+        }
+
+        function getChartJsType(type) {
+            return type === 'horizontalBar' ? 'bar' : type === 'area' ? 'line' : type;
+        }
+
+        function getChartTypeOptions(type, scales) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: type === 'horizontalBar' ? 'y' : 'x',
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales
+            };
+        }
+
+        function openDefaultChartModal(chartId) {
+            editingDefaultChartId = chartId;
+            const config = { ...getDefaultChartConfig(chartId), id: `default_${chartId}`, span: '6' };
+            customCharts.push(config);
+            openChartModal(config.id);
+            customCharts = customCharts.filter(chart => chart.id !== config.id);
+        }
+
+        function deleteDefaultChart(chartId) {
+            if (!confirm('Deseja realmente excluir este gráfico padrão?')) return;
+            defaultChartConfigs[chartId] = { ...getDefaultChartConfig(chartId), deleted: true };
+            localStorage.setItem(DEFAULT_CHARTS_STORAGE_KEY, JSON.stringify(defaultChartConfigs));
+            salvarEstadoSupabase().catch(error => console.error('Erro ao sincronizar exclusão do gráfico:', error));
+            renderCharts();
+        }
+
+        function renderConfiguredDefaultCharts() {
+            ['chart1', 'chart2', 'chart3', 'chart4'].forEach(chartId => {
+                const config = getDefaultChartConfig(chartId);
+                const card = document.getElementById(`defaultChartCard${chartId.slice(-1)}`);
+                if (card) card.classList.toggle('hidden', config.deleted === true);
+                if (config.deleted) return;
+                if (!defaultChartConfigs[chartId]) return;
+
+                const instances = { chart1: chart1Inst, chart2: chart2Inst, chart3: chart3Inst, chart4: chart4Inst };
+                if (instances[chartId]) instances[chartId].destroy();
+                const indexes = [config.ind1, config.ind2, config.ind3, config.ind4].filter(index => Number.isInteger(index) && index >= 0);
+                const indicators = indexes.map(index => currentData[index]).filter(Boolean);
+                const labels = getChartMonthData(indicators[0] || { valores: [] }).labels;
+                if (!indicators.length) return;
+                let datasets = indicators.map((indicator, index) => ({ label: indicator.indicador, data: getChartMonthData(indicator).values, borderColor: ['#10b981', '#eab308', '#f43f5e', '#38bdf8'][index], backgroundColor: ['rgba(16,185,129,.25)', 'rgba(234,179,8,.25)', 'rgba(244,63,94,.25)', 'rgba(56,189,248,.25)'][index], borderWidth: 2, tension: 0.3, fill: config.type === 'line' }));
+                if (chartId === 'chart2' && indicators.length > 1) datasets = [{ label: config.title, data: labels.map((_, index) => indicators.reduce((sum, item) => sum + (getChartMonthData(item).values[index] || 0), 0)), backgroundColor: 'rgba(56,189,248,.6)', borderRadius: 6 }];
+                const scales = config.type === 'radar' ? { r: { min: 0, beginAtZero: true, pointLabels: { color: '#cbd5e1' } } } : { x: { ticks: { color: '#94a3b8' } }, y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } } };
+                if (config.type === 'horizontalBar') {
+                    scales.x = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } };
+                    scales.y = { ticks: { color: '#94a3b8' } };
+                }
+                const chart = new Chart(document.getElementById(chartId).getContext('2d'), { type: getChartJsType(config.type), data: { labels, datasets }, options: getChartTypeOptions(config.type, scales) });
+                if (chartId === 'chart1') chart1Inst = chart;
+                if (chartId === 'chart2') chart2Inst = chart;
+                if (chartId === 'chart3') chart3Inst = chart;
+                if (chartId === 'chart4') chart4Inst = chart;
+            });
+        }
+
         async function salvarEstadoSupabase() {
             const response = await fetch(SUPABASE_STATE_ENDPOINT, {
                 method: 'POST',
@@ -769,7 +870,7 @@
                 },
                 body: JSON.stringify({
                     id: 1,
-                    data: { indicadores: currentData, graficos: customCharts },
+                    data: { indicadores: currentData, graficos: customCharts, graficosPadrao: defaultChartConfigs },
                     updated_at: new Date().toISOString()
                 })
             });
@@ -801,12 +902,17 @@
                 const sharedCharts = Array.isArray(sharedState?.data?.graficos)
                     ? sharedState.data.graficos
                     : null;
+                const sharedDefaultCharts = sharedState?.data?.graficosPadrao;
 
                 if (sharedIndicators && sharedIndicators.length > 0) {
                     currentData = sharedIndicators;
                     if (sharedCharts) {
                         customCharts = sharedCharts;
                         localStorage.setItem(CHARTS_STORAGE_KEY, JSON.stringify(customCharts));
+                    }
+                    if (sharedDefaultCharts && typeof sharedDefaultCharts === 'object' && Object.keys(sharedDefaultCharts).length > 0) {
+                        defaultChartConfigs = sharedDefaultCharts;
+                        localStorage.setItem(DEFAULT_CHARTS_STORAGE_KEY, JSON.stringify(defaultChartConfigs));
                     }
                     syncMonthLabels();
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
@@ -1157,10 +1263,12 @@
                     }
                 }
             });
+            renderConfiguredDefaultCharts();
         }
 
         // ================= SISTEMA DE GRÁFICOS PERSONALIZADOS =================
         function openChartModal(chartId = null) {
+            if (!chartId) editingDefaultChartId = null;
             populateChartConfigDropdowns();
 
             if (chartId) {
@@ -1235,6 +1343,16 @@
             const ind4 = ind4Val !== '' ? parseInt(ind4Val) : null;
 
             const chartObject = { id, title, desc, type, span, ind1, ind2, ind3, ind4 };
+
+            if (editingDefaultChartId) {
+                defaultChartConfigs[editingDefaultChartId] = { ...chartObject, deleted: false };
+                localStorage.setItem(DEFAULT_CHARTS_STORAGE_KEY, JSON.stringify(defaultChartConfigs));
+                salvarEstadoSupabase().catch(error => console.error('Erro ao sincronizar edição do gráfico:', error));
+                editingDefaultChartId = null;
+                closeModal('modalChartConfig');
+                renderCharts();
+                return;
+            }
 
             const existingIdx = customCharts.findIndex(c => c.id === id);
             if (existingIdx !== -1) {
@@ -1319,6 +1437,7 @@
                         : `${datasetColors[index]}33`,
                     borderWidth: 2,
                     tension: 0.3,
+                    fill: c.type === 'area',
                     yAxisID: indicatorObjects.length > 1 ? `y${index + 1}` : 'y'
                 }));
 
@@ -1326,7 +1445,7 @@
                     x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
                 };
 
-                if (c.type !== 'radar' && c.type !== 'doughnut') {
+                if (c.type !== 'radar' && c.type !== 'doughnut' && c.type !== 'polarArea') {
                     if (indicatorObjects.length > 1) {
                         indicatorObjects.forEach((_, index) => {
                             scalesObj[`y${index + 1}`] = {
@@ -1344,19 +1463,20 @@
                 } else if (c.type === 'radar') {
                     scalesObj.r = { min: 0, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, pointLabels: { color: '#cbd5e1' }, ticks: { display: false } };
                 }
+                if (c.type === 'horizontalBar') {
+                    scalesObj.x = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } };
+                    scalesObj.y = { ticks: { color: '#94a3b8' } };
+                }
 
                 const ctx = document.getElementById(`canvas_${c.id}`).getContext('2d');
                 dynamicChartInstances[c.id] = new Chart(ctx, {
-                    type: c.type,
+                    type: getChartJsType(c.type),
                     data: {
                         labels: chartLabels,
                         datasets: datasets
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { labels: { color: '#94a3b8' } } },
-                        scales: scalesObj
+                        ...getChartTypeOptions(c.type, scalesObj)
                     }
                 });
             });
