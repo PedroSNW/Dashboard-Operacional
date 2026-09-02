@@ -1574,6 +1574,18 @@
                     yAxisID: indicatorObjects.length > 1 ? `y${index + 1}` : 'y'
                 }));
 
+                // Calcular o valor máximo comum entre todos os indicadores para escala consistente
+                let maxValue = 0;
+                if (indicatorObjects.length > 1) {
+                    indicatorObjects.forEach(indicator => {
+                        const values = getChartMonthData(indicator).values.filter(v => v !== null && v !== undefined && !isNaN(v));
+                        if (values.length > 0) {
+                            maxValue = Math.max(maxValue, Math.max(...values));
+                        }
+                    });
+                    maxValue = maxValue > 0 ? maxValue * 1.1 : 100; // Adiciona 10% de margem
+                }
+
                 const scalesObj = {
                     x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
                 };
@@ -1585,13 +1597,15 @@
                                 type: 'linear',
                                 position: index % 2 === 0 ? 'left' : 'right',
                                 min: 0,
+                                max: maxValue > 0 ? maxValue : undefined,
                                 beginAtZero: true,
                                 ticks: { color: datasetColors[index] },
-                                grid: { drawOnChartArea: index === 0 }
+                                grid: { drawOnChartArea: index === 0 },
+                                title: { display: true, text: 'Valores Comparativos', color: '#cbd5e1', font: { size: 10, weight: 'bold' } }
                             };
                         });
                     } else {
-                        scalesObj.y = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } };
+                        scalesObj.y = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Valores', color: '#cbd5e1', font: { size: 10, weight: 'bold' } } };
                     }
                 } else if (c.type === 'radar') {
                     scalesObj.r = { min: 0, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, pointLabels: { color: '#cbd5e1' }, ticks: { display: false } };
