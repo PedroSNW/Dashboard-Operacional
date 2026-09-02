@@ -1278,9 +1278,9 @@
                     plugins: { legend: { labels: { color: '#94a3b8' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                        y1: { position: 'left', min: 0, beginAtZero: true, max: 100, ticks: { color: '#ffffff' } },
-                        y2: { position: 'right', min: 0, beginAtZero: true, ticks: { color: '#ffffff' }, grid: { drawOnChartArea: false } },
-                        y3: { position: 'right', min: 0, beginAtZero: true, ticks: { color: '#ffffff' }, grid: { drawOnChartArea: false } }
+                        y1: { position: 'left', min: 0, beginAtZero: true, max: 100, ticks: { color: '#94a3b8' } },
+                        y2: { position: 'right', min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { drawOnChartArea: false } },
+                        y3: { position: 'right', min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { drawOnChartArea: false } }
                     }
                 }
             });
@@ -1304,8 +1304,8 @@
                     responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#94a3b8' } } },
                     scales: {
-                        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                        y: { min: 0, beginAtZero: true, ticks: { color: '#ffffff' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                        x: { ticks: { color: '#38bdf8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { min: 0, beginAtZero: true, ticks: { color: '#38bdf8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
                     }
                 }
             });
@@ -1383,15 +1383,15 @@
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
                         ySin: {
                             type: 'linear', position: 'left', min: 0, beginAtZero: true,
-                            ticks: { color: '#ffffff' },
+                            ticks: { color: '#94a3b8' },
                             grid: { color: 'rgba(255,255,255,0.05)' },
-                            title: { display: true, text: 'Acidentes (Vol.)', color: '#ffffff', font: { size: 10 } }
+                            title: { display: true, text: 'Acidentes (Vol.)', color: '#94a3b8', font: { size: 10 } }
                         },
                         yVel: {
                             type: 'linear', position: 'right', min: 0, beginAtZero: true,
-                            ticks: { color: '#ffffff' },
+                            ticks: { color: '#94a3b8' },
                             grid: { drawOnChartArea: false },
-                            title: { display: true, text: 'Infrações de Velocidade', color: '#ffffff', font: { size: 10 } }
+                            title: { display: true, text: 'Infrações de Velocidade', color: '#94a3b8', font: { size: 10 } }
                         }
                     }
                 }
@@ -1599,13 +1599,13 @@
                                 min: 0,
                                 max: maxValue > 0 ? maxValue : undefined,
                                 beginAtZero: true,
-                                ticks: index === 0 ? { color: '#ffffff' } : { display: false },
+                                ticks: index === 0 ? { color: '#94a3b8' } : { display: false },
                                 grid: { drawOnChartArea: index === 0 },
-                                title: index === 0 ? { display: true, text: 'Valores Comparativos', color: '#ffffff', font: { size: 10, weight: 'bold' } } : { display: false }
+                                title: index === 0 ? { display: true, text: 'Valores Comparativos', color: '#94a3b8', font: { size: 10, weight: 'bold' } } : { display: false }
                             };
                         });
                     } else {
-                        scalesObj.y = { min: 0, beginAtZero: true, ticks: { color: '#ffffff' }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Valores', color: '#ffffff', font: { size: 10, weight: 'bold' } } };
+                        scalesObj.y = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Valores', color: '#94a3b8', font: { size: 10, weight: 'bold' } } };
                     }
                 } else if (c.type === 'radar') {
                     scalesObj.r = { min: 0, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, pointLabels: { color: '#cbd5e1' }, ticks: { display: false } };
@@ -1781,9 +1781,9 @@
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
-                    scales: { 
-                        x: { ticks: { color: '#94a3b8' } }, 
-                        y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } } 
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' } },
+                        y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } }
                     }
                 }
             });
