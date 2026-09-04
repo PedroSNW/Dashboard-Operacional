@@ -739,7 +739,7 @@
         Chart.register(ChartDataLabels);
         Chart.defaults.plugins.datalabels = {
             display: () => showDataLabels,
-            color: '#f8fafc',
+            color: () => document.body.classList.contains('light-theme') ? '#111827' : '#f8fafc',
             anchor: 'end',
             align: 'bottom',
             clamp: true,
@@ -777,6 +777,9 @@
             const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
             localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
             applyTheme(nextTheme);
+            [chart1Inst, chart2Inst, chart3Inst, chart4Inst, modalChartInst, ...Object.values(dynamicChartInstances)]
+                .filter(Boolean)
+                .forEach(chart => chart.update());
         }
 
         // ================= LÓGICA DE GERENCIAMENTO DE LOGO =================
