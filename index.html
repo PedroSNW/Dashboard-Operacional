@@ -37,6 +37,7 @@
             font-family: 'Inter', sans-serif;
             background-color: #070D1E;
             color: #f8fafc;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
         .glass-card {
             background: rgba(17, 28, 56, 0.75);
@@ -68,6 +69,57 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #CA8A04;
         }
+
+        body.light-theme {
+            background-color: #f4f7fb;
+            color: #172033;
+        }
+        body.light-theme header,
+        body.light-theme .bg-\[\#0A1329\]\/95,
+        body.light-theme .bg-\[\#0A1329\]\/80,
+        body.light-theme .bg-\[\#0A1329\]\/40,
+        body.light-theme .bg-\[\#0A1329\],
+        body.light-theme .bg-\[\#050A17\]\/80 {
+            background-color: rgba(255, 255, 255, 0.94) !important;
+        }
+        body.light-theme .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            border-color: rgba(180, 132, 0, 0.24);
+            box-shadow: 0 10px 25px -5px rgba(30, 41, 59, 0.12);
+        }
+        body.light-theme .bg-\[\#070D1E\],
+        body.light-theme .bg-\[\#050A17\] {
+            background-color: #ffffff !important;
+        }
+        body.light-theme .text-white { color: #172033 !important; }
+        body.light-theme .text-slate-950 { color: #172033 !important; }
+        body.light-theme .text-slate-200 { color: #334155 !important; }
+        body.light-theme .text-slate-300 { color: #475569 !important; }
+        body.light-theme .text-slate-400 { color: #64748b !important; }
+        body.light-theme .text-slate-500 { color: #64748b !important; }
+        body.light-theme .border-slate-700,
+        body.light-theme .border-slate-800,
+        body.light-theme .border-slate-800\/80,
+        body.light-theme .border-slate-800\/60,
+        body.light-theme .border-slate-800\/40 {
+            border-color: #d8e0eb !important;
+        }
+        body.light-theme .divide-slate-800\/60 > :not([hidden]) ~ :not([hidden]) {
+            border-color: #e2e8f0 !important;
+        }
+        body.light-theme .bg-slate-800 { background-color: #e8edf4 !important; }
+        body.light-theme .hover\:bg-slate-700:hover { background-color: #dce4ef !important; }
+        body.light-theme .text-slate-100 { color: #1e293b !important; }
+        body.light-theme input,
+        body.light-theme select,
+        body.light-theme textarea {
+            color: #1e293b !important;
+            background-color: #ffffff !important;
+        }
+        body.light-theme ::-webkit-scrollbar-track { background: #f4f7fb; }
+        body.light-theme ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+        body.light-theme .tab-btn:not(.active) { color: #475569; }
+        body.light-theme .tab-btn:not(.active):hover { color: #172033; }
     </style>
 </head>
 <body class="min-h-screen pb-12 flex flex-col">
@@ -159,6 +211,10 @@
 
                 <button onclick="exportToCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
                     <i class="fa-solid fa-download text-emerald-400"></i> Exportar
+                </button>
+
+                <button id="themeToggleBtn" onclick="toggleTheme()" title="Ativar tema claro" aria-label="Ativar tema claro" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-sun text-amber-400"></i> <span>Tema claro</span>
                 </button>
 
                 <button onclick="resetData()" title="Restaurar dados padrões" class="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-medium text-xs px-2.5 py-2 rounded-xl border border-rose-800/40 transition">
@@ -659,6 +715,7 @@
         const MONTHS_STORAGE_KEY = 'dgranel_custom_months_2026';
         const LOGO_STORAGE_KEY = 'dgranel_custom_logo_2026';
         const DATA_LABELS_STORAGE_KEY = 'dgranel_show_chart_data_labels_2026';
+        const THEME_STORAGE_KEY = 'dgranel_theme_2026';
         const GITHUB_CSV_URL = 'https://raw.githubusercontent.com/PedroSNW/Dashboard-Operacional/main/Controle%20de%20resultados%20por%20departamentos(in).csv';
         const GITHUB_REFRESH_INTERVAL = 5 * 60 * 1000;
         const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
@@ -692,6 +749,7 @@
 
         // CARREGAMENTO INICIAL
         document.addEventListener('DOMContentLoaded', () => {
+            applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
             loadStoredData();
             loadStoredCharts();
             loadStoredKpis();
@@ -701,6 +759,25 @@
             carregarDadosCompartilhados();
             setInterval(() => carregarDadosCompartilhados(true), GITHUB_REFRESH_INTERVAL);
         });
+
+        function applyTheme(theme) {
+            const isLight = theme === 'light';
+            document.body.classList.toggle('light-theme', isLight);
+            const button = document.getElementById('themeToggleBtn');
+            if (!button) return;
+
+            button.title = isLight ? 'Ativar tema escuro' : 'Ativar tema claro';
+            button.setAttribute('aria-label', button.title);
+            button.innerHTML = isLight
+                ? '<i class="fa-solid fa-moon text-sky-500"></i> <span>Tema escuro</span>'
+                : '<i class="fa-solid fa-sun text-amber-400"></i> <span>Tema claro</span>';
+        }
+
+        function toggleTheme() {
+            const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+            localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+            applyTheme(nextTheme);
+        }
 
         // ================= LÓGICA DE GERENCIAMENTO DE LOGO =================
         function handleLogoError(img) {
