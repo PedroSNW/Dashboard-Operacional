@@ -1208,7 +1208,7 @@
             updateJSONEditor();
             const detailModal = document.getElementById('modalDetail');
             if (detailModal && !detailModal.classList.contains('hidden') && detailModalIndex !== null) {
-                openDetailModal(detailModalIndex);
+                refreshDetailModal(detailModalIndex);
             }
             if (sincronizarGithub) carregarDadosGithub(true);
         }
@@ -1963,8 +1963,15 @@
 
         // INSPEÇÃO DETALHADA
         function openDetailModal(index) {
+            const modal = document.getElementById('modalDetail');
+            modal.classList.remove('hidden');
+            refreshDetailModal(index);
+        }
+
+        function refreshDetailModal(index) {
             const item = currentData[index];
-            if (!item) return;
+            const modal = document.getElementById('modalDetail');
+            if (!item || !modal || modal.classList.contains('hidden')) return;
 
             detailModalIndex = index;
             const m = calcMetrics(item);
@@ -1987,14 +1994,20 @@
             const tbl = document.getElementById('modalDetailTable');
             tbl.innerHTML = `<tr>${chartMonthData.values.map(value => `<td class="p-2.5 text-center text-slate-200">${fmtVal(value)}</td>`).join('')}</tr>`;
 
-            const modal = document.getElementById('modalDetail');
-            modal.classList.remove('hidden');
-            requestAnimationFrame(() => {
-                if (modal.classList.contains('hidden') || detailModalIndex !== index) return;
+            const canvas = document.getElementById('modalDetailChart');
+            if (!canvas) return;
 
-                const canvas = document.getElementById('modalDetailChart');
-                if (!canvas) return;
-                if (modalChartInst) modalChartInst.destroy();
+            if (modalChartInst) {
+                modalChartInst.data.labels = chartLabels;
+                modalChartInst.data.datasets[0].label = item.indicador;
+                modalChartInst.data.datasets[0].data = chartMonthData.values;
+                modalChartInst.update('none');
+                modalChartInst.resize();
+                return;
+            }
+
+            requestAnimationFrame(() => {
+                if (modal.classList.contains('hidden') || detailModalIndex !== index || modalChartInst) return;
                 modalChartInst = new Chart(canvas.getContext('2d'), {
                     type: 'line',
                     data: {
