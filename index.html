@@ -44,9 +44,56 @@
             backdrop-filter: blur(14px);
             border: 1px solid rgba(234, 179, 8, 0.15);
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            transition: transform 180ms ease-out, box-shadow 180ms ease-out, border-color 180ms ease-out;
         }
         .glass-card:hover {
             border-color: rgba(234, 179, 8, 0.35);
+            transform: translateY(-2px);
+            box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.62);
+        }
+        button,
+        label[for="csvFileInput"] {
+            transition: transform 180ms ease-out, box-shadow 180ms ease-out, background-color 180ms ease-out, border-color 180ms ease-out;
+        }
+        button:hover:not(:disabled),
+        label[for="csvFileInput"]:hover {
+            transform: translateY(-2px);
+            filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.24));
+        }
+        .view-transition-enter {
+            animation: view-enter 360ms ease-out both;
+        }
+        .view-transition-exit {
+            animation: view-exit 180ms ease-out both;
+        }
+        .page-load-item {
+            animation: page-load-enter 420ms ease-out both;
+        }
+        #kpiContainer > .page-load-item:nth-child(1) { animation-delay: 80ms; }
+        #kpiContainer > .page-load-item:nth-child(2) { animation-delay: 140ms; }
+        #kpiContainer > .page-load-item:nth-child(3) { animation-delay: 200ms; }
+        #kpiContainer > .page-load-item:nth-child(4) { animation-delay: 260ms; }
+        @keyframes page-load-enter {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes view-enter {
+            from { opacity: 0; transform: translate3d(12px, 0, 0) scale(0.99); }
+            to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        }
+        @keyframes view-exit {
+            from { opacity: 1; transform: translate3d(0, 0, 0); }
+            to { opacity: 0; transform: translate3d(-8px, 0, 0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 1ms !important;
+                animation-iteration-count: 1 !important;
+                scroll-behavior: auto !important;
+                transition-duration: 1ms !important;
+            }
         }
         .tab-btn.active {
             background-color: #CA8A04;
@@ -120,12 +167,16 @@
         body.light-theme ::-webkit-scrollbar-thumb { background: #cbd5e1; }
         body.light-theme .tab-btn:not(.active) { color: #475569; }
         body.light-theme .tab-btn:not(.active):hover { color: #172033; }
+
+        body:not(.developer-mode) #view-audit {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="min-h-screen pb-12 flex flex-col">
 
     <!-- HEADER / NAVEGAÇÃO PRINCIPAL -->
-    <header class="border-b border-amber-500/20 bg-[#0A1329]/95 sticky top-0 z-40 backdrop-blur-md px-4 sm:px-8 py-3.5 shadow-lg">
+    <header class="page-load-item border-b border-amber-500/20 bg-[#0A1329]/95 sticky top-0 z-40 backdrop-blur-md px-4 sm:px-8 py-3.5 shadow-lg">
         <div class="max-w-[1600px] mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
             
             <!-- BRANDING & LOGO D'GRANEL (COM UPLOAD DE IMAGEM) -->
@@ -134,6 +185,9 @@
                     
                     <!-- Container Interativo da Logo -->
                     <div 
+                        id="developerModeTrigger"
+                        onclick="handleDeveloperModeClick()"
+                        title="Logo D'Granel"
                         class="relative group cursor-pointer h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 p-0.5 shadow-md flex items-center justify-center overflow-hidden hover:opacity-90 transition-all border border-amber-500/30"
                     >
                         <img 
@@ -735,8 +789,17 @@
         let dynamicChartInstances = {};
         let showDataLabels = localStorage.getItem(DATA_LABELS_STORAGE_KEY) === 'true';
         let supabaseReady = false;
+        let developerModeClickCount = 0;
+        let developerModeClickTimer = null;
+        let tabTransitionTimer = null;
+
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const chartAnimation = prefersReducedMotion
+            ? { duration: 0 }
+            : { duration: 650, easing: 'easeOutQuart' };
 
         Chart.register(ChartDataLabels);
+        Chart.defaults.animation = chartAnimation;
         Chart.defaults.plugins.datalabels = {
             display: () => showDataLabels,
             color: () => document.body.classList.contains('light-theme') ? '#111827' : '#f8fafc',
@@ -780,6 +843,27 @@
             [chart1Inst, chart2Inst, chart3Inst, chart4Inst, modalChartInst, ...Object.values(dynamicChartInstances)]
                 .filter(Boolean)
                 .forEach(chart => chart.update());
+        }
+
+        function handleDeveloperModeClick() {
+            developerModeClickCount += 1;
+            clearTimeout(developerModeClickTimer);
+            developerModeClickTimer = setTimeout(() => {
+                developerModeClickCount = 0;
+            }, 2500);
+
+            if (developerModeClickCount === 5) {
+                developerModeClickCount = 0;
+                toggleDeveloperMode();
+            }
+        }
+
+        function toggleDeveloperMode() {
+            const isEnabled = document.body.classList.toggle('developer-mode');
+            const status = isEnabled ? 'Ativado' : 'Desativado';
+            console.log(`Modo Desenvolvedor ${status}`);
+            switchTab(isEnabled ? 'audit' : 'dashboard');
+            alert(`Modo Desenvolvedor ${status}`);
         }
 
         // ================= LÓGICA DE GERENCIAMENTO DE LOGO =================
@@ -1130,12 +1214,36 @@
 
         // NAVEGAÇÃO DE ABAS
         function switchTab(tabName) {
+            if (tabName === 'audit' && !document.body.classList.contains('developer-mode')) {
+                return;
+            }
+
+            const nextView = document.getElementById(`view-${tabName}`);
+            const currentView = document.querySelector('main > div:not(.hidden)');
+            if (!nextView || currentView === nextView) return;
+
+            clearTimeout(tabTransitionTimer);
+            document.querySelectorAll('main > div').forEach(view => {
+                view.classList.remove('view-transition-enter', 'view-transition-exit');
+                view.classList.add('hidden');
+            });
+
+            if (currentView) {
+                currentView.classList.remove('hidden');
+                currentView.classList.add('view-transition-exit');
+            }
+
+            tabTransitionTimer = setTimeout(() => {
+                if (currentView) currentView.classList.add('hidden');
+                nextView.classList.remove('hidden', 'view-transition-exit');
+                void nextView.offsetWidth;
+                nextView.classList.add('view-transition-enter');
+            }, prefersReducedMotion ? 0 : 180);
+
             ['dashboard', 'datagrid', 'audit'].forEach(t => {
-                document.getElementById(`view-${t}`).classList.add('hidden');
                 document.getElementById(`tab-${t}`).classList.remove('active');
             });
 
-            document.getElementById(`view-${tabName}`).classList.remove('hidden');
             document.getElementById(`tab-${tabName}`).classList.add('active');
 
             if (tabName === 'dashboard') {
@@ -1231,7 +1339,7 @@
                 const last = getLastValid(monthly.values, monthly.labels);
                 const unit = c.unit || indicator.und || '';
                 const el = document.createElement('div');
-                el.className = 'glass-card rounded-2xl p-5 flex flex-col justify-between';
+                el.className = 'glass-card page-load-item rounded-2xl p-5 flex flex-col justify-between';
                 el.innerHTML = `
                     <div class="flex items-start justify-between">
                         <div>
