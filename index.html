@@ -236,7 +236,8 @@
                     <i class="fa-solid fa-table"></i> Consulta & Repositório
                 </button>
                 <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn text-xs font-semibold px-4 py-2 rounded-lg transition flex items-center gap-2 text-slate-300 hover:text-white">
-                    <i class="fa-solid fa-code"></i> Auditoria & JSON Raw
+                    <i id="developerModeLockIcon" class="fa-solid fa-lock text-rose-400" aria-hidden="true"></i>
+                    <span>Auditoria & JSON Raw</span>
                 </button>
             </div>
 
@@ -813,6 +814,7 @@
         // CARREGAMENTO INICIAL
         document.addEventListener('DOMContentLoaded', () => {
             applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
+            updateDeveloperModeLockIcon();
             loadStoredData();
             loadStoredCharts();
             loadStoredKpis();
@@ -861,9 +863,23 @@
         function toggleDeveloperMode() {
             const isEnabled = document.body.classList.toggle('developer-mode');
             const status = isEnabled ? 'Ativado' : 'Desativado';
+            updateDeveloperModeLockIcon(isEnabled);
             console.log(`Modo Desenvolvedor ${status}`);
             switchTab(isEnabled ? 'audit' : 'dashboard');
             alert(`Modo Desenvolvedor ${status}`);
+        }
+
+        function updateDeveloperModeLockIcon(isEnabled = document.body.classList.contains('developer-mode')) {
+            const icon = document.getElementById('developerModeLockIcon');
+            const tab = document.getElementById('tab-audit');
+            if (!icon || !tab) return;
+
+            icon.classList.toggle('fa-lock', !isEnabled);
+            icon.classList.toggle('fa-lock-open', isEnabled);
+            icon.classList.toggle('text-rose-400', !isEnabled);
+            icon.classList.toggle('text-emerald-400', isEnabled);
+            tab.title = isEnabled ? 'Modo Administrador ativo' : 'Acesso restrito ao Modo Administrador';
+            tab.setAttribute('aria-label', tab.title);
         }
 
         // ================= LÓGICA DE GERENCIAMENTO DE LOGO =================
@@ -2094,6 +2110,18 @@
 
         // BUSCA E LEITURA DIRETA DO CSV NO GITHUB
         async function carregarDadosGithub(silencioso = false) {
+            if (!silencioso) {
+                const confirmarSincronizacao = confirm(
+                    'A sincronização substituirá os dados atuais pelos dados do GitHub. Deseja continuar?'
+                );
+                if (!confirmarSincronizacao) return;
+
+                const exportarBackup = confirm(
+                    'Deseja exportar os dados atuais em CSV antes de sincronizar?'
+                );
+                if (exportarBackup) exportToCSV();
+            }
+
             try {
                 const response = await fetch(`${GITHUB_CSV_URL}?t=${Date.now()}`);
                 if (!response.ok) throw new Error(`Erro HTTP! Status: ${response.status}`);
