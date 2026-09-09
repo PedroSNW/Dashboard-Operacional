@@ -793,6 +793,7 @@
         let developerModeClickCount = 0;
         let developerModeClickTimer = null;
         let tabTransitionTimer = null;
+        let detailModalIndex = null;
 
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const chartAnimation = prefersReducedMotion
@@ -1198,10 +1199,17 @@
             populateSetoresDropdown();
             renderTableHeader();
             renderKPIs();
-            renderCharts();
-            renderDynamicCharts();
+            const dashboardView = document.getElementById('view-dashboard');
+            if (dashboardView && !dashboardView.classList.contains('hidden')) {
+                renderCharts();
+                renderDynamicCharts();
+            }
             renderTable();
             updateJSONEditor();
+            const detailModal = document.getElementById('modalDetail');
+            if (detailModal && !detailModal.classList.contains('hidden') && detailModalIndex !== null) {
+                openDetailModal(detailModalIndex);
+            }
             if (sincronizarGithub) carregarDadosGithub(true);
         }
 
@@ -1266,7 +1274,7 @@
                 setTimeout(() => { 
                     renderCharts(); 
                     renderDynamicCharts();
-                }, 100);
+                }, prefersReducedMotion ? 0 : 240);
             } else if (tabName === 'audit') {
                 updateJSONEditor();
             }
@@ -1453,6 +1461,9 @@
 
         // RENDERIZAÇÃO DOS GRÁFICOS PADRÃO
         function renderCharts() {
+            const dashboardView = document.getElementById('view-dashboard');
+            if (dashboardView && dashboardView.classList.contains('hidden')) return;
+
             const crlvObj = currentData.find(d => d.indicador.includes('% CRLV LIBERADOS')) || { valores: [] };
             const scoreObj = currentData.find(d => d.indicador.includes('SCORE')) || { valores: [] };
             const multasObj = currentData.find(d => d.indicador.includes('Multas Cobradas Motoristas')) || { valores: [] };
@@ -1953,6 +1964,9 @@
         // INSPEÇÃO DETALHADA
         function openDetailModal(index) {
             const item = currentData[index];
+            if (!item) return;
+
+            detailModalIndex = index;
             const m = calcMetrics(item);
             const chartMonthData = getMonthlyData(item);
             const chartLabels = chartMonthData.labels;
@@ -1966,32 +1980,6 @@
             document.getElementById('modalDetailDiffLabel').textContent = `Variação (${mesesLabels[0]} -> ${m.lastMonth})`;
             document.getElementById('modalDetailDiff').textContent = fmtVal(m.diff, item.und);
 
-            const ctx = document.getElementById('modalDetailChart').getContext('2d');
-            if (modalChartInst) modalChartInst.destroy();
-            modalChartInst = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: chartLabels,
-                    datasets: [{
-                        label: item.indicador,
-                        data: chartMonthData.values,
-                        borderColor: '#eab308',
-                        backgroundColor: 'rgba(234, 179, 8, 0.15)',
-                        fill: true,
-                        tension: 0.3,
-                        borderWidth: 3
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { ticks: { color: '#94a3b8' } },
-                        y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } }
-                    }
-                }
-            });
-
             // Tabela do Modal
             const head = document.getElementById('modalDetailTableHead');
             head.innerHTML = `<tr>${chartLabels.map(m => `<th class="p-2.5 text-center">${m}</th>`).join('')}</tr>`;
@@ -1999,7 +1987,38 @@
             const tbl = document.getElementById('modalDetailTable');
             tbl.innerHTML = `<tr>${chartMonthData.values.map(value => `<td class="p-2.5 text-center text-slate-200">${fmtVal(value)}</td>`).join('')}</tr>`;
 
-            document.getElementById('modalDetail').classList.remove('hidden');
+            const modal = document.getElementById('modalDetail');
+            modal.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                if (modal.classList.contains('hidden') || detailModalIndex !== index) return;
+
+                const canvas = document.getElementById('modalDetailChart');
+                if (!canvas) return;
+                if (modalChartInst) modalChartInst.destroy();
+                modalChartInst = new Chart(canvas.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            label: item.indicador,
+                            data: chartMonthData.values,
+                            borderColor: '#eab308',
+                            backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                            fill: true,
+                            tension: 0.3,
+                            borderWidth: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: '#94a3b8' } },
+                            y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } }
+                        }
+                    }
+                });
+            });
         }
 
         // GERAR CAMPOS DE INPUT MENSAIS NO FORMULÁRIO DE EDIÇÃO
@@ -2085,6 +2104,13 @@
 
         function closeModal(id) {
             document.getElementById(id).classList.add('hidden');
+            if (id === 'modalDetail') {
+                detailModalIndex = null;
+                if (modalChartInst) {
+                    modalChartInst.destroy();
+                    modalChartInst = null;
+                }
+            }
         }
 
         // AUDITORIA JSON
