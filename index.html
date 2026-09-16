@@ -37,63 +37,27 @@
             font-family: 'Inter', sans-serif;
             background-color: #070D1E;
             color: #f8fafc;
-            transition: background-color 0.2s ease, color 0.2s ease;
         }
         .glass-card {
             background: rgba(17, 28, 56, 0.75);
             backdrop-filter: blur(14px);
             border: 1px solid rgba(234, 179, 8, 0.15);
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-            transition: transform 180ms ease-out, box-shadow 180ms ease-out, border-color 180ms ease-out;
         }
         .glass-card:hover {
             border-color: rgba(234, 179, 8, 0.35);
-            transform: translateY(-2px);
             box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.62);
-        }
-        button,
-        label[for="csvFileInput"] {
-            transition: transform 180ms ease-out, box-shadow 180ms ease-out, background-color 180ms ease-out, border-color 180ms ease-out;
         }
         button:hover:not(:disabled),
         label[for="csvFileInput"]:hover {
-            transform: translateY(-2px);
             filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.24));
         }
-        .view-transition-enter {
-            animation: view-enter 360ms ease-out both;
-        }
-        .view-transition-exit {
-            animation: view-exit 180ms ease-out both;
-        }
-        .page-load-item {
-            animation: page-load-enter 420ms ease-out both;
-        }
-        #kpiContainer > .page-load-item:nth-child(1) { animation-delay: 80ms; }
-        #kpiContainer > .page-load-item:nth-child(2) { animation-delay: 140ms; }
-        #kpiContainer > .page-load-item:nth-child(3) { animation-delay: 200ms; }
-        #kpiContainer > .page-load-item:nth-child(4) { animation-delay: 260ms; }
-        @keyframes page-load-enter {
-            from { opacity: 0; transform: translateY(16px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes view-enter {
-            from { opacity: 0; transform: translate3d(12px, 0, 0) scale(0.99); }
-            to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-        }
-        @keyframes view-exit {
-            from { opacity: 1; transform: translate3d(0, 0, 0); }
-            to { opacity: 0; transform: translate3d(-8px, 0, 0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-            *,
-            *::before,
-            *::after {
-                animation-duration: 1ms !important;
-                animation-iteration-count: 1 !important;
-                scroll-behavior: auto !important;
-                transition-duration: 1ms !important;
-            }
+        *,
+        *::before,
+        *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
         }
         .tab-btn.active {
             background-color: #CA8A04;
@@ -792,16 +756,10 @@
         let supabaseReady = false;
         let developerModeClickCount = 0;
         let developerModeClickTimer = null;
-        let tabTransitionTimer = null;
         let detailModalIndex = null;
 
-        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const chartAnimation = prefersReducedMotion
-            ? { duration: 0 }
-            : { duration: 650, easing: 'easeOutQuart' };
-
         Chart.register(ChartDataLabels);
-        Chart.defaults.animation = chartAnimation;
+        Chart.defaults.animation = false;
         Chart.defaults.plugins.datalabels = {
             display: () => showDataLabels,
             color: () => document.body.classList.contains('light-theme') ? '#111827' : '#f8fafc',
@@ -1246,23 +1204,12 @@
             const currentView = document.querySelector('main > div:not(.hidden)');
             if (!nextView || currentView === nextView) return;
 
-            clearTimeout(tabTransitionTimer);
             document.querySelectorAll('main > div').forEach(view => {
-                view.classList.remove('view-transition-enter', 'view-transition-exit');
                 view.classList.add('hidden');
             });
 
-            if (currentView) {
-                currentView.classList.remove('hidden');
-                currentView.classList.add('view-transition-exit');
-            }
-
-            tabTransitionTimer = setTimeout(() => {
-                if (currentView) currentView.classList.add('hidden');
-                nextView.classList.remove('hidden', 'view-transition-exit');
-                void nextView.offsetWidth;
-                nextView.classList.add('view-transition-enter');
-            }, prefersReducedMotion ? 0 : 180);
+            if (currentView) currentView.classList.add('hidden');
+            nextView.classList.remove('hidden');
 
             ['dashboard', 'datagrid', 'audit'].forEach(t => {
                 document.getElementById(`tab-${t}`).classList.remove('active');
@@ -1271,10 +1218,8 @@
             document.getElementById(`tab-${tabName}`).classList.add('active');
 
             if (tabName === 'dashboard') {
-                setTimeout(() => { 
-                    renderCharts(); 
-                    renderDynamicCharts();
-                }, prefersReducedMotion ? 0 : 240);
+                renderCharts();
+                renderDynamicCharts();
             } else if (tabName === 'audit') {
                 updateJSONEditor();
             }
