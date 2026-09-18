@@ -52,12 +52,42 @@
         label[for="csvFileInput"]:hover {
             filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.24));
         }
-        *,
-        *::before,
-        *::after {
+
+        @keyframes pageEnter {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes iconClick {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.9); }
+            100% { transform: scale(1); }
+        }
+
+        .page-view:not(.hidden) {
+            animation: pageEnter 260ms ease-out both;
+        }
+
+        .icon-click-feedback {
+            animation: iconClick 220ms ease-out;
+        }
+
+        canvas {
             animation: none !important;
             transition: none !important;
-            scroll-behavior: auto !important;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .page-view:not(.hidden),
+            .icon-click-feedback {
+                animation: none;
+            }
         }
         .tab-btn.active {
             background-color: #CA8A04;
@@ -247,7 +277,7 @@
     <main class="max-w-[1600px] mx-auto px-4 sm:px-8 pt-6 space-y-6 flex-1 w-full">
 
         <!-- ================= Aba 1: DASHBOARD EXECUTIVO ================= -->
-        <div id="view-dashboard" class="space-y-6">
+        <div id="view-dashboard" class="page-view space-y-6">
             <!-- ALERTA / RESUMO DE DESTAQUES -->
             <section class="glass-card rounded-2xl p-5 border-l-4 border-l-amber-500 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                 <div class="space-y-1">
@@ -380,7 +410,7 @@
 
 
         <!-- ================= Aba 2: CENTRAL DE CONSULTA E REPOSITÓRIO ================= -->
-        <div id="view-datagrid" class="space-y-6 hidden">
+        <div id="view-datagrid" class="page-view space-y-6 hidden">
             
             <!-- PAINEL DE CONTROLE DE BUSCA E MÉTRICAS DA BASE -->
             <div class="glass-card rounded-2xl p-5 space-y-4">
@@ -468,7 +498,7 @@
 
 
         <!-- ================= Aba 3: AUDITORIA & JSON RAW ================= -->
-        <div id="view-audit" class="space-y-6 hidden">
+        <div id="view-audit" class="page-view space-y-6 hidden">
             <div class="glass-card rounded-2xl p-6 space-y-4">
                 <div class="flex justify-between items-center border-b border-slate-800 pb-4">
                     <div>
@@ -782,6 +812,18 @@
             initSystem();
             carregarDadosCompartilhados();
             setInterval(() => carregarDadosCompartilhados(true), GITHUB_REFRESH_INTERVAL);
+        });
+
+        document.addEventListener('click', event => {
+            const button = event.target.closest('button');
+            if (!button || button.disabled) return;
+
+            button.classList.remove('icon-click-feedback');
+            void button.offsetWidth;
+            button.classList.add('icon-click-feedback');
+            button.addEventListener('animationend', () => {
+                button.classList.remove('icon-click-feedback');
+            }, { once: true });
         });
 
         function applyTheme(theme) {
