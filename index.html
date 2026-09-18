@@ -1016,12 +1016,12 @@
 
         function syncSectorsFromData() {
             const dataSectors = currentData.map(item => item.setor).filter(Boolean);
-            sectors = [...new Set([...sectors, ...dataSectors])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            sectors = [...new Set(dataSectors)].sort((a, b) => a.localeCompare(b, 'pt-BR'));
             localStorage.setItem(SECTORS_STORAGE_KEY, JSON.stringify(sectors));
         }
 
-        function populateSectorSelect(selectedSector = '') {
-            syncSectorsFromData();
+        function populateSectorSelect(selectedSector = '', syncWithData = true) {
+            if (syncWithData) syncSectorsFromData();
             const select = document.getElementById('editSetor');
             if (!select) return;
 
@@ -1048,8 +1048,7 @@
 
             sectors.push(sectorName);
             sectors.sort((a, b) => a.localeCompare(b, 'pt-BR'));
-            localStorage.setItem(SECTORS_STORAGE_KEY, JSON.stringify(sectors));
-            populateSectorSelect(sectorName);
+            populateSectorSelect(sectorName, false);
         }
 
         function loadStoredCharts() {
