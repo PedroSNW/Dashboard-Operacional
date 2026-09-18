@@ -594,7 +594,14 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs text-slate-400 mb-1">Setor</label>
-                        <input type="text" id="editSetor" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <div class="flex gap-2">
+                            <select id="editSetor" required class="min-w-0 flex-1 bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                                <option value="">Selecione um setor</option>
+                            </select>
+                            <button type="button" onclick="createSector()" title="Criar novo setor" class="shrink-0 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 text-xs px-3 rounded-xl border border-slate-700 transition">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs text-slate-400 mb-1">Unidade de Medida</label>
@@ -762,6 +769,7 @@
         const KPI_STORAGE_KEY = 'dgranel_kpi_cards_2026';
         const DEFAULT_CHARTS_STORAGE_KEY = 'dgranel_default_charts_2026';
         const MONTHS_STORAGE_KEY = 'dgranel_custom_months_2026';
+        const SECTORS_STORAGE_KEY = 'dgranel_sectors_2026';
         const LOGO_STORAGE_KEY = 'dgranel_custom_logo_2026';
         const DATA_LABELS_STORAGE_KEY = 'dgranel_show_chart_data_labels_2026';
         const THEME_STORAGE_KEY = 'dgranel_theme_2026';
@@ -776,6 +784,7 @@
         let mesesLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
 
         let currentData = [];
+        let sectors = [];
         let customCharts = [];
         let kpiCards = [];
         let defaultChartConfigs = {};
@@ -805,6 +814,7 @@
             applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
             updateDeveloperModeLockIcon();
             loadStoredData();
+            loadStoredSectors();
             loadStoredCharts();
             loadStoredKpis();
             loadStoredDefaultCharts();
@@ -994,6 +1004,54 @@
             }
         }
 
+        function loadStoredSectors() {
+            try {
+                const stored = JSON.parse(localStorage.getItem(SECTORS_STORAGE_KEY) || '[]');
+                sectors = Array.isArray(stored) ? stored.filter(Boolean) : [];
+            } catch (e) {
+                sectors = [];
+            }
+            syncSectorsFromData();
+        }
+
+        function syncSectorsFromData() {
+            const dataSectors = currentData.map(item => item.setor).filter(Boolean);
+            sectors = [...new Set([...sectors, ...dataSectors])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            localStorage.setItem(SECTORS_STORAGE_KEY, JSON.stringify(sectors));
+        }
+
+        function populateSectorSelect(selectedSector = '') {
+            syncSectorsFromData();
+            const select = document.getElementById('editSetor');
+            if (!select) return;
+
+            select.innerHTML = '<option value="">Selecione um setor</option>';
+            sectors.forEach(sector => {
+                const option = document.createElement('option');
+                option.value = sector;
+                option.textContent = sector;
+                option.selected = sector === selectedSector;
+                select.appendChild(option);
+            });
+        }
+
+        function createSector() {
+            const name = prompt('Digite o nome do novo setor:');
+            const sectorName = name?.trim();
+            if (!sectorName) return;
+
+            const existingSector = sectors.find(sector => sector.toLocaleLowerCase() === sectorName.toLocaleLowerCase());
+            if (existingSector) {
+                populateSectorSelect(existingSector);
+                return;
+            }
+
+            sectors.push(sectorName);
+            sectors.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            localStorage.setItem(SECTORS_STORAGE_KEY, JSON.stringify(sectors));
+            populateSectorSelect(sectorName);
+        }
+
         function loadStoredCharts() {
             const stored = localStorage.getItem(CHARTS_STORAGE_KEY);
             if (stored) {
@@ -1109,7 +1167,7 @@
                 },
                 body: JSON.stringify({
                     id: 1,
-                    data: { indicadores: currentData, graficos: customCharts, graficosPadrao: defaultChartConfigs, kpis: kpiCards },
+                    data: { indicadores: currentData, setores: sectors, graficos: customCharts, graficosPadrao: defaultChartConfigs, kpis: kpiCards },
                     updated_at: new Date().toISOString()
                 })
             });
@@ -1141,11 +1199,20 @@
                 const sharedCharts = Array.isArray(sharedState?.data?.graficos)
                     ? sharedState.data.graficos
                     : null;
+                const sharedSectors = Array.isArray(sharedState?.data?.setores)
+                    ? sharedState.data.setores
+                    : null;
                 const sharedDefaultCharts = sharedState?.data?.graficosPadrao;
                 const sharedKpis = sharedState?.data?.kpis;
 
                 if (sharedIndicators && sharedIndicators.length > 0) {
                     currentData = sharedIndicators;
+                    if (sharedSectors) {
+                        sectors = sharedSectors;
+                        localStorage.setItem(SECTORS_STORAGE_KEY, JSON.stringify(sectors));
+                    } else {
+                        syncSectorsFromData();
+                    }
                     if (sharedCharts) {
                         customCharts = sharedCharts;
                         localStorage.setItem(CHARTS_STORAGE_KEY, JSON.stringify(customCharts));
@@ -1174,6 +1241,7 @@
 
         function saveData(data) {
             currentData = data;
+            syncSectorsFromData();
             syncMonthLabels();
             localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
             document.getElementById('lastUpdatedTag').textContent = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
@@ -1833,17 +1901,17 @@
 
         // POPULAR DROPDOWN SETORES
         function populateSetoresDropdown() {
+            syncSectorsFromData();
             const select = document.getElementById('setorFilter');
             select.innerHTML = '<option value="TODOS">Todos os Setores</option>';
-            const setores = [...new Set(currentData.map(item => item.setor))];
-            setores.forEach(s => {
+            sectors.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s;
                 opt.textContent = s;
                 select.appendChild(opt);
             });
 
-            document.getElementById('statSetoresCount').textContent = setores.length;
+            document.getElementById('statSetoresCount').textContent = sectors.length;
         }
 
         // GERAR CABEÇALHO DINÂMICO DA TABELA
@@ -2041,7 +2109,7 @@
         function openNewIndicatorModal() {
             document.getElementById('modalEditHeading').textContent = 'Novo Indicador';
             document.getElementById('editIndex').value = '-1';
-            document.getElementById('editSetor').value = '';
+            populateSectorSelect();
             document.getElementById('editIndicador').value = '';
             document.getElementById('editMeta').value = '';
             document.getElementById('editUnd').value = 'Qtd';
@@ -2055,7 +2123,7 @@
             const monthly = getMonthlyData(item);
             document.getElementById('modalEditHeading').textContent = 'Editar Indicador';
             document.getElementById('editIndex').value = index;
-            document.getElementById('editSetor').value = item.setor;
+            populateSectorSelect(item.setor);
             document.getElementById('editIndicador').value = item.indicador;
             document.getElementById('editMeta').value = item.meta ?? '';
             document.getElementById('editUnd').value = item.und;
@@ -2402,9 +2470,11 @@ function parseCSVContent(csvText, sourceName = "CSV", silencioso = false) {
                 localStorage.removeItem(STORAGE_KEY);
                 localStorage.removeItem(CHARTS_STORAGE_KEY);
                 localStorage.removeItem(MONTHS_STORAGE_KEY);
+                localStorage.removeItem(SECTORS_STORAGE_KEY);
                 resetLogo();
                 mesesLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
                 loadStoredData();
+                loadStoredSectors();
                 loadStoredCharts();
                 initSystem();
             }
