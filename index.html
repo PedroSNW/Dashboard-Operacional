@@ -95,6 +95,25 @@
             border-color: #EAB308;
             box-shadow: 0 4px 12px rgba(202, 138, 4, 0.25);
         }
+        .dashboard-tab.active {
+            background-color: rgba(234, 179, 8, 0.18);
+            color: #facc15;
+            border-color: rgba(234, 179, 8, 0.45);
+        }
+        @keyframes dashboardSlideNext {
+            from { opacity: 0; transform: translateX(-34px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes dashboardSlidePrevious {
+            from { opacity: 0; transform: translateX(34px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        #view-dashboard.dashboard-slide-next { animation: dashboardSlideNext 280ms ease-out both; }
+        #view-dashboard.dashboard-slide-previous { animation: dashboardSlidePrevious 280ms ease-out both; }
+        @media (prefers-reduced-motion: reduce) {
+            #view-dashboard.dashboard-slide-next,
+            #view-dashboard.dashboard-slide-previous { animation: none; }
+        }
         /* Custom Scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
@@ -275,6 +294,19 @@
     </header>
 
     <main class="max-w-[1600px] mx-auto px-4 sm:px-8 pt-6 space-y-6 flex-1 w-full">
+
+        <section class="flex flex-col gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider font-bold text-amber-400">Espaços de trabalho</div>
+                    <h2 class="text-base font-bold text-white">Dashboards personalizados</h2>
+                </div>
+                <button onclick="createDashboard()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Novo Dashboard
+                </button>
+            </div>
+            <div id="dashboardTabs" class="flex items-center gap-2 overflow-x-auto pb-1"></div>
+        </section>
 
         <!-- ================= Aba 1: DASHBOARD EXECUTIVO ================= -->
         <div id="view-dashboard" class="page-view space-y-6">
@@ -773,6 +805,7 @@
         const LOGO_STORAGE_KEY = 'dgranel_custom_logo_2026';
         const DATA_LABELS_STORAGE_KEY = 'dgranel_show_chart_data_labels_2026';
         const THEME_STORAGE_KEY = 'dgranel_theme_2026';
+        const DASHBOARDS_STORAGE_KEY = 'dgranel_dashboards_2026';
         const GITHUB_CSV_URL = 'https://raw.githubusercontent.com/PedroSNW/Dashboard-Operacional/main/Controle%20de%20resultados%20por%20departamentos(in).csv';
         const GITHUB_REFRESH_INTERVAL = 5 * 60 * 1000;
         const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
@@ -796,6 +829,8 @@
         let developerModeClickCount = 0;
         let developerModeClickTimer = null;
         let detailModalIndex = null;
+        let dashboards = [];
+        let activeDashboardId = null;
 
         Chart.register(ChartDataLabels);
         Chart.defaults.animation = false;
@@ -818,6 +853,7 @@
             loadStoredCharts();
             loadStoredKpis();
             loadStoredDefaultCharts();
+            loadStoredDashboards();
             setupDragAndDrop();
             initSystem();
             carregarDadosCompartilhados();
@@ -847,6 +883,161 @@
             button.innerHTML = isLight
                 ? '<i class="fa-solid fa-moon text-sky-500"></i> <span>Tema escuro</span>'
                 : '<i class="fa-solid fa-sun text-amber-400"></i> <span>Tema claro</span>';
+        }
+
+        function getDefaultDashboardWidgets() {
+            return [
+                { id: 'widget_kpi1', type: 'kpi', ref: 'kpi1' },
+                { id: 'widget_kpi2', type: 'kpi', ref: 'kpi2' },
+                { id: 'widget_kpi3', type: 'kpi', ref: 'kpi3' },
+                { id: 'widget_kpi4', type: 'kpi', ref: 'kpi4' },
+                { id: 'widget_chart1', type: 'default-chart', ref: 'chart1' },
+                { id: 'widget_chart2', type: 'default-chart', ref: 'chart2' },
+                { id: 'widget_chart3', type: 'default-chart', ref: 'chart3' },
+                { id: 'widget_chart4', type: 'default-chart', ref: 'chart4' }
+            ];
+        }
+
+        function loadStoredDashboards() {
+            try {
+                const stored = JSON.parse(localStorage.getItem(DASHBOARDS_STORAGE_KEY) || 'null');
+                dashboards = Array.isArray(stored) && stored.length
+                    ? stored
+                    : [{ id: 'dashboard_main', name: 'Geral', widgets: getDefaultDashboardWidgets() }];
+            } catch (error) {
+                dashboards = [{ id: 'dashboard_main', name: 'Geral', widgets: getDefaultDashboardWidgets() }];
+            }
+
+            dashboards = dashboards.map((dashboard, index) => ({
+                id: dashboard.id || `dashboard_${index + 1}`,
+                name: dashboard.name || `Dashboard ${index + 1}`,
+                widgets: Array.isArray(dashboard.widgets) ? dashboard.widgets : []
+            }));
+            activeDashboardId = localStorage.getItem(`${DASHBOARDS_STORAGE_KEY}:active`) || dashboards[0].id;
+            if (!dashboards.some(dashboard => dashboard.id === activeDashboardId)) activeDashboardId = dashboards[0].id;
+
+            const defaultDashboard = dashboards[0];
+            customCharts.forEach(chart => {
+                if (!defaultDashboard.widgets.some(widget => widget.type === 'custom-chart' && widget.ref === chart.id)) {
+                    defaultDashboard.widgets.push({ id: `widget_${chart.id}`, type: 'custom-chart', ref: chart.id });
+                }
+            });
+            saveDashboards();
+        }
+
+        function saveDashboards() {
+            localStorage.setItem(DASHBOARDS_STORAGE_KEY, JSON.stringify(dashboards));
+            localStorage.setItem(`${DASHBOARDS_STORAGE_KEY}:active`, activeDashboardId || '');
+            salvarEstadoSupabase().catch(error => console.error('Erro ao sincronizar dashboards:', error));
+        }
+
+        function getActiveDashboard() {
+            return dashboards.find(dashboard => dashboard.id === activeDashboardId) || dashboards[0];
+        }
+
+        function dashboardHasWidget(type, ref) {
+            return Boolean(getActiveDashboard()?.widgets?.some(widget => widget.type === type && widget.ref === ref));
+        }
+
+        function renderDashboardTabs() {
+            const container = document.getElementById('dashboardTabs');
+            const activeDashboard = getActiveDashboard();
+            if (!container || !activeDashboard) return;
+
+            activeDashboardId = activeDashboard.id;
+            container.innerHTML = dashboards.map(dashboard => `
+                <button onclick="selectDashboard('${dashboard.id}')" class="dashboard-tab ${dashboard.id === activeDashboardId ? 'active' : ''} shrink-0 flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-700 text-slate-300 transition">
+                    <i class="fa-solid fa-table-columns"></i><span>${dashboard.name}</span>
+                    <i onclick="event.stopPropagation(); renameDashboard('${dashboard.id}')" title="Renomear dashboard" class="fa-solid fa-pen text-[10px] opacity-70 hover:opacity-100"></i>
+                    ${dashboards.length > 1 ? `<i onclick="event.stopPropagation(); deleteDashboard('${dashboard.id}')" title="Excluir dashboard" class="fa-solid fa-xmark text-[10px] opacity-70 hover:text-rose-400"></i>` : ''}
+                </button>
+            `).join('');
+        }
+
+        function selectDashboard(id) {
+            if (!dashboards.some(dashboard => dashboard.id === id)) return;
+            const previousIndex = dashboards.findIndex(dashboard => dashboard.id === activeDashboardId);
+            const nextIndex = dashboards.findIndex(dashboard => dashboard.id === id);
+            const direction = nextIndex >= previousIndex ? 'next' : 'previous';
+            activeDashboardId = id;
+            saveDashboards();
+            renderDashboardTabs();
+            renderKPIs();
+            renderCharts();
+            renderDynamicCharts();
+            animateDashboardTransition(direction);
+        }
+
+        function animateDashboardTransition(direction) {
+            const dashboardView = document.getElementById('view-dashboard');
+            if (!dashboardView) return;
+            dashboardView.classList.remove('dashboard-slide-next', 'dashboard-slide-previous');
+            void dashboardView.offsetWidth;
+            dashboardView.classList.add(direction === 'previous' ? 'dashboard-slide-previous' : 'dashboard-slide-next');
+        }
+
+        function createDashboard() {
+            const name = prompt('Nome do novo dashboard:', `Dashboard ${dashboards.length + 1}`)?.trim();
+            if (!name) return;
+
+            const dashboard = { id: `dashboard_${Date.now()}`, name, widgets: [] };
+            dashboards.push(dashboard);
+            activeDashboardId = dashboard.id;
+            saveDashboards();
+            renderDashboardTabs();
+            renderKPIs();
+            renderCharts();
+            renderDynamicCharts();
+            animateDashboardTransition('next');
+        }
+
+        function renameDashboard(id) {
+            const dashboard = dashboards.find(item => item.id === id);
+            if (!dashboard) return;
+            const name = prompt('Novo nome do dashboard:', dashboard.name)?.trim();
+            if (!name) return;
+
+            dashboard.name = name;
+            saveDashboards();
+            renderDashboardTabs();
+        }
+
+        function deleteDashboard(id) {
+            if (dashboards.length === 1 || !confirm('Excluir este dashboard e seus widgets?')) return;
+            dashboards = dashboards.filter(dashboard => dashboard.id !== id);
+            if (activeDashboardId === id) activeDashboardId = dashboards[0].id;
+            saveDashboards();
+            renderDashboardTabs();
+            renderKPIs();
+            renderCharts();
+            renderDynamicCharts();
+        }
+
+        function addWidgetToDashboard() {
+            const dashboard = getActiveDashboard();
+            if (!dashboard) return;
+
+            const choice = prompt('Digite o widget: KPI, gráfico ou gráfico padrão (1-4).')?.trim().toLowerCase();
+            if (!choice) return;
+
+            if (choice === 'kpi' || choice === 'balão') {
+                openKpiModal();
+                return;
+            }
+            if (choice.includes('gráfico') || choice.includes('grafico')) {
+                openChartModal();
+                return;
+            }
+            if (!['1', '2', '3', '4'].includes(choice)) {
+                alert('Escolha KPI, gráfico ou um número de gráfico padrão entre 1 e 4.');
+                return;
+            }
+
+            const widget = { id: `widget_chart${choice}_${Date.now()}`, type: 'default-chart', ref: `chart${choice}` };
+            if (!dashboard.widgets.some(item => item.type === widget.type && item.ref === widget.ref)) dashboard.widgets.push(widget);
+            saveDashboards();
+            renderDashboardTabs();
+            renderCharts();
         }
 
         function toggleTheme() {
@@ -1130,7 +1321,7 @@
             ['chart1', 'chart2', 'chart3', 'chart4'].forEach(chartId => {
                 const config = getDefaultChartConfig(chartId);
                 const card = document.getElementById(`defaultChartCard${chartId.slice(-1)}`);
-                if (card) card.classList.toggle('hidden', config.deleted === true);
+                if (card) card.classList.toggle('hidden', config.deleted === true || !dashboardHasWidget('default-chart', chartId));
                 if (config.deleted) return;
                 if (!defaultChartConfigs[chartId]) return;
 
@@ -1166,7 +1357,7 @@
                 },
                 body: JSON.stringify({
                     id: 1,
-                    data: { indicadores: currentData, setores: sectors, graficos: customCharts, graficosPadrao: defaultChartConfigs, kpis: kpiCards },
+                    data: { indicadores: currentData, setores: sectors, graficos: customCharts, graficosPadrao: defaultChartConfigs, kpis: kpiCards, dashboards },
                     updated_at: new Date().toISOString()
                 })
             });
@@ -1203,6 +1394,7 @@
                     : null;
                 const sharedDefaultCharts = sharedState?.data?.graficosPadrao;
                 const sharedKpis = sharedState?.data?.kpis;
+                const sharedDashboards = sharedState?.data?.dashboards;
 
                 if (sharedIndicators && sharedIndicators.length > 0) {
                     currentData = sharedIndicators;
@@ -1223,6 +1415,11 @@
                     if (Array.isArray(sharedKpis) && sharedKpis.length > 0) {
                         kpiCards = sharedKpis;
                         localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(kpiCards));
+                    }
+                    if (Array.isArray(sharedDashboards) && sharedDashboards.length > 0) {
+                        dashboards = sharedDashboards;
+                        activeDashboardId = dashboards.some(item => item.id === activeDashboardId) ? activeDashboardId : dashboards[0].id;
+                        localStorage.setItem(DASHBOARDS_STORAGE_KEY, JSON.stringify(dashboards));
                     }
                     syncMonthLabels();
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
@@ -1262,6 +1459,7 @@
 
         function initSystem(sincronizarGithub = false) {
             syncMonthLabels();
+            renderDashboardTabs();
             updateDataLabelsButton();
             populateSetoresDropdown();
             renderTableHeader();
@@ -1412,6 +1610,7 @@
                 .filter(card => !card.deleted);
 
             cards.forEach(c => {
+                if (!dashboardHasWidget('kpi', c.id)) return;
                 const indicator = currentData[c.indicator] || { valores: [] };
                 const monthly = getMonthlyData(indicator);
                 const last = getLastValid(monthly.values, monthly.labels);
@@ -1492,8 +1691,14 @@
             const index = kpiCards.findIndex(card => card.id === id);
             if (index >= 0) kpiCards[index] = config;
             else kpiCards.push(config);
+            const dashboard = getActiveDashboard();
+            if (!dashboard.widgets.some(widget => widget.type === 'kpi' && widget.ref === id)) {
+                dashboard.widgets.push({ id: `widget_${id}`, type: 'kpi', ref: id });
+            }
             saveKpis();
+            saveDashboards();
             closeModal('modalKpiConfig');
+            renderDashboardTabs();
             renderKPIs();
         }
 
@@ -1509,7 +1714,10 @@
             } else {
                 kpiCards = kpiCards.filter(card => card.id !== kpiId);
             }
+            getActiveDashboard().widgets = getActiveDashboard().widgets.filter(widget => !(widget.type === 'kpi' && widget.ref === kpiId));
             saveKpis();
+            saveDashboards();
+            renderDashboardTabs();
             renderKPIs();
         }
 
@@ -1763,15 +1971,27 @@
                 customCharts.push(chartObject);
             }
 
+            const dashboard = getActiveDashboard();
+            if (!dashboard.widgets.some(widget => widget.type === 'custom-chart' && widget.ref === id)) {
+                dashboard.widgets.push({ id: `widget_${id}`, type: 'custom-chart', ref: id });
+            }
+
             saveCustomChartsStorage();
+            saveDashboards();
             closeModal('modalChartConfig');
+            renderDashboardTabs();
             renderDynamicCharts();
         }
 
         function deleteCustomChart(chartId) {
             if (confirm('Deseja realmente remover este gráfico personalizado?')) {
                 customCharts = customCharts.filter(c => c.id !== chartId);
+                dashboards.forEach(dashboard => {
+                    dashboard.widgets = dashboard.widgets.filter(widget => !(widget.type === 'custom-chart' && widget.ref === chartId));
+                });
                 saveCustomChartsStorage();
+                saveDashboards();
+                renderDashboardTabs();
                 renderDynamicCharts();
             }
         }
@@ -1791,6 +2011,7 @@
             if (customCharts.length === 0) return;
 
             customCharts.forEach(c => {
+                if (!dashboardHasWidget('custom-chart', c.id)) return;
                 const indObj1 = currentData[c.ind1];
                 if (!indObj1) return;
 
@@ -2468,6 +2689,8 @@ function parseCSVContent(csvText, sourceName = "CSV", silencioso = false) {
             if (confirm('Deseja restaurar os dados padrões originais da D\'Granel? (A logo personalizada também será resetada)')) {
                 localStorage.removeItem(STORAGE_KEY);
                 localStorage.removeItem(CHARTS_STORAGE_KEY);
+                localStorage.removeItem(DASHBOARDS_STORAGE_KEY);
+                localStorage.removeItem(`${DASHBOARDS_STORAGE_KEY}:active`);
                 localStorage.removeItem(MONTHS_STORAGE_KEY);
                 localStorage.removeItem(SECTORS_STORAGE_KEY);
                 resetLogo();
@@ -2475,6 +2698,7 @@ function parseCSVContent(csvText, sourceName = "CSV", silencioso = false) {
                 loadStoredData();
                 loadStoredSectors();
                 loadStoredCharts();
+                loadStoredDashboards();
                 initSystem();
             }
         }
