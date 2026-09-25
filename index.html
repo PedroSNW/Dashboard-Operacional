@@ -31,6 +31,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <!-- PapaParse for CSV Parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <!-- Supabase Auth / Database client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body {
@@ -184,9 +186,50 @@
         body:not(.developer-mode) #view-audit {
             display: none !important;
         }
+
+        body:not(.authenticated) > header,
+        body:not(.authenticated) > main,
+        body:not(.authenticated) > div:not(#authScreen) {
+            display: none !important;
+        }
+
+        #authScreen {
+            min-height: 100vh;
+            background: radial-gradient(circle at top right, rgba(234, 179, 8, 0.18), transparent 36%), #070D1E;
+        }
+
+        body.authenticated #authScreen {
+            display: none;
+        }
     </style>
 </head>
 <body class="min-h-screen pb-12 flex flex-col">
+
+    <section id="authScreen" class="flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-md rounded-2xl p-7">
+            <div class="mb-6">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">Acesso corporativo</p>
+                <h2 class="mt-2 text-2xl font-black text-white">D'GRANEL</h2>
+                <p class="mt-2 text-sm text-slate-400">Entre com seu e-mail corporativo para acessar o painel.</p>
+            </div>
+
+            <form id="authForm" class="space-y-4">
+                <div>
+                    <label for="authEmail" class="mb-1 block text-xs font-semibold text-slate-300">E-mail</label>
+                    <input id="authEmail" type="email" autocomplete="email" required class="w-full rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-sm text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="nome@dgranel.com.br">
+                </div>
+                <div>
+                    <label for="authPassword" class="mb-1 block text-xs font-semibold text-slate-300">Senha</label>
+                    <input id="authPassword" type="password" autocomplete="current-password" minlength="8" required class="w-full rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-sm text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Mínimo de 8 caracteres">
+                </div>
+                <p id="authMessage" class="min-h-5 text-xs" role="alert" aria-live="polite"></p>
+                <div class="flex gap-2">
+                    <button id="loginButton" type="submit" class="flex-1 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-amber-600">Entrar</button>
+                    <button id="signupButton" type="button" class="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-slate-700">Criar conta</button>
+                </div>
+            </form>
+        </div>
+    </section>
 
     <!-- HEADER / NAVEGAÇÃO PRINCIPAL -->
     <header class="page-load-item border-b border-amber-500/20 bg-[#0A1329]/95 sticky top-0 z-40 backdrop-blur-md px-4 sm:px-8 py-3.5 shadow-lg">
@@ -287,6 +330,10 @@
 
                 <button onclick="resetData()" title="Restaurar dados padrões" class="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-medium text-xs px-2.5 py-2 rounded-xl border border-rose-800/40 transition">
                     <i class="fa-solid fa-rotate-left"></i>
+                </button>
+
+                <button onclick="signOutUser()" title="Encerrar sessão" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-2.5 py-2 rounded-xl border border-slate-700 transition">
+                    <i class="fa-solid fa-right-from-bracket"></i>
                 </button>
             </div>
 
@@ -812,6 +859,9 @@
         const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w6wowhTeTPXuDiZTgSjCgA_pw_5UuQO';
         const SUPABASE_STATE_ENDPOINT = `${SUPABASE_URL}/rest/v1/dashboard_state`;
         const DEFAULT_LOGO_SRC = 'logo.png';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+        });
 
         const BASE_MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let mesesLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
@@ -831,6 +881,8 @@
         let detailModalIndex = null;
         let dashboards = [];
         let activeDashboardId = null;
+        let currentSession = null;
+        let appInitialized = false;
 
         Chart.register(ChartDataLabels);
         Chart.defaults.animation = false;
@@ -845,9 +897,91 @@
         };
 
         // CARREGAMENTO INICIAL
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
             updateDeveloperModeLockIcon();
+            setupAuthForm();
+
+            const { data } = await supabaseClient.auth.getSession();
+            await handleAuthSession(data.session);
+
+            supabaseClient.auth.onAuthStateChange((_event, session) => {
+                handleAuthSession(session);
+            });
+        });
+
+        function setupAuthForm() {
+            document.getElementById('authForm')?.addEventListener('submit', event => {
+                event.preventDefault();
+                signInUser();
+            });
+            document.getElementById('signupButton')?.addEventListener('click', signUpUser);
+        }
+
+        function showAuthMessage(text, isError = true) {
+            const message = document.getElementById('authMessage');
+            if (!message) return;
+            message.textContent = text;
+            message.className = `min-h-5 text-xs ${isError ? 'text-rose-400' : 'text-emerald-400'}`;
+        }
+
+        function getAuthCredentials() {
+            const email = document.getElementById('authEmail').value.trim().toLowerCase();
+            const password = document.getElementById('authPassword').value;
+
+            if (!email.endsWith('@dgranel.com.br')) throw new Error('DOMAIN_NOT_ALLOWED');
+            if (password.length < 8) throw new Error('PASSWORD_TOO_SHORT');
+            return { email, password };
+        }
+
+        async function signInUser() {
+            try {
+                const { email, password } = getAuthCredentials();
+                const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                showAuthMessage('Login realizado com sucesso.', false);
+            } catch (error) {
+                showAuthMessage(error.message === 'DOMAIN_NOT_ALLOWED'
+                    ? 'Use um e-mail corporativo @dgranel.com.br.'
+                    : error.message === 'PASSWORD_TOO_SHORT'
+                        ? 'A senha deve possuir pelo menos 8 caracteres.'
+                        : 'Não foi possível realizar o login.');
+            }
+        }
+
+        async function signUpUser() {
+            try {
+                const { email, password } = getAuthCredentials();
+                const { error } = await supabaseClient.auth.signUp({
+                    email,
+                    password,
+                    options: { emailRedirectTo: window.location.origin }
+                });
+                if (error) throw error;
+                showAuthMessage('Cadastro realizado. Verifique seu e-mail para confirmar a conta.', false);
+            } catch (error) {
+                showAuthMessage(error.message === 'DOMAIN_NOT_ALLOWED' || error.message?.includes('dgranel.com.br')
+                    ? 'Apenas e-mails @dgranel.com.br podem criar contas.'
+                    : 'Não foi possível criar a conta.');
+            }
+        }
+
+        async function signOutUser() {
+            const { error } = await supabaseClient.auth.signOut();
+            if (error) console.error('Erro ao encerrar sessão:', error);
+        }
+
+        async function handleAuthSession(session) {
+            currentSession = session;
+            document.body.classList.toggle('authenticated', Boolean(session));
+
+            if (!session) {
+                appInitialized = false;
+                return;
+            }
+
+            if (appInitialized) return;
+            appInitialized = true;
             loadStoredData();
             loadStoredSectors();
             loadStoredCharts();
@@ -856,9 +990,18 @@
             loadStoredDashboards();
             setupDragAndDrop();
             initSystem();
-            carregarDadosCompartilhados();
+            await carregarDadosCompartilhados();
             setInterval(() => carregarDadosCompartilhados(true), GITHUB_REFRESH_INTERVAL);
-        });
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
 
         document.addEventListener('click', event => {
             const button = event.target.closest('button');
@@ -945,13 +1088,40 @@
             if (!container || !activeDashboard) return;
 
             activeDashboardId = activeDashboard.id;
-            container.innerHTML = dashboards.map(dashboard => `
-                <button onclick="selectDashboard('${dashboard.id}')" class="dashboard-tab ${dashboard.id === activeDashboardId ? 'active' : ''} shrink-0 flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-700 text-slate-300 transition">
-                    <i class="fa-solid fa-table-columns"></i><span>${dashboard.name}</span>
-                    <i onclick="event.stopPropagation(); renameDashboard('${dashboard.id}')" title="Renomear dashboard" class="fa-solid fa-pen text-[10px] opacity-70 hover:opacity-100"></i>
-                    ${dashboards.length > 1 ? `<i onclick="event.stopPropagation(); deleteDashboard('${dashboard.id}')" title="Excluir dashboard" class="fa-solid fa-xmark text-[10px] opacity-70 hover:text-rose-400"></i>` : ''}
-                </button>
-            `).join('');
+            container.replaceChildren();
+            dashboards.forEach(dashboard => {
+                const button = document.createElement('button');
+                button.className = `dashboard-tab ${dashboard.id === activeDashboardId ? 'active' : ''} shrink-0 flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-700 text-slate-300 transition`;
+                button.addEventListener('click', () => selectDashboard(dashboard.id));
+
+                const icon = document.createElement('i');
+                icon.className = 'fa-solid fa-table-columns';
+                const name = document.createElement('span');
+                name.textContent = dashboard.name;
+                button.append(icon, name);
+
+                const rename = document.createElement('i');
+                rename.className = 'fa-solid fa-pen text-[10px] opacity-70 hover:opacity-100';
+                rename.title = 'Renomear dashboard';
+                rename.addEventListener('click', event => {
+                    event.stopPropagation();
+                    renameDashboard(dashboard.id);
+                });
+                button.appendChild(rename);
+
+                if (dashboards.length > 1) {
+                    const remove = document.createElement('i');
+                    remove.className = 'fa-solid fa-xmark text-[10px] opacity-70 hover:text-rose-400';
+                    remove.title = 'Excluir dashboard';
+                    remove.addEventListener('click', event => {
+                        event.stopPropagation();
+                        deleteDashboard(dashboard.id);
+                    });
+                    button.appendChild(remove);
+                }
+
+                container.appendChild(button);
+            });
         }
 
         function selectDashboard(id) {
@@ -1347,11 +1517,14 @@
         }
 
         async function salvarEstadoSupabase() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) return;
+
             const response = await fetch(SUPABASE_STATE_ENDPOINT, {
                 method: 'POST',
                 headers: {
                     'apikey': SUPABASE_PUBLISHABLE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+                    'Authorization': `Bearer ${session.access_token}`,
                     'Content-Type': 'application/json',
                     'Prefer': 'resolution=merge-duplicates,return=minimal'
                 },
@@ -1367,10 +1540,13 @@
         }
 
         async function carregarDadosSupabase(silencioso = false) {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) return null;
+
             const response = await fetch(`${SUPABASE_STATE_ENDPOINT}?id=eq.1&select=data,updated_at`, {
                 headers: {
                     'apikey': SUPABASE_PUBLISHABLE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+                    'Authorization': `Bearer ${session.access_token}`
                 }
             });
 
@@ -1615,26 +1791,27 @@
                 const monthly = getMonthlyData(indicator);
                 const last = getLastValid(monthly.values, monthly.labels);
                 const unit = c.unit || indicator.und || '';
+                const color = ['emerald', 'amber', 'rose', 'sky', 'violet'].includes(c.color) ? c.color : 'sky';
                 const el = document.createElement('div');
                 el.className = 'glass-card page-load-item rounded-2xl p-5 flex flex-col justify-between';
                 el.innerHTML = `
                     <div class="flex items-start justify-between">
                         <div>
-                            <span class="text-xs text-slate-400 font-medium">${c.title}</span>
+                            <span class="text-xs text-slate-400 font-medium">${escapeHtml(c.title)}</span>
                             <div class="text-2xl font-extrabold text-white mt-1">${fmtVal(last.val, unit === '%' ? '%' : '')}${unit && unit !== '%' ? ` ${unit}` : ''}</div>
                         </div>
-                        <div class="p-3 rounded-xl bg-${c.color}-500/10 text-${c.color}-400 border border-${c.color}-500/20">
+                        <div class="p-3 rounded-xl bg-${color}-500/10 text-${color}-400 border border-${color}-500/20">
                             <i class="fa-solid ${c.icon} text-lg"></i>
                         </div>
                     </div>
                     <div class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center gap-2 text-xs">
-                        <span class="text-slate-400">Último: ${last.month}</span>
+                        <span class="text-slate-400">Último: ${escapeHtml(last.month)}</span>
                         <span class="text-slate-300">Meta: ${fmtVal(indicator.meta, unit === '%' ? '%' : '')}${unit && unit !== '%' && indicator.meta !== null && indicator.meta !== undefined ? ` ${unit}` : ''}</span>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-${c.color}-500/10 text-${c.color}-400 border border-${c.color}-500/20">${c.badge}</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-${color}-500/10 text-${color}-400 border border-${color}-500/20">${escapeHtml(c.badge)}</span>
                     </div>
                     <div class="flex justify-end gap-1 mt-3">
-                        <button onclick="openKpiModal('${c.id}')" title="Editar Balão" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="deleteKpi('${c.id}')" title="Excluir Balão" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                        <button onclick="openKpiModal('${escapeHtml(c.id)}')" title="Editar Balão" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="deleteKpi('${escapeHtml(c.id)}')" title="Excluir Balão" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 `;
                 kpiContainer.appendChild(el);
@@ -2030,15 +2207,15 @@
                         <div>
                             <h4 class="text-sm font-bold text-white flex items-center gap-2">
                                 <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                                ${c.title}
+                                ${escapeHtml(c.title)}
                             </h4>
-                            <p class="text-xs text-slate-400">${c.desc || 'Gráfico Personalizado'}</p>
+                            <p class="text-xs text-slate-400">${escapeHtml(c.desc || 'Gráfico Personalizado')}</p>
                         </div>
                         <div class="flex items-center gap-1">
-                            <button onclick="openChartModal('${c.id}')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs">
+                            <button onclick="openChartModal('${escapeHtml(c.id)}')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
-                            <button onclick="deleteCustomChart('${c.id}')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs">
+                            <button onclick="deleteCustomChart('${escapeHtml(c.id)}')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs">
                                 <i class="fa-solid fa-trash"></i>
                             </button>
                         </div>
@@ -2222,10 +2399,10 @@
                             <button onclick="deleteIndicator(${origIndex})" title="Excluir" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </td>
-                    <td class="py-2.5 px-3 font-medium text-slate-400 text-[11px]">${item.setor}</td>
-                    <td class="py-2.5 px-3 font-semibold text-white text-[11px]">${item.indicador}</td>
-                    <td class="py-2.5 px-2 text-center font-mono text-slate-400 text-[11px]">${item.meta !== null ? fmtVal(item.meta, item.und) : '-'}</td>
-                    <td class="py-2.5 px-2 text-center text-slate-400 text-[11px]">${item.und}</td>
+                    <td class="py-2.5 px-3 font-medium text-slate-400 text-[11px]">${escapeHtml(item.setor)}</td>
+                    <td class="py-2.5 px-3 font-semibold text-white text-[11px]">${escapeHtml(item.indicador)}</td>
+                    <td class="py-2.5 px-2 text-center font-mono text-slate-400 text-[11px]">${item.meta !== null ? escapeHtml(fmtVal(item.meta, item.und)) : '-'}</td>
+                    <td class="py-2.5 px-2 text-center text-slate-400 text-[11px]">${escapeHtml(item.und)}</td>
                     ${valoresTdHtml}
                     <td class="py-2.5 px-3 text-right font-mono font-semibold bg-amber-950/20 text-slate-200 text-[11px]">${fmtVal(m.avg, item.und)}</td>
                     <td class="py-2.5 px-3 text-center font-mono text-[10px] text-slate-400 bg-amber-950/20">${fmtVal(m.min)} / ${fmtVal(m.max)}</td>
