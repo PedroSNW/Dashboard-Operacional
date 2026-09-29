@@ -803,11 +803,11 @@
                     <legend class="block text-xs text-slate-400 mb-2">Escala do eixo Y</legend>
                     <div class="grid grid-cols-2 gap-2">
                         <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-300">
-                            <input type="radio" name="chartAxisMode" value="single" class="accent-amber-500">
+                            <input type="radio" name="chartAxisMode" value="single" checked class="accent-amber-500">
                             <span>Eixo Único</span>
                         </label>
                         <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-300">
-                            <input type="radio" name="chartAxisMode" value="independent" checked class="accent-amber-500">
+                            <input type="radio" name="chartAxisMode" value="independent" class="accent-amber-500">
                             <span>Eixos Independentes</span>
                         </label>
                     </div>
@@ -1521,9 +1521,42 @@
                 const indicators = indexes.map(index => currentData[index]).filter(Boolean);
                 const labels = getChartMonthData(indicators[0] || { valores: [] }).labels;
                 if (!indicators.length) return;
-                let datasets = indicators.map((indicator, index) => ({ label: indicator.indicador, data: getChartMonthData(indicator).values, borderColor: ['#10b981', '#eab308', '#f43f5e', '#38bdf8'][index], backgroundColor: ['rgba(16,185,129,.25)', 'rgba(234,179,8,.25)', 'rgba(244,63,94,.25)', 'rgba(56,189,248,.25)'][index], borderWidth: 2, tension: 0.3, fill: config.type === 'line' }));
+                const supportsYAxis = !['radar', 'doughnut', 'polarArea', 'horizontalBar'].includes(config.type);
+                const usesIndependentAxes = config.axisMode === 'independent' && supportsYAxis && indicators.length > 1;
+                let datasets = indicators.map((indicator, index) => ({
+                    label: indicator.indicador,
+                    data: getChartMonthData(indicator).values,
+                    borderColor: ['#10b981', '#eab308', '#f43f5e', '#38bdf8'][index],
+                    backgroundColor: ['rgba(16,185,129,.25)', 'rgba(234,179,8,.25)', 'rgba(244,63,94,.25)', 'rgba(56,189,248,.25)'][index],
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: config.type === 'line',
+                    ...(usesIndependentAxes ? { yAxisID: `y${index + 1}` } : {})
+                }));
                 if (chartId === 'chart2' && indicators.length > 1) datasets = [{ label: config.title, data: labels.map((_, index) => indicators.reduce((sum, item) => sum + (getChartMonthData(item).values[index] || 0), 0)), backgroundColor: 'rgba(56,189,248,.6)', borderRadius: 6 }];
-                const scales = config.type === 'radar' ? { r: { min: 0, beginAtZero: true, pointLabels: { color: '#cbd5e1' } } } : { x: { ticks: { color: '#94a3b8' } }, y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } } };
+                const scales = config.type === 'radar'
+                    ? { r: { min: 0, beginAtZero: true, pointLabels: { color: '#cbd5e1' } } }
+                    : { x: { ticks: { color: '#94a3b8' } }, y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } } };
+                if (supportsYAxis && indicators.length > 1 && !usesIndependentAxes) {
+                    const values = indicators.flatMap(indicator => getChartMonthData(indicator).values)
+                        .filter(value => value !== null && value !== undefined && Number.isFinite(Number(value)));
+                    const maxValue = values.length ? Math.max(...values) * 1.1 : undefined;
+                    scales.y.max = maxValue > 0 ? maxValue : undefined;
+                }
+                if (usesIndependentAxes) {
+                    delete scales.y;
+                    indicators.forEach((_, index) => {
+                        scales[`y${index + 1}`] = {
+                            type: 'linear',
+                            position: 'left',
+                            offset: index > 0,
+                            min: 0,
+                            beginAtZero: true,
+                            ticks: { color: ['#10b981', '#eab308', '#f43f5e', '#38bdf8'][index] },
+                            grid: { drawOnChartArea: index === 0 }
+                        };
+                    });
+                }
                 if (config.type === 'horizontalBar') {
                     scales.x = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } };
                     scales.y = { ticks: { color: '#94a3b8' } };
@@ -2091,7 +2124,7 @@
                 document.getElementById('chartConfigInd2').value = chartObj.ind2 || '';
                 document.getElementById('chartConfigInd3').value = chartObj.ind3 ?? '';
                 document.getElementById('chartConfigInd4').value = chartObj.ind4 ?? '';
-                document.querySelector(`input[name="chartAxisMode"][value="${chartObj.axisMode || 'independent'}"]`).checked = true;
+                document.querySelector(`input[name="chartAxisMode"][value="${chartObj.axisMode || 'single'}"]`).checked = true;
             } else {
                 document.getElementById('modalChartHeading').innerHTML = '<i class="fa-solid fa-chart-line text-amber-400"></i> Criar Gráfico Personalizado';
                 document.getElementById('chartConfigId').value = '';
@@ -2103,7 +2136,7 @@
                 document.getElementById('chartConfigInd2').value = '';
                 document.getElementById('chartConfigInd3').value = '';
                 document.getElementById('chartConfigInd4').value = '';
-                document.querySelector('input[name="chartAxisMode"][value="independent"]').checked = true;
+                document.querySelector('input[name="chartAxisMode"][value="single"]').checked = true;
             }
 
             document.getElementById('modalChartConfig').classList.remove('hidden');
@@ -2221,7 +2254,7 @@
                 const indObj2 = indicatorObjects[1] || null;
                 const chartMonthData = getChartMonthData(indObj1);
                 const chartLabels = chartMonthData.labels.length > 0 ? chartMonthData.labels : mesesLabels;
-                const usesIndependentAxes = c.axisMode !== 'single' && indicatorObjects.length > 1;
+                const usesIndependentAxes = c.axisMode === 'independent' && indicatorObjects.length > 1;
 
                 const wrapper = document.createElement('div');
                 wrapper.className = `lg:col-span-${c.span} glass-card rounded-2xl p-5 flex flex-col`;
