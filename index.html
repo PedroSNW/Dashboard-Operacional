@@ -98,6 +98,11 @@
             border-color: #EAB308;
             box-shadow: 0 4px 12px rgba(202, 138, 4, 0.25);
         }
+        #modalChartConfig label:has(input[name="chartAxisMode"]:checked) {
+            border-color: rgba(234, 179, 8, 0.5);
+            background-color: rgba(234, 179, 8, 0.1);
+            color: #fcd34d;
+        }
         .dashboard-tab.active {
             background-color: rgba(234, 179, 8, 0.18);
             color: #facc15;
@@ -793,6 +798,20 @@
                         <option value="">Nenhum</option>
                     </select>
                 </div>
+
+                <fieldset>
+                    <legend class="block text-xs text-slate-400 mb-2">Escala do eixo Y</legend>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-300">
+                            <input type="radio" name="chartAxisMode" value="single" class="accent-amber-500">
+                            <span>Eixo Único</span>
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-300">
+                            <input type="radio" name="chartAxisMode" value="independent" checked class="accent-amber-500">
+                            <span>Eixos Independentes</span>
+                        </label>
+                    </div>
+                </fieldset>
 
                 <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
                     <button type="button" onclick="closeModal('modalChartConfig')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl">Cancelar</button>
@@ -2072,6 +2091,7 @@
                 document.getElementById('chartConfigInd2').value = chartObj.ind2 || '';
                 document.getElementById('chartConfigInd3').value = chartObj.ind3 ?? '';
                 document.getElementById('chartConfigInd4').value = chartObj.ind4 ?? '';
+                document.querySelector(`input[name="chartAxisMode"][value="${chartObj.axisMode || 'independent'}"]`).checked = true;
             } else {
                 document.getElementById('modalChartHeading').innerHTML = '<i class="fa-solid fa-chart-line text-amber-400"></i> Criar Gráfico Personalizado';
                 document.getElementById('chartConfigId').value = '';
@@ -2083,6 +2103,7 @@
                 document.getElementById('chartConfigInd2').value = '';
                 document.getElementById('chartConfigInd3').value = '';
                 document.getElementById('chartConfigInd4').value = '';
+                document.querySelector('input[name="chartAxisMode"][value="independent"]').checked = true;
             }
 
             document.getElementById('modalChartConfig').classList.remove('hidden');
@@ -2129,8 +2150,9 @@
             const ind3 = ind3Val !== '' ? parseInt(ind3Val) : null;
             const ind4Val = document.getElementById('chartConfigInd4').value;
             const ind4 = ind4Val !== '' ? parseInt(ind4Val) : null;
+            const axisMode = document.querySelector('input[name="chartAxisMode"]:checked').value;
 
-            const chartObject = { id, title, desc, type, span, ind1, ind2, ind3, ind4 };
+            const chartObject = { id, title, desc, type, span, ind1, ind2, ind3, ind4, axisMode };
 
             if (editingDefaultChartId) {
                 defaultChartConfigs[editingDefaultChartId] = { ...chartObject, deleted: false };
@@ -2199,6 +2221,7 @@
                 const indObj2 = indicatorObjects[1] || null;
                 const chartMonthData = getChartMonthData(indObj1);
                 const chartLabels = chartMonthData.labels.length > 0 ? chartMonthData.labels : mesesLabels;
+                const usesIndependentAxes = c.axisMode !== 'single' && indicatorObjects.length > 1;
 
                 const wrapper = document.createElement('div');
                 wrapper.className = `lg:col-span-${c.span} glass-card rounded-2xl p-5 flex flex-col`;
@@ -2239,12 +2262,11 @@
                     borderWidth: 2,
                     tension: 0.3,
                     fill: c.type === 'area',
-                    yAxisID: indicatorObjects.length > 1 ? `y${index + 1}` : 'y'
+                    yAxisID: usesIndependentAxes ? `y${index + 1}` : 'y'
                 }));
 
-                // Calcular o valor máximo comum entre todos os indicadores para escala consistente
                 let maxValue = 0;
-                if (indicatorObjects.length > 1) {
+                if (indicatorObjects.length > 1 && !usesIndependentAxes) {
                     indicatorObjects.forEach(indicator => {
                         const values = getChartMonthData(indicator).values.filter(v => v !== null && v !== undefined && !isNaN(v));
                         if (values.length > 0) {
@@ -2260,18 +2282,28 @@
 
                 if (c.type !== 'radar' && c.type !== 'doughnut' && c.type !== 'polarArea') {
                     if (indicatorObjects.length > 1) {
-                        indicatorObjects.forEach((_, index) => {
-                            scalesObj[`y${index + 1}`] = {
-                                type: 'linear',
-                                position: index % 2 === 0 ? 'left' : 'right',
+                        if (usesIndependentAxes) {
+                            indicatorObjects.forEach((_, index) => {
+                                scalesObj[`y${index + 1}`] = {
+                                    type: 'linear',
+                                    position: 'left',
+                                    offset: index > 0,
+                                    min: 0,
+                                    beginAtZero: true,
+                                    ticks: { color: datasetColors[index] },
+                                    grid: { drawOnChartArea: index === 0 }
+                                };
+                            });
+                        } else {
+                            scalesObj.y = {
                                 min: 0,
                                 max: maxValue > 0 ? maxValue : undefined,
                                 beginAtZero: true,
-                                ticks: index === 0 ? { color: '#94a3b8' } : { display: false },
-                                grid: { drawOnChartArea: index === 0 },
-                                title: index === 0 ? { display: true, text: 'Valores Comparativos', color: '#94a3b8', font: { size: 10, weight: 'bold' } } : { display: false }
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                title: { display: true, text: 'Valores Comparativos', color: '#94a3b8', font: { size: 10, weight: 'bold' } }
                             };
-                        });
+                        }
                     } else {
                         scalesObj.y = { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Valores', color: '#94a3b8', font: { size: 10, weight: 'bold' } } };
                     }
