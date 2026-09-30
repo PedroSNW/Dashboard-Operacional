@@ -1668,11 +1668,24 @@
 
                     // 6. Extrai Espaços de Trabalho / Dashboards Personalizados
                     if (Array.isArray(dataObj.dashboards) && dataObj.dashboards.length > 0) {
-                        dashboards = dataObj.dashboards;
+                        let localDashboards = [];
+                        try {
+                            const storedDashboards = JSON.parse(localStorage.getItem(DASHBOARDS_STORAGE_KEY) || '[]');
+                            if (Array.isArray(storedDashboards)) localDashboards = storedDashboards;
+                        } catch (error) {
+                            console.error('Erro ao ler dashboards locais:', error);
+                        }
+
+                        const sharedDashboardIds = new Set(dataObj.dashboards.map(item => item.id));
+                        const missingLocalDashboards = localDashboards.filter(item => !sharedDashboardIds.has(item.id));
+                        dashboards = [...dataObj.dashboards, ...missingLocalDashboards];
                         activeDashboardId = dashboards.some(item => item.id === activeDashboardId)
                             ? activeDashboardId
                             : dashboards[0].id;
                         localStorage.setItem(DASHBOARDS_STORAGE_KEY, JSON.stringify(dashboards));
+                        if (missingLocalDashboards.length > 0) {
+                            salvarEstadoSupabase().catch(error => console.error('Erro ao restaurar dashboards no Supabase:', error));
+                        }
                     } else {
                         loadStoredDashboards();
                     }
