@@ -380,6 +380,10 @@
                         <div class="text-[10px] uppercase font-semibold text-slate-400">Última Modificação</div>
                         <div class="text-xs font-bold text-slate-200" id="lastUpdatedTag">Hoje</div>
                     </div>
+                    <div class="border-l border-slate-800 pl-4">
+                        <div class="text-[10px] uppercase font-semibold text-slate-400">Último salvamento</div>
+                        <div class="text-xs font-bold text-emerald-400" id="lastSavedTag">Ainda não sincronizado</div>
+                    </div>
                 </div>
             </section>
 
@@ -873,6 +877,7 @@
         const DATA_LABELS_STORAGE_KEY = 'dgranel_show_chart_data_labels_2026';
         const THEME_STORAGE_KEY = 'dgranel_theme_2026';
         const DASHBOARDS_STORAGE_KEY = 'dgranel_dashboards_2026';
+        const LAST_SAVE_STORAGE_KEY = 'dgranel_last_save_2026';
         const GITHUB_CSV_URL = 'https://raw.githubusercontent.com/PedroSNW/Dashboard-Operacional/main/Controle%20de%20resultados%20por%20departamentos(in).csv';
         const GITHUB_REFRESH_INTERVAL = 5 * 60 * 1000;
         const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
@@ -920,6 +925,8 @@
         // CARREGAMENTO INICIAL
         document.addEventListener('DOMContentLoaded', async () => {
             applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
+            updateLastSaveStatus();
+            setInterval(updateLastSaveStatus, 60 * 1000);
             updateDeveloperModeLockIcon();
             setupAuthForm();
 
@@ -944,6 +951,28 @@
             if (!message) return;
             message.textContent = text;
             message.className = `min-h-5 text-xs ${isError ? 'text-rose-400' : 'text-emerald-400'}`;
+        }
+
+        function updateLastSaveStatus(timestamp = Number(localStorage.getItem(LAST_SAVE_STORAGE_KEY))) {
+            const tag = document.getElementById('lastSavedTag');
+            if (!tag) return;
+
+            const savedAt = new Date(timestamp);
+            if (!Number.isFinite(timestamp) || Number.isNaN(savedAt.getTime())) {
+                tag.textContent = 'Ainda não sincronizado';
+                return;
+            }
+
+            const elapsedMinutes = Math.floor(Math.max(0, Date.now() - savedAt.getTime()) / 60000);
+            const elapsedLabel = elapsedMinutes === 0
+                ? 'Agora'
+                : elapsedMinutes < 60
+                    ? `há ${elapsedMinutes} min`
+                    : elapsedMinutes < 1440
+                        ? `há ${Math.floor(elapsedMinutes / 60)} h`
+                        : `há ${Math.floor(elapsedMinutes / 1440)} d`;
+            const time = savedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            tag.textContent = `${elapsedLabel} · ${time}`;
         }
 
         function getAuthCredentials() {
@@ -1597,6 +1626,9 @@
 
             if (!response.ok) throw new Error(`Supabase HTTP ${response.status}`);
             supabaseReady = true;
+            const savedAt = Date.now();
+            localStorage.setItem(LAST_SAVE_STORAGE_KEY, String(savedAt));
+            updateLastSaveStatus(savedAt);
         }
 
         async function carregarDadosSupabase(silencioso = false) {
@@ -1619,6 +1651,13 @@
         async function carregarDadosCompartilhados(silencioso = false) {
             try {
                 const sharedState = await carregarDadosSupabase(silencioso);
+                if (sharedState?.updated_at) {
+                    const savedAt = new Date(sharedState.updated_at).getTime();
+                    if (Number.isFinite(savedAt)) {
+                        localStorage.setItem(LAST_SAVE_STORAGE_KEY, String(savedAt));
+                        updateLastSaveStatus(savedAt);
+                    }
+                }
 
                 if (sharedState && sharedState.data) {
                     const dataObj = sharedState.data;
