@@ -1612,46 +1612,72 @@
         async function carregarDadosCompartilhados(silencioso = false) {
             try {
                 const sharedState = await carregarDadosSupabase(silencioso);
-                const sharedIndicators = Array.isArray(sharedState?.data)
-                    ? sharedState.data
-                    : sharedState?.data?.indicadores;
-                const sharedCharts = Array.isArray(sharedState?.data?.graficos)
-                    ? sharedState.data.graficos
-                    : null;
-                const sharedSectors = Array.isArray(sharedState?.data?.setores)
-                    ? sharedState.data.setores
-                    : null;
-                const sharedDefaultCharts = sharedState?.data?.graficosPadrao;
-                const sharedKpis = sharedState?.data?.kpis;
-                const sharedDashboards = sharedState?.data?.dashboards;
 
-                if (sharedIndicators && sharedIndicators.length > 0) {
-                    currentData = sharedIndicators;
-                    if (sharedSectors) {
-                        sectors = sharedSectors;
+                if (sharedState && sharedState.data) {
+                    const dataObj = sharedState.data;
+
+                    // 1. Extrai Indicadores (suporta ambos os formatos de estrutura)
+                    const sharedIndicators = Array.isArray(dataObj) ? dataObj : dataObj.indicadores;
+                    if (Array.isArray(sharedIndicators) && sharedIndicators.length > 0) {
+                        currentData = sharedIndicators;
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
+                    } else {
+                        loadStoredData();
+                    }
+
+                    // 2. Extrai Setores
+                    if (Array.isArray(dataObj.setores) && dataObj.setores.length > 0) {
+                        sectors = dataObj.setores;
                         localStorage.setItem(SECTORS_STORAGE_KEY, JSON.stringify(sectors));
                     } else {
                         syncSectorsFromData();
                     }
-                    if (sharedCharts) {
-                        customCharts = sharedCharts;
-                        localStorage.setItem(CHARTS_STORAGE_KEY, JSON.stringify(customCharts));
+
+                    // 3. Extrai Gráficos Personalizados (com preservação do Cache Local)
+                    const sharedCharts = dataObj.graficos;
+                    const localCharts = JSON.parse(localStorage.getItem(CHARTS_STORAGE_KEY) || '[]');
+
+                    if (Array.isArray(sharedCharts) && sharedCharts.length > 0) {
+                        // Mescla gráficos locais e compartilhados, priorizando a versão do Supabase.
+                        const mergedMap = new Map();
+                        localCharts.forEach(c => mergedMap.set(c.id, c));
+                        sharedCharts.forEach(c => mergedMap.set(c.id, c));
+                        customCharts = Array.from(mergedMap.values());
+                    } else if (localCharts.length > 0) {
+                        customCharts = localCharts;
+                    } else {
+                        loadStoredCharts();
                     }
-                    if (sharedDefaultCharts && typeof sharedDefaultCharts === 'object' && Object.keys(sharedDefaultCharts).length > 0) {
-                        defaultChartConfigs = sharedDefaultCharts;
+                    localStorage.setItem(CHARTS_STORAGE_KEY, JSON.stringify(customCharts));
+
+                    // 4. Extrai Configurações de Gráficos Padrão
+                    if (dataObj.graficosPadrao && typeof dataObj.graficosPadrao === 'object') {
+                        defaultChartConfigs = { ...defaultChartConfigs, ...dataObj.graficosPadrao };
                         localStorage.setItem(DEFAULT_CHARTS_STORAGE_KEY, JSON.stringify(defaultChartConfigs));
+                    } else {
+                        loadStoredDefaultCharts();
                     }
-                    if (Array.isArray(sharedKpis) && sharedKpis.length > 0) {
-                        kpiCards = sharedKpis;
+
+                    // 5. Extrai Balões / KPIs
+                    if (Array.isArray(dataObj.kpis) && dataObj.kpis.length > 0) {
+                        kpiCards = dataObj.kpis;
                         localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(kpiCards));
+                    } else {
+                        loadStoredKpis();
                     }
-                    if (Array.isArray(sharedDashboards) && sharedDashboards.length > 0) {
-                        dashboards = sharedDashboards;
-                        activeDashboardId = dashboards.some(item => item.id === activeDashboardId) ? activeDashboardId : dashboards[0].id;
+
+                    // 6. Extrai Espaços de Trabalho / Dashboards Personalizados
+                    if (Array.isArray(dataObj.dashboards) && dataObj.dashboards.length > 0) {
+                        dashboards = dataObj.dashboards;
+                        activeDashboardId = dashboards.some(item => item.id === activeDashboardId)
+                            ? activeDashboardId
+                            : dashboards[0].id;
                         localStorage.setItem(DASHBOARDS_STORAGE_KEY, JSON.stringify(dashboards));
+                    } else {
+                        loadStoredDashboards();
                     }
+
                     syncMonthLabels();
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
                     initSystem();
                     return;
                 }
@@ -1660,7 +1686,12 @@
             } catch (error) {
                 supabaseReady = false;
                 console.error('Erro ao carregar dados compartilhados:', error);
-                if (!silencioso) alert('Não foi possível acessar o Supabase. Os dados locais continuam disponíveis.');
+                // Em caso de falha de conexão, restaura do cache do navegador
+                loadStoredData();
+                loadStoredCharts();
+                loadStoredKpis();
+                loadStoredDashboards();
+                initSystem();
             }
         }
 
