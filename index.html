@@ -903,6 +903,7 @@
         let activeDashboardId = null;
         let currentSession = null;
         let appInitialized = false;
+        let supabaseSyncInterval = null;
 
         Chart.register(ChartDataLabels);
         Chart.defaults.animation = false;
@@ -997,6 +998,8 @@
 
             if (!session) {
                 appInitialized = false;
+                clearInterval(supabaseSyncInterval);
+                supabaseSyncInterval = null;
                 return;
             }
 
@@ -1011,7 +1014,11 @@
             setupDragAndDrop();
             initSystem();
             await carregarDadosCompartilhados();
-            setInterval(() => carregarDadosCompartilhados(true), GITHUB_REFRESH_INTERVAL);
+            supabaseSyncInterval = setInterval(() => {
+                salvarEstadoSupabase()
+                    .then(() => console.log('Sincronização periódica: Estado salvo no Supabase.'))
+                    .catch(error => console.error('Erro na sincronização periódica com Supabase:', error));
+            }, GITHUB_REFRESH_INTERVAL);
         }
 
         function escapeHtml(value) {
