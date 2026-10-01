@@ -1048,9 +1048,8 @@
                     carregarDadosCompartilhados(true);
                     return;
                 }
-                salvarEstadoSupabase()
-                    .then(() => console.log('Sincronização periódica: Estado salvo no Supabase.'))
-                    .catch(error => console.error('Erro na sincronização periódica com Supabase:', error));
+                carregarDadosCompartilhados(true)
+                    .catch(error => console.error('Erro ao atualizar estado compartilhado:', error));
             }, GITHUB_REFRESH_INTERVAL);
         }
 
@@ -1626,13 +1625,15 @@
         async function carregarDadosCompartilhados(silencioso = false) {
             try {
                 const sharedState = await carregarDadosSupabase(silencioso);
+                const remoteSavedAt = sharedState?.updated_at
+                    ? new Date(sharedState.updated_at).getTime()
+                    : null;
+                if (silencioso && Number.isFinite(remoteSavedAt) && remoteSavedAt <= lastSupabaseSavedAt) return;
+
                 supabaseStateLoaded = true;
-                if (sharedState?.updated_at) {
-                    const savedAt = new Date(sharedState.updated_at).getTime();
-                    if (Number.isFinite(savedAt)) {
-                        lastSupabaseSavedAt = savedAt;
-                        updateLastSaveStatus(savedAt);
-                    }
+                if (Number.isFinite(remoteSavedAt)) {
+                    lastSupabaseSavedAt = remoteSavedAt;
+                    updateLastSaveStatus(remoteSavedAt);
                 }
 
                 if (sharedState && sharedState.data) {
