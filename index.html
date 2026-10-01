@@ -256,6 +256,7 @@
                             id="dashboardLogo" 
                             src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&s=10.png" 
                             alt="D'Granel Logo" 
+                            onerror="handleLogoError(this)"
                             class="h-full w-full object-cover rounded-[10px]"
                         >
                     </div>
@@ -872,7 +873,7 @@
         const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
         const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w6wowhTeTPXuDiZTgSjCgA_pw_5UuQO';
         const SUPABASE_STATE_ENDPOINT = `${SUPABASE_URL}/rest/v1/dashboard_state`;
-        const DEFAULT_LOGO_SRC = 'logo.png';
+        const DEFAULT_LOGO_SRC = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&s=10.png';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
             auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
         });
