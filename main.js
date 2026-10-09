@@ -1,7 +1,6 @@
 // DADOS PADRÃO (INICIALIZAÇÃO)
 const initialData = [{"setor": "Controle de Sinistro", "indicador": "ACIDENTE POR (MILHAO) DE KM RODADO - Mensal", "meta": 0.0, "und": "%", "valores": [3.5, 4.43, 4.17, 5.51, 3.58, 4.09, null]}, {"setor": "Controlde de Sinistro", "indicador": "Acidentes com culpa - Mensal", "meta": 0.0, "und": "Qtd", "valores": [11.0, 12.0, 8.0, 17.0, 21.0, 13.0, 16.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de acidentes com lesões - veículos proprios - Mensal", "meta": 0.0, "und": "Qtd", "valores": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de acidentes com lesões envolvendo Terceiros - Mensal", "meta": 0.0, "und": "Qtd", "valores": [0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1.0]}, {"setor": "Controle de Sinistro", "indicador": "Numero de mortes - proprios - Mensal", "meta": 0.0, "und": "Qtd", "valores": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de mortes -Terceiros - Mensal", "meta": 0.0, "und": "Qtd", "valores": [0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 1.0]}, {"setor": "Controle de Sinistro", "indicador": "Total de acidentes - Mensal", "meta": 40.0, "und": "Qtd", "valores": [26.0, 33.0, 38.0, 49.0, 32.0, 38.0, 43.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "VEÍCULOS ATIVOS (semirreboques)", "meta": 2500.0, "und": "Qtd", "valores": [2015.0, 1972.0, 1968.0, 1959.0, 1947.0, 1947.0, 1932.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "VEÍCULOS ATIVOS (cavalo mecânico)", "meta": 1300.0, "und": "Qtd", "valores": [1234.0, 1208.0, 1223.0, 1231.0, 1221.0, 1204.0, 1190.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Cronotacógrafo - Mensal", "meta": 100.0, "und": "%", "valores": [62.25, 64.29, 64.37, 97.44, 98.61, 98.51, 98.43]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Veículos emplacados - Mensal", "meta": 0.0, "und": "Qtd", "valores": [68.0, 36.0, 36.0, 31.0, 31.0, 23.0, 11.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Veículos Vendidos", "meta": 0.0, "und": "Qtd", "valores": [27.0, 24.0, 35.0, 35.0, 23.0, 45.0, 49.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "% CRLV LIBERADOS - Mensal", "meta": 100.0, "und": "%", "valores": [5.13, 79.45, 91.9, 96.51, 97.3, 99.18, 99.59]}, {"setor": "Controle de Penalidade/Autuações", "indicador": "Redução quantidade de multas por frota - Mensal", "meta": 0.35, "und": "%", "valores": [0.59, 0.46, 0.5, 0.58, 0.35, 0.55, null]}, {"setor": "Controle de Penalidade", "indicador": "% de multas pagas com 20% de desconto - Mensal", "meta": 20.0, "und": "%", "valores": [20.0, 18.0, 15.0, 23.0, 16.0, 10.67, 12.08]}, {"setor": "Controle de Penalidade", "indicador": "% de multas pagas com 40% de desconto - Mensal", "meta": 10.0, "und": "%", "valores": [42.0, 39.0, 56.0, 38.0, 55.0, 48.71, 47.35]}, {"setor": "Controle de Penalidade", "indicador": "Multas Cobradas Motoristas - Mensal", "meta": 50000.0, "und": "Qtd", "valores": [159.0, 161.0, 188.0, 99.0, 185.0, 245.0, 297.0]}, {"setor": "Controle de Penalidade", "indicador": "Multas Mapeadas Mês - Mensal", "meta": 0.0, "und": "Qtd", "valores": [595.0, 528.0, 651.0, 924.0, 407.0, 644.0, 478.0]}, {"setor": "Controle de Penalidade", "indicador": "Multas Pagas Mês - Mensal", "meta": 0.0, "und": "Qtd", "valores": [843.0, 707.0, 602.0, 556.0, 854.0, 1199.0, 1134.0]}, {"setor": "Controle de de Autuações", "indicador": "Defesas administrativas", "meta": 50000.0, "und": "Qtd", "valores": [3.0, 16.0, 6.0, 2.0, 29.0, 35.0, 13.0]}, {"setor": "Controle de de Autuações", "indicador": "Autuações tratadas", "meta": 50000.0, "und": "Qtd", "valores": [267.0, 100.0, 229.0, 278.0, 262.0, 278.0, 246.0]}, {"setor": "Controle de de Autuações", "indicador": "Responsabilidade da empresa", "meta": 50000.0, "und": "Qtd", "valores": [96.0, 28.0, 70.0, 30.0, 30.0, 37.0, 13.0]}, {"setor": "Controle de de Autuações", "indicador": "Já identificado pelo agente", "meta": 50000.0, "und": "Qtd", "valores": [17.0, 4.0, 5.0, 14.0, 6.0, 12.0, 16.0]}, {"setor": "Controle de de Autuações", "indicador": "Identificar (solicitou ser identificado, mas não possui termo)", "meta": 50000.0, "und": "Qtd", "valores": [27.0, 36.0, 46.0, 40.0, 42.0, 39.0, 32.0]}, {"setor": "Controle de de Autuações", "indicador": "PRF", "meta": 50000.0, "und": "Qtd", "valores": [42.0, 12.0, 47.0, 65.0, 84.0, 93.0, 72.0]}, {"setor": "Controle de de Autuações", "indicador": "Identificado", "meta": 50000.0, "und": "Qtd", "valores": [27.0, 36.0, 46.0, 40.0, 42.0, 43.0, 49.0]}, {"setor": "Controle de de Autuações", "indicador": "Agregados Identificados", "meta": 50000.0, "und": "Qtd", "valores": [1.0, null, 1.0, 2.0, 8.0, 3.0, 6.0]}, {"setor": "Controle de de Autuações", "indicador": "Agregados não Identificado", "meta": 50000.0, "und": "Qtd", "valores": [null, null, 15.0, 7.0, 14.0, 2.0, 8.0]}, {"setor": "Controle de de Autuações", "indicador": "Não Identificado frota", "meta": 50000.0, "und": "Qtd", "valores": [33.0, 3.0, 13.0, 47.0, 22.0, 32.0, 28.0]}, {"setor": "Controle de de Autuações", "indicador": "Não Identificado 24h", "meta": 50000.0, "und": "Qtd", "valores": [12.0, 1.0, 11.0, 19.0, 14.0, 17.0, 22.0]}, {"setor": "Controle de de Autuações", "indicador": "Defesas ANTT", "meta": 50000.0, "und": "Qtd", "valores": [null, null, null, null, 28.0, 29.0, null]}, {"setor": "Controle de SCORE do motorista", "indicador": "SCORE - Mensal", "meta": 600.0, "und": "Qtd", "valores": [249.0, 318.0, 405.0, 460.0, 497.0, 589.0, null]}, {"setor": "Controle de Velocidade", "indicador": "Numero de motoristas com ocorrencias acima da velocidade permitida - Mensal", "meta": 0.0, "und": "Qtd", "valores": [542.0, 580.0, 673.0, 640.0, 584.0, 597.0, 540.0]}];
 
-const GITHUB_CSV_URL = 'https://raw.githubusercontent.com/PedroSNW/Dashboard-Operacional/main/Controle%20de%20resultados%20por%20departamentos(in).csv';
 const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhsYXNxdXJ0aG5uaG1zem9qcmNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczMzE3MjQsImV4cCI6MjEwMjkwNzcyNH0.m_Om19_gEfT_ab1QjeUVQWF-oimhtasu7_xXsNMHPrg';
 const SUPABASE_STATE_ENDPOINT = `${SUPABASE_URL}/rest/v1/dashboard_state`;
@@ -958,7 +957,6 @@ async function carregarDadosCompartilhados(silencioso = false) {
             return;
         }
 
-        if (!silencioso) await carregarDadosGithub(true);
         initSystem();
     } catch (error) {
         supabaseReady = false;
@@ -980,7 +978,7 @@ function saveCustomChartsStorage() {
     markStateDirty();
 }
 
-function initSystem(sincronizarGithub = false) {
+function initSystem() {
     syncMonthLabels();
     renderDashboardMonthFilter();
     renderDashboardTabs();
@@ -999,7 +997,6 @@ function initSystem(sincronizarGithub = false) {
     if (detailModal && !detailModal.classList.contains('hidden') && detailModalIndex !== null) {
         refreshDetailModal(detailModalIndex);
     }
-    if (sincronizarGithub) carregarDadosGithub(true);
 }
 
 function toggleDataLabels() {
@@ -2141,33 +2138,6 @@ function applyRawJSON() {
         showAlert('Sucesso!', 'Alterações salvas com sucesso!', 'success');
     } catch(e) {
         showAlert('Erro na validação', 'Verifique a sintaxe do JSON.', 'error');
-    }
-}
-
-// BUSCA E LEITURA DIRETA DO CSV NO GITHUB
-async function carregarDadosGithub(silencioso = false) {
-    if (!silencioso) {
-        const confirmarSincronizacao = confirm(
-            'A sincronização substituirá os dados atuais pelos dados do GitHub. Deseja continuar?'
-        );
-        if (!confirmarSincronizacao) return;
-
-        const exportarBackup = confirm(
-            'Deseja exportar os dados atuais em CSV antes de sincronizar?'
-        );
-        if (exportarBackup) exportToCSV();
-    }
-
-    try {
-        const response = await fetch(`${GITHUB_CSV_URL}?t=${Date.now()}`);
-        if (!response.ok) throw new Error(`Erro HTTP! Status: ${response.status}`);
-
-        const csvText = await response.text();
-        parseCSVContent(csvText, "GitHub", silencioso);
-
-    } catch (erro) {
-        console.error("Erro ao buscar dados do GitHub:", erro);
-        if (!silencioso) showAlert('Falha na sincronização', 'Não foi possível carregar a planilha do GitHub. Os dados locais continuam disponíveis.', 'error');
     }
 }
 
