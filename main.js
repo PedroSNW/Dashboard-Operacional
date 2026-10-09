@@ -836,6 +836,7 @@ async function saveCurrentState() {
         await salvarEstadoSupabase();
         hasUnsavedChanges = stateRevision !== revisionBeingSaved;
         document.getElementById('lastSavedTag').textContent = 'Salvo agora';
+        showAlert('Salvo com sucesso', 'As alterações foram salvas.', 'success');
     } catch (error) {
         console.error('Erro ao salvar o estado no Supabase:', error);
         document.getElementById('lastSavedTag').textContent = 'Falha ao salvar';
