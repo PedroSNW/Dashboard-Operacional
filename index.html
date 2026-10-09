@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D'Granel - Dashboard Operacional & Segurança de Frota</title>
+    <link rel="icon" type="image/png" href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&amp;s=10.png">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <!-- PapaParse for CSV Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <!-- Supabase Auth / Database client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+        <link rel="stylesheet" href="style.css">
+</head>
+<body class="min-h-screen pb-12 flex flex-col">
+
+    <section id="authScreen" class="flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-md rounded-2xl p-7">
+            <div class="mb-6">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">Acesso corporativo</p>
+                <h2 class="mt-2 text-2xl font-black text-white">D'GRANEL</h2>
+                <p class="mt-2 text-sm text-slate-400">Entre com seu e-mail corporativo para acessar o painel.</p>
+            </div>
+
+            <form id="authForm" class="space-y-4">
+                <div>
+                    <label for="authEmail" class="mb-1 block text-xs font-semibold text-slate-300">E-mail</label>
+                    <input id="authEmail" type="email" autocomplete="email" required class="w-full rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-sm text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="nome@dgranel.com.br">
+                </div>
+                <div>
+                    <label for="authPassword" class="mb-1 block text-xs font-semibold text-slate-300">Senha</label>
+                    <input id="authPassword" type="password" autocomplete="current-password" minlength="8" required class="w-full rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-sm text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Mínimo de 8 caracteres">
+                </div>
+                <p id="authMessage" class="min-h-5 text-xs" role="alert" aria-live="polite"></p>
+                <div class="flex gap-2">
+                    <button id="loginButton" type="submit" class="flex-1 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-amber-600">Entrar</button>
+                    <button id="signupButton" type="button" class="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-slate-700">Criar conta</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- HEADER / NAVEGAÇÃO PRINCIPAL -->
+    <header class="page-load-item border-b border-amber-500/20 bg-[#0A1329]/95 sticky top-0 z-40 backdrop-blur-md px-4 sm:px-8 py-3.5 shadow-lg">
+        <div class="max-w-[1600px] mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
+            
+            <!-- BRANDING & LOGO D'GRANEL (COM UPLOAD DE IMAGEM) -->
+            <div class="flex items-center gap-4 w-full lg:w-auto justify-between lg:justify-start">
+                <div class="flex items-center gap-3">
+                    
+                    <!-- Container Interativo da Logo -->
+                    <div 
+                        id="developerModeTrigger"
+                        onclick="handleDeveloperModeClick()"
+                        title="Logo D'Granel"
+                        class="relative group cursor-pointer h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 p-0.5 shadow-md flex items-center justify-center overflow-hidden hover:opacity-90 transition-all border border-amber-500/30"
+                    >
+                        <img 
+                            id="dashboardLogo" 
+                            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&s=10.png" 
+                            alt="D'Granel Logo" 
+                            onerror="handleLogoError(this)"
+                            class="h-full w-full object-cover rounded-[10px]"
+                        >
+                    </div>
+
+                    <!-- Input Oculto de Arquivo -->
+                    <input 
+                        type="file" 
+                        id="logoInput" 
+                        accept="image/*" 
+                        class="hidden" 
+                        onchange="handleLogoUpload(event)"
+                    >
+
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-lg font-black tracking-wider uppercase text-white">D'GRANEL</h1>
+                            <span class="inline-flex items-center justify-center whitespace-nowrap text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30">Gestão de Transportes</span>
+                            
+                            <!-- Botão para Resetar Logo -->
+                            <button 
+                                id="removeLogoBtn" 
+                                onclick="resetLogo()" 
+                                class="hidden text-[10px] text-slate-400 hover:text-rose-400 transition-colors ml-1 font-semibold flex items-center gap-1" 
+                                title="Restaurar logo padrão"
+                            >
+                                <i class="fa-solid fa-xmark"></i> Resetar Logo
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-400">Dashboard Operacional & Controle de Segurança Viária</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NAVEGAÇÃO DE ABAS -->
+            <div class="flex items-center gap-1.5 bg-[#050A17]/80 p-1.5 rounded-xl border border-amber-500/20 w-full lg:w-auto justify-center">
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn active text-xs font-semibold px-4 py-2 rounded-lg transition flex items-center gap-2 text-slate-300 hover:text-white">
+                    <i class="fa-solid fa-chart-pie text-amber-400"></i> Executive Dashboard
+                </button>
+                <button onclick="switchTab('datagrid')" id="tab-datagrid" class="tab-btn text-xs font-semibold px-4 py-2 rounded-lg transition flex items-center gap-2 text-slate-300 hover:text-white">
+                    <i class="fa-solid fa-table"></i> Consulta & Repositório
+                </button>
+                <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn text-xs font-semibold px-4 py-2 rounded-lg transition flex items-center gap-2 text-slate-300 hover:text-white">
+                    <i id="developerModeLockIcon" class="fa-solid fa-lock text-rose-400" aria-hidden="true"></i>
+                    <span>Auditoria & JSON Raw</span>
+                </button>
+            </div>
+
+            <!-- AÇÕES GERAIS DE DADOS -->
+            <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                <button id="saveStateButton" title="Salvar todos os dados atuais no banco" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-lg shadow-emerald-600/20 flex items-center gap-2">
+                    <i class="fa-solid fa-floppy-disk"></i> <span>Salvar agora</span>
+                </button>
+                <button onclick="carregarDadosGithub()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center gap-2">
+                    <i class="fa-brands fa-github text-slate-950"></i> Sincronizar Dados
+                </button>
+
+                <button onclick="openChartModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-amber-400"></i> + Criar Gráfico
+                </button>
+
+                <button id="toggleDataLabelsBtn" onclick="toggleDataLabels()" title="Ativar rótulos de dados nos gráficos" aria-pressed="false" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-tags text-amber-400"></i> <span>Mostrar Rótulos</span>
+                </button>
+
+                <button onclick="openNewIndicatorModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus text-amber-400"></i> Novo Indicador
+                </button>
+                
+                <label for="csvFileInput" class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-csv text-amber-400"></i> Importar CSV
+                </label>
+                <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
+
+                <button onclick="exportToCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-download text-emerald-400"></i> Exportar
+                </button>
+
+                <button id="themeToggleBtn" onclick="toggleTheme()" title="Ativar tema claro" aria-label="Ativar tema claro" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-sun text-amber-400"></i> <span>Tema claro</span>
+                </button>
+
+                <button onclick="resetData()" title="Restaurar dados padrões" class="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-medium text-xs px-2.5 py-2 rounded-xl border border-rose-800/40 transition">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+
+                <button onclick="signOutUser()" title="Encerrar sessão" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-2.5 py-2 rounded-xl border border-slate-700 transition">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <main class="max-w-[1600px] mx-auto px-4 sm:px-8 pt-6 space-y-6 flex-1 w-full">
+
+        <section class="flex flex-col gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider font-bold text-amber-400">Espaços de trabalho</div>
+                    <h2 class="text-base font-bold text-white">Dashboards personalizados</h2>
+                </div>
+                <button onclick="createDashboard()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Novo Dashboard
+                </button>
+            </div>
+            <div id="dashboardTabs" class="flex items-center gap-2 overflow-x-auto pb-1"></div>
+        </section>
+
+        <!-- ================= Aba 1: DASHBOARD EXECUTIVO ================= -->
+        <div id="view-dashboard" class="page-view space-y-6">
+            <!-- ALERTA / RESUMO DE DESTAQUES -->
+            <section class="glass-card rounded-2xl p-5 border-l-4 border-l-amber-500 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
+                        <i class="fa-solid fa-bullhorn"></i> Resumo D'Granel Operacional
+                    </div>
+                    <h2 class="text-lg font-bold text-white">Panorama de Performance e Análise de Risco Viário</h2>
+                    <p class="text-xs text-slate-300 max-w-5xl leading-relaxed">
+                        A base monitora <span class="text-amber-400 font-bold" id="kpiTotalCount">0</span> indicadores operacionais ao longo de <span class="text-amber-400 font-bold" id="kpiMonthsCount">0</span> meses mapeados. 
+                        Acompanhamento automatizado e atualizado em tempo real.
+                    </p>
+                </div>
+                <div class="flex items-center gap-4 border-t lg:border-t-0 lg:border-l border-slate-800 pt-3 lg:pt-0 lg:pl-6">
+                    <div>
+                        <div class="text-[10px] uppercase font-semibold text-slate-400">Última Modificação</div>
+                        <div class="text-xs font-bold text-slate-200" id="lastUpdatedTag">Hoje</div>
+                    </div>
+                    <div class="border-l border-slate-800 pl-4">
+                        <div class="text-[10px] uppercase font-semibold text-slate-400">Último salvamento</div>
+                        <div class="text-xs font-bold text-emerald-400" id="lastSavedTag">Ainda não sincronizado</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- KPI CARDS -->
+            <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="kpiContainer">
+                <!-- Gerado via JS -->
+            </section>
+
+            <div class="flex justify-end -mt-3">
+                <button onclick="openKpiModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus text-amber-400"></i> Adicionar Balão
+                </button>
+            </div>
+
+            <!-- BARRA DE AÇÕES DO DASHBOARD -->
+            <div class="flex justify-between items-center bg-[#0A1329]/80 p-3.5 rounded-xl border border-amber-500/20 flex-wrap gap-3">
+                <div class="text-xs font-bold text-slate-300 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column text-amber-400"></i> Painel Visual de Indicadores Frota D'Granel
+                </div>
+                <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <details id="dashboardMonthPicker" class="relative">
+                        <summary class="list-none flex items-center gap-2 bg-[#070D1E] border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs cursor-pointer">
+                            <i class="fa-solid fa-calendar-days text-amber-400"></i>
+                            <span>Meses:</span>
+                            <span id="dashboardMonthSummary" class="font-semibold">Todos os meses</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
+                        </summary>
+                        <div class="absolute right-0 top-full z-30 mt-2 w-64 rounded-lg border border-slate-700 bg-[#111C38] p-3 shadow-xl">
+                            <div class="mb-2 flex items-center justify-between border-b border-slate-700 pb-2">
+                                <span class="text-[11px] font-semibold text-slate-300">Meses exibidos</span>
+                                <div class="flex gap-2">
+                                    <button type="button" id="selectAllDashboardMonths" class="text-[10px] font-semibold text-amber-400 hover:text-amber-300">Todos</button>
+                                    <button type="button" id="clearDashboardMonths" class="text-[10px] font-semibold text-slate-400 hover:text-white">Limpar</button>
+                                </div>
+                            </div>
+                            <div id="dashboardMonthOptions" class="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto"></div>
+                        </div>
+                    </details>
+                    <button onclick="openChartModal()" class="bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 border border-amber-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> Novo Gráfico
+                    </button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO DE GRÁFICOS PADRÃO -->
+            <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- GRÁFICO 1 -->
+                <div id="defaultChartCard1" class="lg:col-span-8 glass-card rounded-2xl p-5 flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                                Evolução de Documentação, Score vs Acidentes & Multas
+                            </h4>
+                            <p class="text-xs text-slate-400">Acompanhamento temporal dos indicadores críticos D'Granel</p>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="downloadChart('chart1', 'Evolucao_Documentacao')" title="Baixar Gráfico em PNG" class="p-1.5 bg-slate-800 hover:bg-emerald-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-download"></i></button>
+                            <button onclick="openDefaultChartModal('chart1')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteDefaultChart('chart1')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="relative flex-1 min-h-[320px]">
+                        <canvas id="chart1"></canvas>
+                    </div>
+                </div>
+
+                <!-- GRÁFICO 3 (RADAR) -->
+                <div id="defaultChartCard3" class="lg:col-span-4 glass-card rounded-2xl p-5 flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                                Matriz de Eficiência (%)
+                            </h4>
+                            <p class="text-xs text-slate-400" id="radarSubTitle">Comparativo Mês Inicial vs Mais Recente</p>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="downloadChart('chart3', 'Matriz_Eficiencia')" title="Baixar Gráfico em PNG" class="p-1.5 bg-slate-800 hover:bg-emerald-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-download"></i></button>
+                            <button onclick="openDefaultChartModal('chart3')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteDefaultChart('chart3')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="relative flex-1 min-h-[320px] flex items-center justify-center">
+                        <canvas id="chart3"></canvas>
+                    </div>
+                </div>
+
+                <!-- GRÁFICO 2 -->
+                <div id="defaultChartCard2" class="lg:col-span-6 glass-card rounded-2xl p-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                                Dimensionamento da Frota
+                            </h4>
+                            <p class="text-xs text-slate-400">Evolução do volume de frota ativa</p>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="downloadChart('chart2', 'Dimensionamento_Frota')" title="Baixar Gráfico em PNG" class="p-1.5 bg-slate-800 hover:bg-emerald-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-download"></i></button>
+                            <button onclick="openDefaultChartModal('chart2')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteDefaultChart('chart2')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="relative min-h-[280px]">
+                        <canvas id="chart2"></canvas>
+                    </div>
+                </div>
+
+                <!-- GRÁFICO 4 (CORRELAÇÃO DE SINISTROS E VELOCIDADE) -->
+                <div id="defaultChartCard4" class="lg:col-span-6 glass-card rounded-2xl p-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                                Correlação: Sinistros vs Excesso de Velocidade
+                            </h4>
+                            <p class="text-xs text-slate-400">Análise de impacto direto: Picos de velocidade vs acidentes</p>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="downloadChart('chart4', 'Sinistros_Excesso_Velocidade')" title="Baixar Gráfico em PNG" class="p-1.5 bg-slate-800 hover:bg-emerald-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-download"></i></button>
+                            <button onclick="openDefaultChartModal('chart4')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteDefaultChart('chart4')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="relative min-h-[280px]">
+                        <canvas id="chart4"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SEÇÃO DE GRÁFICOS DINÂMICOS / PERSONALIZADOS CRIADOS PELO USUÁRIO -->
+            <section class="grid grid-cols-1 lg:grid-cols-12 gap-6" id="dynamicChartsContainer">
+                <!-- Gráficos criados pelo usuário serão renderizados aqui via JS -->
+            </section>
+        </div>
+
+
+        <!-- ================= Aba 2: CENTRAL DE CONSULTA E REPOSITÓRIO ================= -->
+        <div id="view-datagrid" class="page-view space-y-6 hidden">
+            
+            <!-- PAINEL DE CONTROLE DE BUSCA E MÉTRICAS DA BASE -->
+            <div class="glass-card rounded-2xl p-5 space-y-4">
+                
+                <!-- MÉTRICAS RÁPIDAS DA BASE -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 border-b border-slate-800/80 pb-4">
+                    <div class="bg-[#0A1329]/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] font-medium text-slate-400">Total de Indicadores</div>
+                        <div class="text-xl font-bold text-white" id="statTotalRows">0</div>
+                    </div>
+                    <div class="bg-[#0A1329]/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] font-medium text-emerald-400">Dentro da Meta (em %)</div>
+                        <div class="text-xl font-bold text-emerald-400" id="statMetaOk">0</div>
+                    </div>
+                    <div class="bg-[#0A1329]/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] font-medium text-rose-400">Abaixo da Meta</div>
+                        <div class="text-xl font-bold text-rose-400" id="statMetaOff">0</div>
+                    </div>
+                    <div class="bg-[#0A1329]/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] font-medium text-amber-400">Setores Mapeados</div>
+                        <div class="text-xl font-bold text-amber-300" id="statSetoresCount">0</div>
+                    </div>
+                </div>
+
+                <!-- FILTROS AVANÇADOS -->
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
+                        <!-- Busca por Texto -->
+                        <div class="relative flex-1 min-w-[220px]">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" id="searchInput" placeholder="Buscar por indicador ou setor..." oninput="renderTableDebounced()" class="w-full bg-[#070D1E] border border-slate-700 text-slate-200 text-xs rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:border-amber-500">
+                        </div>
+
+                        <!-- Filtro Setor -->
+                        <select id="setorFilter" onchange="renderTable()" class="bg-[#070D1E] border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500 min-w-[160px]">
+                            <option value="TODOS">Todos os Setores</option>
+                        </select>
+
+                        <!-- Filtro Status -->
+                        <select id="statusFilter" onchange="renderTable()" class="bg-[#070D1E] border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500 min-w-[150px]">
+                            <option value="TODOS">Todos os Status</option>
+                            <option value="OK">Meta OK</option>
+                            <option value="ACOMPANHAR">Abaixo da Meta</option>
+                            <option value="N/A">Sem classificação</option>
+                        </select>
+
+                        <!-- Filtro Unidade -->
+                        <select id="unitFilter" onchange="renderTable()" class="bg-[#070D1E] border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500 min-w-[130px]">
+                            <option value="TODOS">Todas Unidades</option>
+                            <option value="%">% (Percentual)</option>
+                            <option value="Qtd">Qtd</option>
+                        </select>
+                    </div>
+
+                    <div class="text-xs text-slate-400">
+                        Exibindo <span id="filteredCount" class="font-bold text-white">0</span> resultados
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- AREA DRAG AND DROP CSV -->
+            <div id="dropZone" class="border-2 border-dashed border-amber-500/30 hover:border-amber-400 rounded-xl p-4 text-center transition bg-[#0A1329]/40 cursor-pointer" onclick="document.getElementById('csvFileInput').click()">
+                <i class="fa-solid fa-cloud-arrow-up text-amber-400 text-lg mb-1"></i>
+                <p class="text-xs font-medium text-slate-300">Arraste e solte seu arquivo CSV atualizado aqui para carregar instantaneamente</p>
+            </div>
+
+            <!-- TABELA COMPLETA COM CÁLCULOS ANALÍTICOS DINÂMICOS -->
+            <div class="glass-card rounded-2xl overflow-hidden border border-slate-800">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr id="tableHeaderRow" class="bg-[#0A1329] text-amber-400 font-semibold border-b border-amber-500/20">
+                                <!-- Gerado dinamicamente via JS -->
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody" class="divide-y divide-slate-800/60 text-slate-300">
+                            <!-- Linhas geradas dinamicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- ================= Aba 3: AUDITORIA & LOGS ================= -->
+        <div id="view-audit" class="page-view space-y-6 hidden">
+            <div class="glass-card rounded-2xl p-6 space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-shield-halved text-amber-400"></i> Logs de Auditoria de Modificações
+                        </h3>
+                        <p class="text-xs text-slate-400">Histórico de ações, alterações de dados e salvamentos realizados na base.</p>
+                    </div>
+                    <button onclick="carregarLogsAuditoria()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-2">
+                        <i class="fa-solid fa-rotate"></i> Atualizar Logs
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto rounded-xl border border-slate-800 max-h-[300px]">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-[#0A1329] text-amber-400 font-semibold sticky top-0">
+                            <tr>
+                                <th class="p-3">Data / Hora</th>
+                                <th class="p-3">Usuário</th>
+                                <th class="p-3">Ação</th>
+                                <th class="p-3">Detalhes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditLogsTableBody" class="divide-y divide-slate-800 text-slate-300 font-mono text-[11px]">
+                            <tr>
+                                <td colspan="4" class="p-4 text-center text-slate-500">Carregando logs...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-2xl p-6 space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-code text-amber-400"></i> Editor e Inspeção de Dados em Nível de Código (JSON)
+                        </h3>
+                        <p class="text-xs text-slate-400">Você pode copiar, fazer backup ou editar diretamente a estrutura dos dados em formato JSON abaixo.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="copyRawJSON()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700 transition">
+                            <i class="fa-solid fa-copy mr-1"></i> Copiar JSON
+                        </button>
+                        <button onclick="applyRawJSON()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs px-3.5 py-2 rounded-xl transition font-bold">
+                            <i class="fa-solid fa-check mr-1"></i> Aplicar Alterações JSON
+                        </button>
+                    </div>
+                </div>
+
+                <textarea id="jsonEditor" class="w-full h-[350px] bg-[#050A17] text-amber-400 font-mono text-xs p-4 rounded-xl border border-slate-800 focus:outline-none focus:border-amber-500 leading-relaxed"></textarea>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL 1: INSPEÇÃO DETALHADA DO INDICADOR -->
+    <div id="modalDetail" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card w-full max-w-3xl rounded-2xl p-6 border border-slate-700 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-start border-b border-slate-800 pb-4">
+                <div>
+                    <span id="modalDetailSetor" class="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">SETOR</span>
+                    <h3 id="modalDetailTitle" class="text-lg font-bold text-white mt-1">Nome do Indicador</h3>
+                </div>
+                <button onclick="closeModal('modalDetail')" class="text-slate-400 hover:text-white p-2">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- METRICAS DETALHADAS -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-[#0A1329] p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] text-slate-400">Meta Definida</div>
+                    <div id="modalDetailMeta" class="text-base font-bold text-white">-</div>
+                </div>
+                <div class="bg-[#0A1329] p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] text-slate-400" id="modalDetailLastLabel">Último Valor</div>
+                    <div id="modalDetailLast" class="text-base font-bold text-amber-400">-</div>
+                </div>
+                <div class="bg-[#0A1329] p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] text-slate-400">Média no Período</div>
+                    <div id="modalDetailAvg" class="text-base font-bold text-slate-200">-</div>
+                </div>
+                <div class="bg-[#0A1329] p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] text-slate-400" id="modalDetailDiffLabel">Variação Total</div>
+                    <div id="modalDetailDiff" class="text-base font-bold text-slate-200">-</div>
+                </div>
+            </div>
+
+            <!-- GRÁFICO INDIVIDUAL DO INDICADOR -->
+            <div class="bg-[#0A1329]/60 p-4 rounded-xl border border-slate-800">
+                <h4 class="text-xs font-bold text-slate-300 mb-3">Histórico Mensal em Gráfico</h4>
+                <div class="h-48 relative">
+                    <canvas id="modalDetailChart"></canvas>
+                </div>
+            </div>
+
+            <!-- HISTÓRICO EM TABELA -->
+            <div class="overflow-x-auto rounded-xl border border-slate-800">
+                <table class="w-full text-xs text-left">
+                    <thead class="bg-[#0A1329] text-amber-400 font-semibold" id="modalDetailTableHead">
+                        <!-- Gerado via JS -->
+                    </thead>
+                    <tbody id="modalDetailTable" class="divide-y divide-slate-800 font-mono">
+                        <!-- Gerado via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: CRIAR / EDITAR INDICADOR -->
+    <div id="modalEdit" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card w-full max-w-2xl rounded-2xl p-6 border border-slate-700 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 id="modalEditHeading" class="text-base font-bold text-white">Editar Indicador</h3>
+                <button onclick="closeModal('modalEdit')" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="editForm" onsubmit="saveIndicatorForm(event)" class="space-y-4">
+                <input type="hidden" id="editIndex" value="-1">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Setor</label>
+                        <div class="flex gap-2">
+                            <select id="editSetor" required class="min-w-0 flex-1 bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                                <option value="">Selecione um setor</option>
+                            </select>
+                            <button type="button" onclick="createSector()" title="Criar novo setor" class="shrink-0 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 text-xs px-3 rounded-xl border border-slate-700 transition">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Unidade de Medida</label>
+                        <select id="editUnd" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                            <option value="Qtd">Qtd</option>
+                            <option value="%">%</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Nome do Indicador</label>
+                    <input type="text" id="editIndicador" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div class="w-1/2">
+                    <label class="block text-xs text-slate-400 mb-1">Meta Desejada</label>
+                    <input type="number" step="any" id="editMeta" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <!-- VALORES MENSAIS DINÂMICOS -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-2">Valores Mensais</label>
+                    <div id="monthlyInputsContainer" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1">
+                        <!-- Gerado via JS -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closeModal('modalEdit')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl">Cancelar</button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-5 py-2 rounded-xl">Salvar Indicador</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: SISTEMA DE CRIAR / EDITAR GRÁFICOS PERSONALIZADOS -->
+    <div id="modalChartConfig" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card w-full max-w-xl rounded-2xl p-6 border border-slate-700 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 id="modalChartHeading" class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-amber-400"></i> Criar Gráfico Personalizado
+                </h3>
+                <button onclick="closeModal('modalChartConfig')" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="chartConfigForm" onsubmit="saveCustomChart(event)" class="space-y-4">
+                <input type="hidden" id="chartConfigId" value="">
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Título do Gráfico</label>
+                    <input type="text" id="chartConfigTitle" required placeholder="Ex: Comparativo de Multas vs Treinamentos" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Subtítulo / Descrição Breve</label>
+                    <input type="text" id="chartConfigDesc" placeholder="Ex: Acompanhamento mensal dos setores X e Y" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Tipo de Gráfico</label>
+                        <select id="chartConfigType" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                            <option value="line">Linha</option>
+                            <option value="bar">Barra</option>
+                            <option value="horizontalBar">Barra horizontal</option>
+                            <option value="area">Área preenchida</option>
+                            <option value="doughnut">Rosca / Pizza</option>
+                            <option value="radar">Radar</option>
+                            <option value="polarArea">Polar</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Largura no Dashboard</label>
+                        <select id="chartConfigSpan" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                            <option value="6">Metade da Tela (50%)</option>
+                            <option value="12">Largura Total (100%)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Indicador Principal (Eixo Y1)</label>
+                    <select id="chartConfigInd1" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <!-- Opções geradas via JS -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Segundo Indicador (Opcional - Comparativo/Eixo Y2)</label>
+                    <select id="chartConfigInd2" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <option value="">Nenhum (Gráfico Único)</option>
+                        <!-- Opções geradas via JS -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Terceiro Indicador (Opcional - Comparativo/Eixo Y3)</label>
+                    <select id="chartConfigInd3" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <option value="">Nenhum</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Quarto Indicador (Opcional - Comparativo/Eixo Y4)</label>
+                    <select id="chartConfigInd4" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <option value="">Nenhum</option>
+                    </select>
+                </div>
+
+                <fieldset>
+                    <legend class="block text-xs text-slate-400 mb-2">Escala do eixo Y</legend>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-300">
+                            <input type="radio" name="chartAxisMode" value="single" checked class="accent-amber-500">
+                            <span>Eixo Único</span>
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-300">
+                            <input type="radio" name="chartAxisMode" value="independent" class="accent-amber-500">
+                            <span>Eixos Independentes</span>
+                        </label>
+                    </div>
+                </fieldset>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closeModal('modalChartConfig')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl">Cancelar</button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-5 py-2 rounded-xl">Gerar Gráfico</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modalKpiConfig" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-card w-full max-w-xl rounded-2xl p-6 border border-slate-700 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 id="modalKpiHeading" class="text-base font-bold text-white"><i class="fa-solid fa-chart-simple text-amber-400"></i> Configurar Balão</h3>
+                <button onclick="closeModal('modalKpiConfig')" class="text-slate-400 hover:text-white p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="saveKpiConfig(event)" class="space-y-4">
+                <input type="hidden" id="kpiConfigId" value="">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Título</label>
+                    <input type="text" id="kpiConfigTitle" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Estatística / Indicador</label>
+                    <select id="kpiConfigIndicator" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500"></select>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Texto da unidade</label>
+                        <input type="text" id="kpiConfigUnit" placeholder="Ex: pts, %, ocorrências" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Cor</label>
+                        <select id="kpiConfigColor" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                            <option value="emerald">Verde</option><option value="amber">Âmbar</option><option value="rose">Vermelho</option><option value="sky">Azul</option><option value="violet">Violeta</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closeModal('modalKpiConfig')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl">Cancelar</button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-5 py-2 rounded-xl">Salvar Balão</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
+        <script src="main.js"></script>
+</body>
+</html>
+

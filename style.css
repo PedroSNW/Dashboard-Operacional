@@ -1,0 +1,172 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #070D1E;
+    color: #f8fafc;
+}
+.glass-card {
+    background: rgba(17, 28, 56, 0.75);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(234, 179, 8, 0.15);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+.glass-card:hover {
+    border-color: rgba(234, 179, 8, 0.35);
+    box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.62);
+}
+button:hover:not(:disabled),
+label[for="csvFileInput"]:hover {
+    filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.24));
+}
+
+@keyframes pageEnter {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes iconClick {
+    0% { transform: scale(1); }
+    50% { transform: scale(0.9); }
+    100% { transform: scale(1); }
+}
+
+.page-view:not(.hidden) {
+    animation: pageEnter 260ms ease-out both;
+}
+
+.icon-click-feedback {
+    animation: iconClick 220ms ease-out;
+}
+
+canvas {
+    animation: none !important;
+    transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .page-view:not(.hidden),
+    .icon-click-feedback {
+        animation: none;
+    }
+}
+.tab-btn.active {
+    background-color: #CA8A04;
+    color: #ffffff;
+    border-color: #EAB308;
+    box-shadow: 0 4px 12px rgba(202, 138, 4, 0.25);
+}
+#modalChartConfig label:has(input[name="chartAxisMode"]:checked) {
+    border-color: rgba(234, 179, 8, 0.5);
+    background-color: rgba(234, 179, 8, 0.1);
+    color: #fcd34d;
+}
+.dashboard-tab.active {
+    background-color: rgba(234, 179, 8, 0.18);
+    color: #facc15;
+    border-color: rgba(234, 179, 8, 0.45);
+}
+@keyframes dashboardSlideNext {
+    from { opacity: 0; transform: translateX(-34px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes dashboardSlidePrevious {
+    from { opacity: 0; transform: translateX(34px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+#view-dashboard.dashboard-slide-next { animation: dashboardSlideNext 280ms ease-out both; }
+#view-dashboard.dashboard-slide-previous { animation: dashboardSlidePrevious 280ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+    #view-dashboard.dashboard-slide-next,
+    #view-dashboard.dashboard-slide-previous { animation: none; }
+}
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #070D1E;
+}
+::-webkit-scrollbar-thumb {
+    background: #1A2A4A;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #CA8A04;
+}
+
+body.light-theme {
+    background-color: #f4f7fb;
+    color: #172033;
+}
+body.light-theme header,
+body.light-theme .bg-\[\#0A1329\]\/95,
+body.light-theme .bg-\[\#0A1329\]\/80,
+body.light-theme .bg-\[\#0A1329\]\/40,
+body.light-theme .bg-\[\#0A1329\],
+body.light-theme .bg-\[\#050A17\]\/80 {
+    background-color: rgba(255, 255, 255, 0.94) !important;
+}
+body.light-theme .glass-card {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(180, 132, 0, 0.24);
+    box-shadow: 0 10px 25px -5px rgba(30, 41, 59, 0.12);
+}
+body.light-theme .bg-\[\#070D1E\],
+body.light-theme .bg-\[\#050A17\] {
+    background-color: #ffffff !important;
+}
+body.light-theme .text-white { color: #172033 !important; }
+body.light-theme .text-slate-950 { color: #172033 !important; }
+body.light-theme .text-slate-200 { color: #334155 !important; }
+body.light-theme .text-slate-300 { color: #475569 !important; }
+body.light-theme .text-slate-400 { color: #64748b !important; }
+body.light-theme .text-slate-500 { color: #64748b !important; }
+body.light-theme .border-slate-700,
+body.light-theme .border-slate-800,
+body.light-theme .border-slate-800\/80,
+body.light-theme .border-slate-800\/60,
+body.light-theme .border-slate-800\/40 {
+    border-color: #d8e0eb !important;
+}
+body.light-theme .divide-slate-800\/60 > :not([hidden]) ~ :not([hidden]) {
+    border-color: #e2e8f0 !important;
+}
+body.light-theme .bg-slate-800 { background-color: #e8edf4 !important; }
+body.light-theme .hover\:bg-slate-700:hover { background-color: #dce4ef !important; }
+body.light-theme .text-slate-100 { color: #1e293b !important; }
+body.light-theme input,
+body.light-theme select,
+body.light-theme textarea {
+    color: #1e293b !important;
+    background-color: #ffffff !important;
+}
+body.light-theme ::-webkit-scrollbar-track { background: #f4f7fb; }
+body.light-theme ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+body.light-theme .tab-btn:not(.active) { color: #475569; }
+body.light-theme .tab-btn:not(.active):hover { color: #172033; }
+
+body:not(.developer-mode) #view-audit {
+    display: none !important;
+}
+
+body:not(.authenticated) > header,
+body:not(.authenticated) > main,
+body:not(.authenticated) > div:not(#authScreen) {
+    display: none !important;
+}
+
+#authScreen {
+    min-height: 100vh;
+    background: radial-gradient(circle at top right, rgba(234, 179, 8, 0.18), transparent 36%), #070D1E;
+}
+
+body.authenticated #authScreen {
+    display: none;
+}
