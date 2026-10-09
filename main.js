@@ -820,9 +820,7 @@ function updateSaveButton() {
     const button = document.getElementById('saveStateButton');
     if (!button) return;
 
-    const label = button.querySelector('span');
     button.disabled = isSavingState;
-    if (label) label.textContent = isSavingState ? 'Salvando...' : hasUnsavedChanges ? 'Salvar alterações' : 'Salvar agora';
     button.classList.toggle('bg-amber-500', hasUnsavedChanges && !isSavingState);
     button.classList.toggle('hover:bg-amber-400', hasUnsavedChanges && !isSavingState);
     button.classList.toggle('bg-emerald-600', !hasUnsavedChanges || isSavingState);
