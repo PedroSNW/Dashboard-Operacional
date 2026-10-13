@@ -112,33 +112,63 @@ function initSmartNavbar() {
     const header = document.querySelector('header');
     if (!header) return;
 
-    let lastScrollY = window.scrollY;
+    const lastScrollBySource = new Map([[window, window.scrollY]]);
+    const pendingScrollBySource = new Map();
     let scrollUpdatePending = false;
     const scrollThreshold = 10;
 
-    const updateNavbar = () => {
-        const currentScrollY = window.scrollY;
-
-        if (currentScrollY <= 50 || header.matches(':focus-within')) {
+    const processScroll = (source, currentScrollY) => {
+        const lastScrollY = lastScrollBySource.get(source) ?? 0;
+        if (currentScrollY <= 30 || header.matches(':focus-within')) {
             header.classList.remove('nav-hidden');
-            lastScrollY = currentScrollY;
         } else if (currentScrollY > lastScrollY + scrollThreshold) {
             header.classList.add('nav-hidden');
-            lastScrollY = currentScrollY;
         } else if (currentScrollY < lastScrollY - scrollThreshold) {
             header.classList.remove('nav-hidden');
-            lastScrollY = currentScrollY;
         }
+        lastScrollBySource.set(source, currentScrollY);
+    };
 
-        scrollUpdatePending = false;
+    const queueScrollUpdate = (source, currentScrollY) => {
+        pendingScrollBySource.set(source, currentScrollY);
+        if (scrollUpdatePending) return;
+        scrollUpdatePending = true;
+        window.requestAnimationFrame(() => {
+            pendingScrollBySource.forEach((position, source) => processScroll(source, position));
+            pendingScrollBySource.clear();
+            scrollUpdatePending = false;
+        });
     };
 
     window.addEventListener('scroll', () => {
-        if (scrollUpdatePending) return;
-        scrollUpdatePending = true;
-        window.requestAnimationFrame(updateNavbar);
+        queueScrollUpdate(window, window.scrollY);
     }, { passive: true });
+    document.addEventListener('scroll', event => {
+        if (event.target === document) return;
+        const container = event.target;
+        if (typeof container?.scrollTop === 'number') {
+            queueScrollUpdate(container, container.scrollTop);
+        }
+    }, { passive: true, capture: true });
+
     header.addEventListener('focusin', () => header.classList.remove('nav-hidden'));
+    header.addEventListener('focusout', () => {
+        if (!header.matches(':focus-within')) return;
+        header.classList.remove('nav-hidden');
+    });
+
+    window.resetSmartNavbar = () => {
+        header.classList.remove('nav-hidden');
+        lastScrollBySource.set(window, window.scrollY);
+        lastScrollBySource.forEach((_position, source) => {
+            if (source !== window) lastScrollBySource.set(source, source.scrollTop || 0);
+        });
+    };
+}
+
+function resetNavbarOnTabChange() {
+    window.resetSmartNavbar?.();
+    document.querySelector('header')?.classList.remove('nav-hidden');
 }
 
 function setupRevealObserver() {
@@ -1130,6 +1160,7 @@ function switchTab(tabName) {
     const nextView = document.getElementById(`view-${tabName}`);
     const currentView = document.querySelector('main > div:not(.hidden)');
     if (!nextView || currentView === nextView) return;
+    resetNavbarOnTabChange();
 
     document.querySelectorAll('main > div').forEach(view => {
         view.classList.add('hidden');
@@ -1143,6 +1174,7 @@ function switchTab(tabName) {
     });
 
     document.getElementById(`tab-${tabName}`).classList.add('active');
+    document.getElementById('dashboardWorkspaceSection')?.classList.toggle('hidden', tabName !== 'dashboard');
 
     if (tabName === 'dashboard') {
         renderCharts();
