@@ -38,6 +38,8 @@ let hasUnsavedChanges = false;
 let isSavingState = false;
 let stateRevision = 0;
 let supabaseSaveQueue = Promise.resolve();
+let revealObserver = null;
+const observedRevealElements = new WeakSet();
 
 function debounce(func, wait) {
     let timeout;
@@ -67,6 +69,8 @@ Chart.defaults.plugins.datalabels = {
 
 // CARREGAMENTO INICIAL
 document.addEventListener('DOMContentLoaded', async () => {
+    setupRevealObserver();
+    initSmartNavbar();
     applyTheme('dark');
     updateLastSaveStatus();
     setInterval(updateLastSaveStatus, 60 * 1000);
@@ -103,6 +107,101 @@ document.addEventListener('DOMContentLoaded', async () => {
         handleAuthSession(session);
     });
 });
+
+function initSmartNavbar() {
+    const header = document.querySelector('header');
+    if (!header) return;
+
+    let lastScrollY = window.scrollY;
+    let scrollUpdatePending = false;
+    const scrollThreshold = 10;
+
+    const updateNavbar = () => {
+        const currentScrollY = window.scrollY;
+
+        if (currentScrollY <= 50 || header.matches(':focus-within')) {
+            header.classList.remove('nav-hidden');
+            lastScrollY = currentScrollY;
+        } else if (currentScrollY > lastScrollY + scrollThreshold) {
+            header.classList.add('nav-hidden');
+            lastScrollY = currentScrollY;
+        } else if (currentScrollY < lastScrollY - scrollThreshold) {
+            header.classList.remove('nav-hidden');
+            lastScrollY = currentScrollY;
+        }
+
+        scrollUpdatePending = false;
+    };
+
+    window.addEventListener('scroll', () => {
+        if (scrollUpdatePending) return;
+        scrollUpdatePending = true;
+        window.requestAnimationFrame(updateNavbar);
+    }, { passive: true });
+    header.addEventListener('focusin', () => header.classList.remove('nav-hidden'));
+}
+
+function setupRevealObserver() {
+    if (revealObserver || !('IntersectionObserver' in window)) return;
+
+    revealObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+            const element = entry.target;
+            element.classList.remove('reveal-pending');
+            element.classList.add('reveal-visible');
+            revealObserver.unobserve(element);
+            element.addEventListener('transitionend', event => {
+                if (event.propertyName === 'opacity') element.style.transitionDelay = '';
+            }, { once: true });
+            element.querySelectorAll('[data-count-to]').forEach(animateKpiCount);
+        });
+    }, { threshold: 0.12, rootMargin: '0px 0px -36px 0px' });
+}
+
+function initPXStyleAnimations(root = document) {
+    setupRevealObserver();
+    const elements = [
+        ...(root.matches?.('.glass-card, .kpi-card') ? [root] : []),
+        ...root.querySelectorAll('.glass-card, .kpi-card')
+    ];
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    elements.forEach((element, index) => {
+        if (observedRevealElements.has(element)) return;
+        observedRevealElements.add(element);
+
+        if (reduceMotion || !revealObserver) {
+            element.classList.add('reveal-visible');
+            element.querySelectorAll('[data-count-to]').forEach(animateKpiCount);
+            return;
+        }
+
+        element.classList.add('reveal-pending');
+        element.style.transitionDelay = `${Math.min(index * 55, 330)}ms`;
+        revealObserver.observe(element);
+    });
+}
+
+function animateKpiCount(element) {
+    const target = Number(element.dataset.countTo);
+    if (!Number.isFinite(target)) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        element.textContent = `${target.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}${element.dataset.countUnit || ''}`;
+        return;
+    }
+
+    const startedAt = performance.now();
+    const duration = 850;
+    const step = timestamp => {
+        const progress = Math.min((timestamp - startedAt) / duration, 1);
+        const easedProgress = 1 - Math.pow(1 - progress, 3);
+        const value = target * easedProgress;
+        element.textContent = `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}${element.dataset.countUnit || ''}`;
+        if (progress < 1) window.requestAnimationFrame(step);
+    };
+    window.requestAnimationFrame(step);
+}
 
 function setupAuthForm() {
     document.getElementById('authForm')?.addEventListener('submit', event => {
@@ -996,6 +1095,7 @@ function initSystem() {
     if (detailModal && !detailModal.classList.contains('hidden') && detailModalIndex !== null) {
         refreshDetailModal(detailModalIndex);
     }
+    initPXStyleAnimations(document);
 }
 
 function toggleDataLabels() {
@@ -1210,11 +1310,14 @@ function renderKPIs() {
         const color = ['emerald', 'amber', 'rose', 'sky', 'violet'].includes(c.color) ? c.color : 'sky';
         const el = document.createElement('div');
         el.className = 'glass-card page-load-item rounded-2xl p-5 flex flex-col justify-between';
+        const valueMarkup = last.val !== null && last.val !== undefined && Number.isFinite(Number(last.val))
+            ? `<span data-count-to="${Number(last.val)}" data-count-unit="${unit === '%' ? '%' : ''}">0</span>`
+            : '-';
         el.innerHTML = `
             <div class="flex items-start justify-between">
                 <div>
                     <span class="text-xs text-slate-400 font-medium">${escapeHtml(c.title)}</span>
-                    <div class="text-2xl font-extrabold text-white mt-1">${fmtVal(last.val, unit === '%' ? '%' : '')}${unit && unit !== '%' ? ` ${unit}` : ''}</div>
+                    <div class="text-2xl font-extrabold text-white mt-1">${valueMarkup}${unit && unit !== '%' && valueMarkup !== '-' ? ` ${unit}` : ''}</div>
                 </div>
                 <div class="p-3 rounded-xl bg-${color}-500/10 text-${color}-400 border border-${color}-500/20">
                     <i class="fa-solid ${c.icon} text-lg"></i>
@@ -1232,6 +1335,7 @@ function renderKPIs() {
         `;
         kpiContainer.appendChild(el);
     });
+    initPXStyleAnimations(kpiContainer);
 }
 
 function populateKpiIndicators(selectedIndex = null) {
@@ -1750,6 +1854,7 @@ function renderDynamicCharts() {
             }
         });
     });
+    initPXStyleAnimations(container);
 }
 
 // POPULAR DROPDOWN SETORES
