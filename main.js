@@ -448,16 +448,7 @@ function applyTheme(theme) {
 }
 
 function getDefaultDashboardWidgets() {
-    return [
-        { id: 'widget_kpi1', type: 'kpi', ref: 'kpi1' },
-        { id: 'widget_kpi2', type: 'kpi', ref: 'kpi2' },
-        { id: 'widget_kpi3', type: 'kpi', ref: 'kpi3' },
-        { id: 'widget_kpi4', type: 'kpi', ref: 'kpi4' },
-        { id: 'widget_chart1', type: 'default-chart', ref: 'chart1' },
-        { id: 'widget_chart2', type: 'default-chart', ref: 'chart2' },
-        { id: 'widget_chart3', type: 'default-chart', ref: 'chart3' },
-        { id: 'widget_chart4', type: 'default-chart', ref: 'chart4' }
-    ];
+    return [];
 }
 
 function loadStoredDashboards() {
@@ -1107,7 +1098,12 @@ async function carregarDadosCompartilhados(silencioso = false) {
             dashboards = dashboards.map((dashboard, index) => ({
                 id: dashboard.id || `dashboard_${index + 1}`,
                 name: dashboard.name || `Dashboard ${index + 1}`,
-                widgets: Array.isArray(dashboard.widgets) ? dashboard.widgets : []
+                widgets: Array.isArray(dashboard.widgets)
+                    ? dashboard.widgets.filter(widget => !(
+                        (widget.type === 'kpi' && /^kpi[1-4]$/.test(widget.ref)) ||
+                        (widget.type === 'default-chart' && /^chart[1-4]$/.test(widget.ref))
+                    ))
+                    : []
             }));
             activeDashboardId = dashboards.some(dashboard => dashboard.id === dataObj.activeDashboardId)
                 ? dataObj.activeDashboardId
@@ -1365,29 +1361,20 @@ function fmtVal(val, unit = '') {
 // RENDERIZAÇÃO DOS KPIS D'GRANEL
 function renderKPIs() {
     const kpiContainer = document.getElementById('kpiContainer');
+    if (!kpiContainer) return;
     kpiContainer.innerHTML = '';
 
-    document.getElementById('kpiTotalCount').textContent = currentData.length;
-    document.getElementById('kpiMonthsCount').textContent = mesesLabels.length;
+    document.getElementById('kpiTotalCount')?.replaceChildren(String(currentData.length));
+    document.getElementById('kpiMonthsCount')?.replaceChildren(String(mesesLabels.length));
 
-    const findIndicator = text => currentData.findIndex(item => item.indicador.includes(text));
-    const defaults = [
-        { id: 'kpi1', title: '% CRLV Liberados', indicator: findIndicator('% CRLV LIBERADOS'), unit: '%', color: 'emerald', icon: 'fa-file-check', badge: 'Regularização OK' },
-        { id: 'kpi2', title: 'Score do Motorista', indicator: findIndicator('SCORE'), unit: 'pts', color: 'amber', icon: 'fa-star', badge: 'Em Elevação' },
-        { id: 'kpi3', title: 'Excesso de Velocidade', indicator: findIndicator('velocidade permitida'), unit: '', color: 'rose', icon: 'fa-gauge-high', badge: 'Risco Operacional' },
-        { id: 'kpi4', title: 'Multas Cobradas', indicator: findIndicator('Multas Cobradas Motoristas'), unit: '', color: 'amber', icon: 'fa-receipt', badge: 'Atenção Elevada' }
-    ];
-    const savedById = Object.fromEntries(kpiCards.map(card => [card.id, card]));
-    const cards = [...defaults.map(card => ({ ...card, ...savedById[card.id] })), ...kpiCards.filter(card => !defaults.some(item => item.id === card.id))]
-        .filter(card => !card.deleted);
-
-    cards.forEach(c => {
+    kpiCards.filter(card => !card.deleted).forEach(c => {
         if (!dashboardHasWidget('kpi', c.id)) return;
         const indicator = currentData[c.indicator] || { valores: [] };
         const monthly = getMonthlyData(indicator);
         const last = getLastValid(monthly.values, monthly.labels);
         const unit = c.unit || indicator.und || '';
         const color = ['emerald', 'amber', 'rose', 'sky', 'violet'].includes(c.color) ? c.color : 'sky';
+        const emojiDisplay = escapeHtml(c.emoji || '📊');
         const el = document.createElement('div');
         el.className = 'glass-card page-load-item rounded-2xl p-5 flex flex-col justify-between';
         const valueMarkup = last.val !== null && last.val !== undefined && Number.isFinite(Number(last.val))
@@ -1399,14 +1386,13 @@ function renderKPIs() {
                     <span class="text-xs text-slate-400 font-medium">${escapeHtml(c.title)}</span>
                     <div class="text-2xl font-extrabold text-white mt-1">${valueMarkup}${unit && unit !== '%' && valueMarkup !== '-' ? ` ${unit}` : ''}</div>
                 </div>
-                <div class="p-3 rounded-xl bg-${color}-500/10 text-${color}-400 border border-${color}-500/20">
-                    <i class="fa-solid ${c.icon} text-lg"></i>
+                <div class="p-2.5 rounded-xl bg-${color}-500/10 border border-${color}-500/20 flex items-center justify-center text-2xl">
+                    <span>${emojiDisplay}</span>
                 </div>
             </div>
             <div class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center gap-2 text-xs">
                 <span class="text-slate-400">Último: ${escapeHtml(last.month)}</span>
                 <span class="text-slate-300">Meta: ${fmtVal(indicator.meta, unit === '%' ? '%' : '')}${unit && unit !== '%' && indicator.meta !== null && indicator.meta !== undefined ? ` ${unit}` : ''}</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-${color}-500/10 text-${color}-400 border border-${color}-500/20">${escapeHtml(c.badge)}</span>
             </div>
             <div class="flex justify-end gap-1 mt-3">
                 <button onclick="openKpiModal('${escapeHtml(c.id)}')" title="Editar Balão" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
@@ -1441,9 +1427,10 @@ function getKpiConfig(kpiId) {
 }
 
 function openKpiModal(kpiId = null) {
-    const config = kpiId ? getKpiConfig(kpiId) : { id: `kpi_${Date.now()}`, title: '', indicator: 0, unit: '', color: 'sky', icon: 'fa-chart-simple', badge: 'Personalizado' };
+    const config = kpiId ? getKpiConfig(kpiId) : { id: `kpi_${Date.now()}`, title: '', indicator: 0, unit: '', color: 'sky', emoji: '📊', icon: 'fa-chart-simple', badge: 'Personalizado' };
     document.getElementById('kpiConfigId').value = config.id;
     document.getElementById('kpiConfigTitle').value = config.title;
+    document.getElementById('kpiConfigEmoji').value = config.emoji || '📊';
     document.getElementById('kpiConfigUnit').value = config.unit || '';
     document.getElementById('kpiConfigColor').value = config.color || 'sky';
     populateKpiIndicators(config.indicator);
@@ -1456,10 +1443,12 @@ function openKpiModal(kpiId = null) {
 function saveKpiConfig(event) {
     event.preventDefault();
     const id = document.getElementById('kpiConfigId').value;
+    const emojiInput = document.getElementById('kpiConfigEmoji').value.trim();
     const config = {
         id,
         title: document.getElementById('kpiConfigTitle').value,
         indicator: parseInt(document.getElementById('kpiConfigIndicator').value),
+        emoji: emojiInput || '📊',
         unit: document.getElementById('kpiConfigUnit').value,
         color: document.getElementById('kpiConfigColor').value,
         icon: id === 'kpi1' ? 'fa-file-check' : id === 'kpi2' ? 'fa-star' : id === 'kpi3' ? 'fa-gauge-high' : id === 'kpi4' ? 'fa-receipt' : 'fa-chart-simple',

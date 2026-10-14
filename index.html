@@ -708,7 +708,11 @@
                     <label class="block text-xs text-slate-400 mb-1">Estatística / Indicador</label>
                     <select id="kpiConfigIndicator" required class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500"></select>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Emoji do Balão</label>
+                        <input type="text" id="kpiConfigEmoji" placeholder="⚡, 📊, 🚚, 🎯" maxlength="8" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 text-center text-base focus:outline-none focus:border-amber-500">
+                    </div>
                     <div>
                         <label class="block text-xs text-slate-400 mb-1">Texto da unidade</label>
                         <input type="text" id="kpiConfigUnit" placeholder="Ex: pts, %, ocorrências" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
