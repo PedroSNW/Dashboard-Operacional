@@ -888,8 +888,8 @@ function renderConfiguredDefaultCharts() {
         let datasets = indicators.map((indicator, index) => ({
             label: indicator.indicador,
             data: getDashboardChartData(indicator).values,
-            borderColor: ['#10b981', '#eab308', '#f43f5e', '#38bdf8'][index],
-            backgroundColor: ['rgba(16,185,129,.25)', 'rgba(234,179,8,.25)', 'rgba(244,63,94,.25)', 'rgba(56,189,248,.25)'][index],
+            borderColor: ['#eab308', '#10b981', '#38bdf8', '#f43f5e'][index],
+            backgroundColor: ['rgba(234,179,8,.25)', 'rgba(16,185,129,.25)', 'rgba(56,189,248,.25)', 'rgba(244,63,94,.25)'][index],
             borderWidth: 2,
             tension: 0.3,
             fill: config.type === 'line',
@@ -907,15 +907,27 @@ function renderConfiguredDefaultCharts() {
         }
         if (usesIndependentAxes) {
             delete scales.y;
+            const colors = ['#eab308', '#10b981', '#38bdf8', '#f43f5e'];
+
             indicators.forEach((_, index) => {
-                scales[`y${index + 1}`] = {
+                const yAxisId = `y${index + 1}`;
+                const position = index % 2 === 0 ? 'left' : 'right';
+
+                scales[yAxisId] = {
                     type: 'linear',
-                    position: 'left',
-                    offset: index > 0,
+                    display: true,
+                    position,
                     min: 0,
                     beginAtZero: true,
-                    ticks: { color: ['#10b981', '#eab308', '#f43f5e', '#38bdf8'][index] },
-                    grid: { drawOnChartArea: index === 0 }
+                    grace: '10%',
+                    ticks: {
+                        color: colors[index % colors.length],
+                        font: { size: 10, weight: 'bold' }
+                    },
+                    grid: {
+                        drawOnChartArea: index === 0,
+                        color: 'rgba(255, 255, 255, 0.05)'
+                    }
                 };
             });
         }
@@ -1843,14 +1855,24 @@ function renderDynamicCharts() {
             if (indicatorObjects.length > 1) {
                 if (usesIndependentAxes) {
                     indicatorObjects.forEach((_, index) => {
-                        scalesObj[`y${index + 1}`] = {
+                        const yAxisId = `y${index + 1}`;
+                        const position = index % 2 === 0 ? 'left' : 'right';
+
+                        scalesObj[yAxisId] = {
                             type: 'linear',
-                            position: 'left',
-                            offset: index > 0,
+                            display: true,
+                            position,
                             min: 0,
                             beginAtZero: true,
-                            ticks: { color: datasetColors[index] },
-                            grid: { drawOnChartArea: index === 0 }
+                            grace: '10%',
+                            ticks: {
+                                color: datasetColors[index % datasetColors.length],
+                                font: { size: 10, weight: 'bold' }
+                            },
+                            grid: {
+                                drawOnChartArea: index === 0,
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            }
                         };
                     });
                 } else {
