@@ -118,8 +118,16 @@ function initSmartNavbar() {
     const scrollThreshold = 10;
 
     const processScroll = (source, currentScrollY) => {
+        const activeElement = document.activeElement;
+        const activeInput = activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(activeElement.tagName);
+        if (header.matches(':hover') || (activeInput && header.contains(activeElement))) {
+            header.classList.remove('nav-hidden');
+            lastScrollBySource.set(source, currentScrollY);
+            return;
+        }
+
         const lastScrollY = lastScrollBySource.get(source) ?? 0;
-        if (currentScrollY <= 30 || header.matches(':focus-within')) {
+        if (currentScrollY <= 30) {
             header.classList.remove('nav-hidden');
         } else if (currentScrollY > lastScrollY + scrollThreshold) {
             header.classList.add('nav-hidden');
@@ -150,6 +158,12 @@ function initSmartNavbar() {
             queueScrollUpdate(container, container.scrollTop);
         }
     }, { passive: true, capture: true });
+
+    window.addEventListener('mousemove', event => {
+        if (event.clientY <= 20 && header.classList.contains('nav-hidden')) {
+            header.classList.remove('nav-hidden');
+        }
+    }, { passive: true });
 
     header.addEventListener('focusin', () => header.classList.remove('nav-hidden'));
     header.addEventListener('focusout', () => {
@@ -1167,6 +1181,10 @@ function updateDataLabelsButton() {
 function switchTab(tabName) {
     if (tabName === 'audit' && !document.body.classList.contains('developer-mode')) {
         return;
+    }
+
+    if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
     }
 
     const nextView = document.getElementById(`view-${tabName}`);
