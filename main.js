@@ -113,9 +113,12 @@ function initSmartNavbar() {
     if (!header) return;
 
     const lastScrollBySource = new Map([[window, window.scrollY]]);
+    const scrollAnchorBySource = new Map([[window, window.scrollY]]);
+    const scrollDirectionBySource = new Map();
     const pendingScrollBySource = new Map();
     let scrollUpdatePending = false;
-    const scrollThreshold = 10;
+    const scrollThresholdDown = 10;
+    const scrollThresholdUp = 600;
 
     const processScroll = (source, currentScrollY) => {
         const activeElement = document.activeElement;
@@ -123,16 +126,29 @@ function initSmartNavbar() {
         if (header.matches(':hover') || (activeInput && header.contains(activeElement))) {
             header.classList.remove('nav-hidden');
             lastScrollBySource.set(source, currentScrollY);
+            scrollAnchorBySource.set(source, currentScrollY);
+            scrollDirectionBySource.delete(source);
             return;
         }
 
         const lastScrollY = lastScrollBySource.get(source) ?? 0;
         if (currentScrollY <= 30) {
             header.classList.remove('nav-hidden');
-        } else if (currentScrollY > lastScrollY + scrollThreshold) {
-            header.classList.add('nav-hidden');
-        } else if (currentScrollY < lastScrollY - scrollThreshold) {
-            header.classList.remove('nav-hidden');
+            scrollAnchorBySource.set(source, currentScrollY);
+            scrollDirectionBySource.delete(source);
+        } else if (currentScrollY !== lastScrollY) {
+            const direction = currentScrollY > lastScrollY ? 'down' : 'up';
+            if (scrollDirectionBySource.get(source) !== direction) {
+                scrollDirectionBySource.set(source, direction);
+                scrollAnchorBySource.set(source, lastScrollY);
+            }
+
+            const scrollAnchor = scrollAnchorBySource.get(source) ?? lastScrollY;
+            if (direction === 'down' && currentScrollY >= scrollAnchor + scrollThresholdDown) {
+                header.classList.add('nav-hidden');
+            } else if (direction === 'up' && currentScrollY <= scrollAnchor - scrollThresholdUp) {
+                header.classList.remove('nav-hidden');
+            }
         }
         lastScrollBySource.set(source, currentScrollY);
     };
@@ -173,9 +189,11 @@ function initSmartNavbar() {
 
     window.resetSmartNavbar = () => {
         header.classList.remove('nav-hidden');
-        lastScrollBySource.set(window, window.scrollY);
         lastScrollBySource.forEach((_position, source) => {
-            if (source !== window) lastScrollBySource.set(source, source.scrollTop || 0);
+            const currentPosition = source === window ? window.scrollY : source.scrollTop || 0;
+            lastScrollBySource.set(source, currentPosition);
+            scrollAnchorBySource.set(source, currentPosition);
+            scrollDirectionBySource.delete(source);
         });
     };
 }
