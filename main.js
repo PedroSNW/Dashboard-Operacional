@@ -34,6 +34,7 @@ let dashboards = [];
 let activeDashboardId = null;
 let currentSession = null;
 let appInitialized = false;
+let initialHomeOpened = false;
 let hasUnsavedChanges = false;
 let isSavingState = false;
 let stateRevision = 0;
@@ -385,14 +386,21 @@ function escapeHtml(value) {
         .replace(/'/g, '&#039;');
 }
 
-function showAlert(title, text, icon = 'info') {
+function fireThemedAlert(options) {
+    const isLight = document.body.classList.contains('light-theme');
     return Swal.fire({
+        ...options,
+        background: isLight ? '#ffffff' : '#111C38',
+        color: isLight ? '#1e293b' : '#f8fafc'
+    });
+}
+
+function showAlert(title, text, icon = 'info') {
+    return fireThemedAlert({
         title,
         text,
         icon,
-        confirmButtonColor: '#EAB308',
-        background: '#111C38',
-        color: '#fff'
+        confirmButtonColor: '#EAB308'
     });
 }
 
@@ -410,14 +418,12 @@ function downloadChart(chartCanvasId, fileName) {
     link.click();
     link.remove();
 
-    Swal.fire({
+    fireThemedAlert({
         title: 'Download Concluído!',
         text: 'O gráfico foi salvo no seu computador.',
         icon: 'success',
         timer: 2000,
-        showConfirmButton: false,
-        background: '#111C38',
-        color: '#f8fafc'
+        showConfirmButton: false
     });
 }
 
@@ -442,9 +448,12 @@ function applyTheme(theme) {
 
     button.title = isLight ? 'Ativar tema escuro' : 'Ativar tema claro';
     button.setAttribute('aria-label', button.title);
-    button.innerHTML = isLight
-        ? '<i class="fa-solid fa-moon text-sky-500"></i> <span>Tema escuro</span>'
-        : '<i class="fa-solid fa-sun text-amber-400"></i> <span>Tema claro</span>';
+    const icon = document.getElementById('themeToggleIcon');
+    if (icon) {
+        icon.className = isLight
+            ? 'fa-solid fa-moon w-4 text-sky-400'
+            : 'fa-solid fa-sun w-4 text-amber-400';
+    }
 }
 
 function getDefaultDashboardWidgets() {
@@ -576,7 +585,7 @@ function renameDashboard(id) {
 function deleteDashboard(id) {
     if (dashboards.length === 1) return;
 
-    Swal.fire({
+    fireThemedAlert({
         title: 'Excluir Dashboard?',
         text: 'Este dashboard e seus widgets serão removidos. Esta ação não pode ser desfeita.',
         icon: 'warning',
@@ -598,7 +607,7 @@ function deleteDashboard(id) {
         renderCharts();
         renderDynamicCharts();
 
-        Swal.fire({
+        fireThemedAlert({
             title: 'Dashboard excluído!',
             text: 'O dashboard e seus widgets foram removidos.',
             icon: 'success',
@@ -721,6 +730,8 @@ function setDashboardLogo(src) {
             `;
         }
     }
+    const homeLogo = document.getElementById('homeDashboardLogo');
+    if (homeLogo) homeLogo.src = src;
     document.getElementById('removeLogoBtn')?.classList.remove('hidden');
 }
 
@@ -736,6 +747,8 @@ function resetLogo() {
     } else {
         setDashboardLogo(DEFAULT_LOGO_SRC);
     }
+    const homeLogo = document.getElementById('homeDashboardLogo');
+    if (homeLogo) homeLogo.src = DEFAULT_LOGO_SRC;
 
     document.getElementById('removeLogoBtn')?.classList.add('hidden');
     markStateDirty();
@@ -863,7 +876,7 @@ function openDefaultChartModal(chartId) {
 }
 
 function deleteDefaultChart(chartId) {
-    Swal.fire({
+    fireThemedAlert({
         title: 'Excluir Gráfico?',
         text: 'Este gráfico padrão será removido do dashboard. Esta ação pode ser desfeita recriando sua configuração.',
         icon: 'warning',
@@ -881,7 +894,7 @@ function deleteDefaultChart(chartId) {
         markStateDirty();
         renderCharts();
 
-        Swal.fire({
+        fireThemedAlert({
             title: 'Gráfico excluído!',
             text: 'O gráfico padrão foi removido.',
             icon: 'success',
@@ -982,13 +995,23 @@ function markStateDirty() {
 
 function updateSaveButton() {
     const button = document.getElementById('saveStateButton');
-    if (!button) return;
+    const icon = document.getElementById('saveStateButtonIcon');
+    if (!button || !icon) return;
 
     button.disabled = isSavingState;
     button.classList.toggle('bg-amber-500', hasUnsavedChanges && !isSavingState);
     button.classList.toggle('hover:bg-amber-400', hasUnsavedChanges && !isSavingState);
     button.classList.toggle('bg-emerald-600', !hasUnsavedChanges || isSavingState);
     button.classList.toggle('hover:bg-emerald-500', !hasUnsavedChanges || isSavingState);
+
+    if (isSavingState) {
+        icon.className = 'fa-solid fa-spinner animate-spin text-sm';
+        button.title = 'Salvando dados no banco...';
+    } else {
+        icon.className = 'fa-solid fa-floppy-disk text-sm';
+        button.title = hasUnsavedChanges ? 'Existem alterações pendentes para salvar (Ctrl+S)' : 'Todas as alterações estão salvas';
+    }
+    button.setAttribute('aria-label', button.title);
 }
 
 async function saveCurrentState() {
@@ -1166,6 +1189,10 @@ function initSystem() {
         refreshDetailModal(detailModalIndex);
     }
     initPXStyleAnimations(document);
+    if (!initialHomeOpened) {
+        initialHomeOpened = true;
+        switchTab('home');
+    }
 }
 
 function toggleDataLabels() {
@@ -1213,11 +1240,11 @@ function switchTab(tabName) {
     if (currentView) currentView.classList.add('hidden');
     nextView.classList.remove('hidden');
 
-    ['dashboard', 'datagrid', 'audit'].forEach(t => {
-        document.getElementById(`tab-${t}`).classList.remove('active');
+    ['home', 'dashboard', 'datagrid', 'audit'].forEach(t => {
+        const button = document.getElementById(`tab-${t}`);
+        if (button) button.classList.toggle('active', t === tabName);
     });
 
-    document.getElementById(`tab-${tabName}`).classList.add('active');
     document.getElementById('dashboardWorkspaceSection')?.classList.toggle('hidden', tabName !== 'dashboard');
 
     if (tabName === 'dashboard') {
@@ -1469,7 +1496,7 @@ function saveKpiConfig(event) {
 }
 
 function deleteKpi(kpiId) {
-    Swal.fire({
+    fireThemedAlert({
         title: 'Excluir Indicador?',
         text: 'Este balão será removido do dashboard. Esta ação não pode ser desfeita.',
         icon: 'warning',
@@ -1499,7 +1526,7 @@ function deleteKpi(kpiId) {
         renderDashboardTabs();
         renderKPIs();
 
-        Swal.fire({
+        fireThemedAlert({
             title: 'Indicador excluído!',
             text: 'O balão foi removido do dashboard.',
             icon: 'success',
@@ -1978,6 +2005,14 @@ function renderTableHeader() {
 }
 
 // RENDERIZAÇÃO DA TABELA DE CONSULTA COM MESES DINÂMICOS
+function getIndicatorTooltip(indicator) {
+    const name = String(indicator || '').toLowerCase();
+    if (name.includes('score')) return 'Pontuação mensal de condução segura; referência operacional: 600 pontos ou mais.';
+    if (name.includes('crlv')) return 'Percentual de veículos da frota com Certificado de Registro e Licenciamento de Veículo liberado.';
+    if (name.includes('acidente') && (name.includes('milhao') || name.includes('milhão'))) return 'Quantidade de acidentes normalizada por milhão de quilômetros rodados.';
+    return '';
+}
+
 function renderTable() {
     const tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
@@ -2034,13 +2069,13 @@ function renderTable() {
         tr.innerHTML = `
             <td class="py-2.5 px-3">
                 <div class="flex items-center gap-1">
-                    <button onclick="openDetailModal(${origIndex})" title="Inspecionar" class="p-1.5 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-300 rounded-lg transition"><i class="fa-solid fa-eye"></i></button>
-                    <button onclick="openEditModal(${origIndex})" title="Editar" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"><i class="fa-solid fa-pen"></i></button>
-                    <button onclick="deleteIndicator(${origIndex})" title="Excluir" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition"><i class="fa-solid fa-trash"></i></button>
+                    <button onclick="openDetailModal(${origIndex})" title="Inspecionar indicador" aria-label="Inspecionar ${escapeHtml(item.indicador)}" class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-slate-300 transition hover:bg-amber-500 hover:text-slate-950"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></button>
+                    <button onclick="openEditModal(${origIndex})" title="Editar indicador" aria-label="Editar ${escapeHtml(item.indicador)}" class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-slate-300 transition hover:bg-slate-700"><i class="fa-solid fa-pen text-xs" aria-hidden="true"></i></button>
+                    <button onclick="deleteIndicator(${origIndex})" title="Excluir indicador" aria-label="Excluir ${escapeHtml(item.indicador)}" class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-rose-400 transition hover:bg-rose-900/60"><i class="fa-solid fa-trash text-xs" aria-hidden="true"></i></button>
                 </div>
             </td>
             <td class="py-2.5 px-3 font-medium text-slate-400 text-[11px]">${escapeHtml(item.setor)}</td>
-            <td class="py-2.5 px-3 font-semibold text-white text-[11px]">${escapeHtml(item.indicador)}</td>
+            <td title="${escapeHtml(getIndicatorTooltip(item.indicador))}" class="py-2.5 px-3 font-semibold text-white text-[11px]">${escapeHtml(item.indicador)}</td>
             <td class="py-2.5 px-2 text-center font-mono text-slate-400 text-[11px]">${item.meta !== null ? escapeHtml(fmtVal(item.meta, item.und)) : '-'}</td>
             <td class="py-2.5 px-2 text-center text-slate-400 text-[11px]">${escapeHtml(item.und)}</td>
             ${valoresTdHtml}
@@ -2135,7 +2170,7 @@ function renderMonthlyInputs(valoresArray = []) {
         const val = (valoresArray[idx] !== undefined && valoresArray[idx] !== null) ? valoresArray[idx] : '';
         const div = document.createElement('div');
         div.innerHTML = `
-            <span class="text-[10px] text-slate-400 block mb-0.5">${mes}</span>
+            <label for="val_${idx}" class="text-[10px] text-slate-400 block mb-0.5">${escapeHtml(mes)}</label>
             <input type="number" step="any" id="val_${idx}" value="${val}" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-lg p-2 font-mono">
         `;
         container.appendChild(div);
@@ -2221,6 +2256,22 @@ function closeModal(id) {
         }
     }
 }
+
+document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        saveCurrentState();
+        return;
+    }
+
+    if (event.key !== 'Escape') return;
+
+    ['modalDetail', 'modalEdit', 'modalChartConfig', 'modalKpiConfig'].forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal && !modal.classList.contains('hidden')) closeModal(id);
+    });
+    document.getElementById('headerToolsMenu')?.removeAttribute('open');
+});
 
 async function registrarLog(acao, detalhes = '') {
     try {
@@ -2561,7 +2612,7 @@ function exportToCSV() {
 
 
 function resetData() {
-    Swal.fire({
+    fireThemedAlert({
         title: 'Restaurar dados padrões?',
         text: 'Os dados atuais e a logo personalizada serão substituídos pelos dados originais da D\'Granel. Esta ação não pode ser desfeita.',
         icon: 'warning',
@@ -2589,7 +2640,7 @@ function resetData() {
         initSystem();
         markStateDirty();
 
-        Swal.fire({
+        fireThemedAlert({
             title: 'Dados restaurados!',
             text: 'Os dados padrões foram carregados.',
             icon: 'success',
