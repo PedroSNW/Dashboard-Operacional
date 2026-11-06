@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dashboard-operacional-seg-viaria.vercel.app/sitemap.xml
