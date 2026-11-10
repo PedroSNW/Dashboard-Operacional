@@ -65,7 +65,10 @@ Chart.defaults.plugins.datalabels = {
     align: 'bottom',
     clamp: true,
     font: { size: 10, weight: 'bold' },
-    formatter: value => value === null || value === undefined ? '' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+    formatter: (value, context) => {
+        const dataset = context?.dataset || {};
+        return formatChartValue(value, resolveChartUnit(dataset));
+    }
 };
 
 // CARREGAMENTO INICIAL
@@ -857,13 +860,50 @@ function getChartJsType(type) {
     return type === 'horizontalBar' ? 'bar' : type === 'area' ? 'line' : type;
 }
 
+function resolveChartUnit(dataset = {}) {
+    const rawUnit = dataset.unit || dataset.label || '';
+    const unitText = String(rawUnit || '').trim();
+    if (!unitText) return '';
+    if (unitText.includes('R$')) return 'R$';
+    if (unitText.includes('%')) return '%';
+    return unitText;
+}
+
+function formatChartValue(value, unit = '') {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
+    const numeric = Number(value);
+    const formatted = numeric.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (unit === 'R$') return `R$ ${formatted}`;
+    if (unit === '%') return `${formatted}%`;
+    return formatted;
+}
+
+function buildAxisTicks(unit = '', color = '#94a3b8') {
+    return {
+        color,
+        callback: value => formatChartValue(value, unit)
+    };
+}
+
 function getChartTypeOptions(type, scales) {
     return {
         responsive: true,
         maintainAspectRatio: false,
         indexAxis: type === 'horizontalBar' ? 'y' : 'x',
-        plugins: { legend: { labels: { color: '#94a3b8' } } },
-        scales
+        plugins: {
+            legend: { labels: { color: '#94a3b8' } },
+            tooltip: {
+                callbacks: {
+                    label(context) {
+                        const tooltipValue = context.parsed?.y ?? context.parsed?.x ?? context.parsed ?? 0;
+                        const unit = resolveChartUnit(context.dataset || {});
+                        return `${context.dataset.label || 'Valor'}: ${formatChartValue(tooltipValue, unit)}`;
+                    }
+                }
+            }
+        },
+        scales,
+        animation: false
     };
 }
 
@@ -929,12 +969,13 @@ function renderConfiguredDefaultCharts() {
             borderWidth: 2,
             tension: 0.3,
             fill: config.type === 'line',
+            unit: indicator.und || '',
             ...(usesIndependentAxes ? { yAxisID: `y${index + 1}` } : {})
         }));
         if (chartId === 'chart2' && indicators.length > 1) datasets = [{ label: config.title, data: labels.map((_, index) => indicators.reduce((sum, item) => sum + (getDashboardChartData(item).values[index] || 0), 0)), backgroundColor: 'rgba(56,189,248,.6)', borderRadius: 6 }];
         const scales = config.type === 'radar'
             ? { r: { min: 0, beginAtZero: true, pointLabels: { color: '#cbd5e1' } } }
-            : { x: { ticks: { color: '#94a3b8' } }, y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } } };
+            : { x: { ticks: { color: '#94a3b8' } }, y: { min: 0, beginAtZero: true, ticks: buildAxisTicks(indicators.some(i => i.und === 'R$') ? 'R$' : indicators.some(i => i.und === '%') ? '%' : 'Qtd', '#94a3b8') } };
         if (supportsYAxis && indicators.length > 1 && !usesIndependentAxes) {
             const values = indicators.flatMap(indicator => getDashboardChartData(indicator).values)
                 .filter(value => value !== null && value !== undefined && Number.isFinite(Number(value)));
@@ -1380,9 +1421,12 @@ function calcMetrics(item) {
 }
 
 function fmtVal(val, unit = '') {
-    if (val === null || val === undefined || isNaN(val)) return '-';
-    let formatted = val.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
-    return unit === '%' ? formatted + '%' : formatted;
+    if (val === null || val === undefined || Number.isNaN(Number(val))) return '-';
+    const numeric = Number(val);
+    const formatted = numeric.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (unit === 'R$') return `R$ ${formatted}`;
+    if (unit === '%') return `${formatted}%`;
+    return formatted;
 }
 
 // RENDERIZAÇÃO DOS KPIS D'GRANEL
@@ -1560,20 +1604,31 @@ function renderCharts() {
         data: {
             labels: chartMonths,
             datasets: [
-                { label: '% CRLV', data: monthlyValues(crlvObj), type: 'line', borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3, yAxisID: 'y1' },
-                { label: 'Score Motorista', data: monthlyValues(scoreObj), type: 'line', borderColor: '#eab308', borderDash: [5, 5], tension: 0.3, yAxisID: 'y2' },
-                { label: 'Acidentes', data: monthlyValues(acidentesObj), backgroundColor: 'rgba(244, 63, 94, 0.8)', borderRadius: 6, yAxisID: 'y3' },
-                { label: 'Multas Motorista', data: monthlyValues(multasObj), backgroundColor: 'rgba(234, 179, 8, 0.7)', borderRadius: 6, yAxisID: 'y3' }
+                { label: '% CRLV', data: monthlyValues(crlvObj), type: 'line', borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3, yAxisID: 'y1', unit: '%' },
+                { label: 'Score Motorista', data: monthlyValues(scoreObj), type: 'line', borderColor: '#eab308', borderDash: [5, 5], tension: 0.3, yAxisID: 'y2', unit: 'pts' },
+                { label: 'Acidentes', data: monthlyValues(acidentesObj), backgroundColor: 'rgba(244, 63, 94, 0.8)', borderRadius: 6, yAxisID: 'y3', unit: 'Qtd' },
+                { label: 'Multas Motorista', data: monthlyValues(multasObj), backgroundColor: 'rgba(234, 179, 8, 0.7)', borderRadius: 6, yAxisID: 'y3', unit: 'R$' }
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#94a3b8' } } },
+            plugins: {
+                legend: { labels: { color: '#94a3b8' } },
+                tooltip: {
+                    callbacks: {
+                        label(context) {
+                            const tooltipValue = context.parsed?.y ?? context.parsed?.x ?? context.parsed ?? 0;
+                            const unit = resolveChartUnit(context.dataset || {});
+                            return `${context.dataset.label || 'Valor'}: ${formatChartValue(tooltipValue, unit)}`;
+                        }
+                    }
+                }
+            },
             scales: {
                 x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                y1: { position: 'left', min: 0, beginAtZero: true, max: 100, ticks: { color: '#94a3b8' } },
-                y2: { position: 'right', min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { drawOnChartArea: false } },
-                y3: { position: 'right', min: 0, beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { drawOnChartArea: false } }
+                y1: { position: 'left', min: 0, beginAtZero: true, max: 100, ticks: buildAxisTicks('%', '#94a3b8') },
+                y2: { position: 'right', min: 0, beginAtZero: true, ticks: buildAxisTicks('pts', '#94a3b8'), grid: { drawOnChartArea: false } },
+                y3: { position: 'right', min: 0, beginAtZero: true, ticks: buildAxisTicks(multasObj.und === 'R$' ? 'R$' : 'Qtd', '#94a3b8'), grid: { drawOnChartArea: false } }
             }
         }
     });
@@ -1885,6 +1940,7 @@ function renderDynamicCharts() {
             borderWidth: 2,
             tension: 0.3,
             fill: c.type === 'area',
+            unit: indicator.und || '',
             yAxisID: usesIndependentAxes ? `y${index + 1}` : 'y'
         }));
 
@@ -1919,7 +1975,8 @@ function renderDynamicCharts() {
                             grace: '10%',
                             ticks: {
                                 color: datasetColors[index % datasetColors.length],
-                                font: { size: 10, weight: 'bold' }
+                                font: { size: 10, weight: 'bold' },
+                                callback: value => formatChartValue(value, indicatorObjects[index]?.und || '')
                             },
                             grid: {
                                 drawOnChartArea: index === 0,
