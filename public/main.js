@@ -59,7 +59,7 @@ const renderTableDebounced = debounce(renderTable, 300);
 Chart.register(ChartDataLabels);
 Chart.defaults.animation = false;
 Chart.defaults.plugins.datalabels = {
-    display: () => showDataLabels,
+    display: ctx => showDataLabels && ctx.dataset.data[ctx.dataIndex] != null,
     color: () => document.body.classList.contains('light-theme') ? '#111827' : '#f8fafc',
     anchor: 'end',
     align: 'bottom',
@@ -70,6 +70,81 @@ Chart.defaults.plugins.datalabels = {
         return formatChartValue(value, resolveChartUnit(dataset));
     }
 };
+
+const CHART_ZOOM_MIN = 0.25;
+const CHART_ZOOM_MAX = 4;
+const CHART_ZOOM_STEP = 0.25;
+const chartZoomState = {};
+
+function chartPxPerLabel(chart) {
+    const datasets = chart.data.datasets || [];
+    const hasBars = datasets.some(dataset => (dataset.type || chart.config.type) === 'bar');
+    return hasBars ? 50 + datasets.length * 80 : 130;
+}
+
+function applyChartScrollWidth(chart, doResize = true) {
+    const inner = chart.canvas.closest('.chart-scroll-inner');
+    if (!inner) return;
+    const scroller = inner.parentElement;
+    const zoom = chartZoomState[chart.canvas.id] || 1;
+    const labels = (chart.data.labels || []).length || 1;
+    inner.style.width = `${Math.max(scroller.clientWidth, labels * chartPxPerLabel(chart) * zoom)}px`;
+    if (doResize) chart.resize();
+}
+
+function wrapCanvasForScroll(canvas) {
+    if (canvas.closest('.chart-scroll-inner')) return;
+    const box = document.createElement('div');
+    box.className = 'chart-scroll-box';
+    box.innerHTML = `
+        <div class="chart-zoom-bar">
+            <span class="chart-zoom-hint">Ctrl + roda do mouse = zoom</span>
+            <button type="button" data-z="out" title="Diminuir zoom" aria-label="Diminuir zoom">−</button>
+            <span class="chart-zoom-label">100%</span>
+            <button type="button" data-z="in" title="Aumentar zoom" aria-label="Aumentar zoom">+</button>
+            <button type="button" data-z="reset" title="Ajustar à tela" aria-label="Ajustar à tela">↺</button>
+        </div>
+        <div class="chart-scroller"><div class="chart-scroll-inner"></div></div>`;
+    canvas.parentElement.insertBefore(box, canvas);
+    const inner = box.querySelector('.chart-scroll-inner');
+    const scroller = box.querySelector('.chart-scroller');
+    const label = box.querySelector('.chart-zoom-label');
+    inner.appendChild(canvas);
+
+    const setZoom = (value, reset = false) => {
+        const zoom = Math.min(CHART_ZOOM_MAX, Math.max(CHART_ZOOM_MIN, value));
+        const centerRatio = (scroller.scrollLeft + scroller.clientWidth / 2) / (inner.scrollWidth || 1);
+        chartZoomState[canvas.id] = zoom;
+        label.textContent = `${Math.round(zoom * 100)}%`;
+        const chart = Chart.getChart(canvas);
+        if (chart) applyChartScrollWidth(chart);
+        scroller.scrollLeft = reset ? 0 : centerRatio * inner.scrollWidth - scroller.clientWidth / 2;
+    };
+
+    label.textContent = `${Math.round((chartZoomState[canvas.id] || 1) * 100)}%`;
+    box.querySelector('[data-z="in"]').onclick = () => setZoom((chartZoomState[canvas.id] || 1) + CHART_ZOOM_STEP);
+    box.querySelector('[data-z="out"]').onclick = () => setZoom((chartZoomState[canvas.id] || 1) - CHART_ZOOM_STEP);
+    box.querySelector('[data-z="reset"]').onclick = () => setZoom(1, true);
+    scroller.addEventListener('wheel', event => {
+        if (!event.ctrlKey) return;
+        event.preventDefault();
+        setZoom((chartZoomState[canvas.id] || 1) + (event.deltaY < 0 ? CHART_ZOOM_STEP : -CHART_ZOOM_STEP));
+    }, { passive: false });
+}
+
+Chart.register({
+    id: 'scrollZoomWrapper',
+    beforeInit(chart) {
+        const type = chart.config.type;
+        const id = chart.canvas.id || '';
+        if (['radar', 'doughnut', 'pie', 'polarArea'].includes(type)) return;
+        if (!/^(chart[1-4]|canvas_.+)$/.test(id)) return;
+        wrapCanvasForScroll(chart.canvas);
+    },
+    afterInit(chart) {
+        if (chart.canvas.closest('.chart-scroll-inner')) applyChartScrollWidth(chart, false);
+    }
+});
 
 // CARREGAMENTO INICIAL
 document.addEventListener('DOMContentLoaded', async () => {

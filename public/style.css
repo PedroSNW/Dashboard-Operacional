@@ -121,6 +121,69 @@ canvas {
     transition: none !important;
 }
 
+.chart-scroll-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+.chart-zoom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    font-size: 11px;
+    color: #94a3b8;
+}
+.chart-zoom-bar button {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #e2e8f0;
+    cursor: pointer;
+    font-weight: 700;
+    line-height: 1;
+}
+.chart-zoom-bar button:hover {
+    background: #f59e0b;
+    color: #0f172a;
+    border-color: #f59e0b;
+}
+.chart-zoom-label {
+    min-width: 42px;
+    text-align: center;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+.chart-zoom-hint {
+    margin-right: auto;
+    opacity: 0.7;
+}
+.chart-scroller {
+    overflow-x: auto;
+    overflow-y: hidden;
+    width: 100%;
+    padding-bottom: 6px;
+}
+.chart-scroll-inner {
+    position: relative;
+    height: 340px;
+    min-width: 100%;
+}
+.chart-scroller::-webkit-scrollbar {
+    height: 10px;
+}
+.chart-scroller::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 8px;
+}
+.chart-scroller::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .page-view:not(.hidden),
     .icon-click-feedback {
