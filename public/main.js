@@ -115,6 +115,7 @@ function wrapCanvasForScroll(canvas) {
         const zoom = Math.min(CHART_ZOOM_MAX, Math.max(CHART_ZOOM_MIN, value));
         const centerRatio = (scroller.scrollLeft + scroller.clientWidth / 2) / (inner.scrollWidth || 1);
         chartZoomState[canvas.id] = zoom;
+        markStateDirty();
         label.textContent = `${Math.round(zoom * 100)}%`;
         const chart = Chart.getChart(canvas);
         if (chart) applyChartScrollWidth(chart);
@@ -142,7 +143,10 @@ Chart.register({
         wrapCanvasForScroll(chart.canvas);
     },
     afterInit(chart) {
-        if (chart.canvas.closest('.chart-scroll-inner')) applyChartScrollWidth(chart, false);
+        if (!chart.canvas.closest('.chart-scroll-inner')) return;
+        applyChartScrollWidth(chart, false);
+        const label = chart.canvas.closest('.chart-scroll-box')?.querySelector('.chart-zoom-label');
+        if (label) label.textContent = `${Math.round((chartZoomState[chart.canvas.id] || 1) * 100)}%`;
     }
 });
 
@@ -434,6 +438,7 @@ async function handleAuthSession(session) {
     if (!session) {
         appInitialized = false;
         supabaseStateLoaded = false;
+        Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
         return;
     }
 
@@ -1165,6 +1170,7 @@ async function persistirEstadoSupabase() {
         activeDashboardId,
         mesesLabels,
         showDataLabels,
+        zoomGraficos: chartZoomState,
         theme: currentTheme,
         logo: customLogoSrc
     };
@@ -1249,6 +1255,15 @@ async function carregarDadosCompartilhados(silencioso = false) {
                 : dashboards[0].id;
             mesesLabels = Array.isArray(dataObj.mesesLabels) ? dataObj.mesesLabels.filter(isMonthLabel) : ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
             showDataLabels = dataObj.showDataLabels === true;
+            Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
+            if (dataObj.zoomGraficos && typeof dataObj.zoomGraficos === 'object') {
+                Object.entries(dataObj.zoomGraficos).forEach(([id, value]) => {
+                    const zoom = Number(value);
+                    if (Number.isFinite(zoom)) {
+                        chartZoomState[id] = Math.min(CHART_ZOOM_MAX, Math.max(CHART_ZOOM_MIN, zoom));
+                    }
+                });
+            }
             currentTheme = dataObj.theme === 'light' ? 'light' : 'dark';
             customLogoSrc = typeof dataObj.logo === 'string' && dataObj.logo ? dataObj.logo : null;
             applyTheme(currentTheme);
