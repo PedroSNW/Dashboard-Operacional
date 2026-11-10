@@ -491,19 +491,27 @@ function downloadChart(chartCanvasId, fileName) {
     const canvas = document.getElementById(chartCanvasId);
     if (!canvas) return;
 
-    const chart = Chart.getChart(canvas);
-    const imageURL = chart ? chart.toBase64Image() : canvas.toDataURL('image/png');
     const safeFileName = String(fileName || 'grafico').replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_');
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const context = tempCanvas.getContext('2d');
+    if (!context) return;
+
+    context.fillStyle = document.body.classList.contains('light-theme') ? '#ffffff' : '#070D1E';
+    context.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+    context.drawImage(canvas, 0, 0);
+
     const link = document.createElement('a');
     link.download = `${safeFileName}.png`;
-    link.href = imageURL;
+    link.href = tempCanvas.toDataURL('image/png');
     document.body.appendChild(link);
     link.click();
     link.remove();
 
     fireThemedAlert({
         title: 'Download Concluído!',
-        text: 'O gráfico foi salvo no seu computador.',
+        text: 'O gráfico foi salvo no seu computador com o fundo do tema atual.',
         icon: 'success',
         timer: 2000,
         showConfirmButton: false
