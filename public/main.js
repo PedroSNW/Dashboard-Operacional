@@ -1029,7 +1029,10 @@ function resolveChartUnit(dataset = {}) {
 function formatChartValue(value, unit = '') {
     if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
     const numeric = Number(value);
-    const formatted = numeric.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatted = numeric.toLocaleString('pt-BR', {
+        minimumFractionDigits: Number.isInteger(numeric) ? 0 : 2,
+        maximumFractionDigits: 2
+    });
     if (unit === 'R$') return `R$ ${formatted}`;
     if (unit === '%') return `${formatted}%`;
     return formatted;
@@ -1590,7 +1593,10 @@ function calcMetrics(item) {
 function fmtVal(val, unit = '') {
     if (val === null || val === undefined || Number.isNaN(Number(val))) return '-';
     const numeric = Number(val);
-    const formatted = numeric.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatted = numeric.toLocaleString('pt-BR', {
+        minimumFractionDigits: Number.isInteger(numeric) ? 0 : 2,
+        maximumFractionDigits: 2
+    });
     if (unit === 'R$') return `R$ ${formatted}`;
     if (unit === '%') return `${formatted}%`;
     return formatted;
