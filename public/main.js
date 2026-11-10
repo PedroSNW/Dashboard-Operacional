@@ -492,15 +492,84 @@ function downloadChart(chartCanvasId, fileName) {
     if (!canvas) return;
 
     const safeFileName = String(fileName || 'grafico').replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_');
+    const card = canvas.closest('.glass-card') || canvas.closest('article') || canvas.parentElement;
+    const titleText = card?.querySelector('h3, h4')?.textContent.trim() || '';
+    const descText = card?.querySelector('p')?.textContent.trim() || '';
+    const hasHeader = Boolean(titleText);
+    const scale = canvas.width / (canvas.clientWidth || canvas.width || 1);
+    const padding = Math.round(20 * scale);
+    const titleFontSize = Math.max(1, Math.round(16 * scale));
+    const descFontSize = Math.max(1, Math.round(12 * scale));
+    const titleLineHeight = Math.round(20 * scale);
+    const descLineHeight = Math.round(16 * scale);
+    const titleX = padding + Math.round(14 * scale);
+    const maxTextWidth = Math.max(1, canvas.width - titleX - padding);
+
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
     const context = tempCanvas.getContext('2d');
     if (!context) return;
 
-    context.fillStyle = document.body.classList.contains('light-theme') ? '#ffffff' : '#070D1E';
+    const wrapText = (text, font) => {
+        if (!text) return [];
+        context.font = font;
+        const lines = [];
+        let line = '';
+        text.split(/\s+/).forEach(word => {
+            const candidate = line ? `${line} ${word}` : word;
+            if (line && context.measureText(candidate).width > maxTextWidth) {
+                lines.push(line);
+                line = word;
+            } else {
+                line = candidate;
+            }
+        });
+        if (line) lines.push(line);
+        return lines;
+    };
+
+    const titleFont = `bold ${titleFontSize}px Inter, sans-serif`;
+    const descFont = `${descFontSize}px Inter, sans-serif`;
+    const titleLines = hasHeader ? wrapText(titleText, titleFont) : [];
+    const descLines = descText ? wrapText(descText, descFont) : [];
+    const headerPaddingTop = Math.round(14 * scale);
+    const headerPaddingBottom = Math.round(14 * scale);
+    const descGap = descLines.length ? Math.round(4 * scale) : 0;
+    const headerHeight = hasHeader
+        ? headerPaddingTop + titleLines.length * titleLineHeight + descGap + descLines.length * descLineHeight + headerPaddingBottom
+        : 0;
+    tempCanvas.height = canvas.height + headerHeight;
+
+    const isLight = document.body.classList.contains('light-theme');
+    context.fillStyle = isLight ? '#ffffff' : '#070D1E';
     context.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-    context.drawImage(canvas, 0, 0);
+
+    if (hasHeader) {
+        const dotRadius = Math.max(1, Math.round(5 * scale));
+        const firstTitleBaseline = headerPaddingTop + titleFontSize;
+        context.beginPath();
+        context.arc(padding, firstTitleBaseline - Math.round(5 * scale), dotRadius, 0, 2 * Math.PI);
+        context.fillStyle = '#f59e0b';
+        context.fill();
+
+        context.font = titleFont;
+        context.fillStyle = isLight ? '#172033' : '#ffffff';
+        context.textBaseline = 'alphabetic';
+        titleLines.forEach((line, index) => {
+            context.fillText(line, titleX, firstTitleBaseline + index * titleLineHeight, maxTextWidth);
+        });
+
+        if (descLines.length) {
+            context.font = descFont;
+            context.fillStyle = isLight ? '#64748b' : '#94a3b8';
+            const descStartY = firstTitleBaseline + titleLines.length * titleLineHeight + descGap;
+            descLines.forEach((line, index) => {
+                context.fillText(line, padding, descStartY + index * descLineHeight, maxTextWidth);
+            });
+        }
+    }
+
+    context.drawImage(canvas, 0, headerHeight);
 
     const link = document.createElement('a');
     link.download = `${safeFileName}.png`;
@@ -511,7 +580,7 @@ function downloadChart(chartCanvasId, fileName) {
 
     fireThemedAlert({
         title: 'Download Concluído!',
-        text: 'O gráfico foi salvo no seu computador com o fundo do tema atual.',
+        text: 'O gráfico foi salvo com cabeçalho, título e tema atual.',
         icon: 'success',
         timer: 2000,
         showConfirmButton: false
