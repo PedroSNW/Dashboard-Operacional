@@ -22,6 +22,7 @@ let chart1Inst = null, chart2Inst = null, chart3Inst = null, chart4Inst = null, 
 let dynamicChartInstances = {};
 let showDataLabels = false;
 let selectedDashboardMonths = null;
+let fechamentosMensais = {};
 let currentTheme = 'dark';
 let customLogoSrc = null;
 let lastSupabaseSavedAt = null;
@@ -39,6 +40,8 @@ let hasUnsavedChanges = false;
 let isSavingState = false;
 let stateRevision = 0;
 let supabaseSaveQueue = Promise.resolve();
+let intelligenceRenderRevision = 0;
+let intelligenceVisibleLimit = 24;
 let revealObserver = null;
 const observedRevealElements = new WeakSet();
 
@@ -169,18 +172,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateDashboardMonthSummary(availableMonths);
         renderCharts();
         renderDynamicCharts();
+        renderIntelligenceDashboard();
     });
     document.getElementById('selectAllDashboardMonths')?.addEventListener('click', () => {
         selectedDashboardMonths = null;
         renderDashboardMonthFilter();
         renderCharts();
         renderDynamicCharts();
+        renderIntelligenceDashboard();
     });
     document.getElementById('clearDashboardMonths')?.addEventListener('click', () => {
         selectedDashboardMonths = [];
         renderDashboardMonthFilter();
         renderCharts();
         renderDynamicCharts();
+        renderIntelligenceDashboard();
+    });
+    ['intelligenceSectorFilter', 'intelligenceIndicatorFilter', 'intelligencePeriodFilter', 'intelligenceSeverityFilter', 'intelligenceCategoryFilter']
+        .forEach(id => document.getElementById(id)?.addEventListener('change', () => {
+            intelligenceVisibleLimit = 24;
+            if (id === 'intelligenceSectorFilter') {
+                const indicatorFilter = document.getElementById('intelligenceIndicatorFilter');
+                if (indicatorFilter) indicatorFilter.value = 'TODOS';
+            }
+            renderIntelligenceDashboard();
+        }));
+    document.getElementById('intelligenceLoadMore')?.addEventListener('click', () => {
+        intelligenceVisibleLimit += 24;
+        renderIntelligenceDashboard();
+    });
+    ['governanceSearch', 'governanceSectorFilter', 'governanceDirectionFilter'].forEach(id => {
+        const element = document.getElementById(id);
+        element?.addEventListener(id === 'governanceSearch' ? 'input' : 'change', renderGovernanceDashboard);
     });
 
     const { data } = await supabaseClient.auth.getSession();
@@ -439,6 +462,7 @@ async function handleAuthSession(session) {
         appInitialized = false;
         supabaseStateLoaded = false;
         Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
+        fechamentosMensais = {};
         return;
     }
 
@@ -452,6 +476,7 @@ async function handleAuthSession(session) {
     dashboards = [{ id: 'dashboard_main', name: 'Geral', widgets: getDefaultDashboardWidgets() }];
     activeDashboardId = dashboards[0].id;
     showDataLabels = false;
+    fechamentosMensais = {};
     currentTheme = 'dark';
     customLogoSrc = null;
     applyTheme(currentTheme);
@@ -1252,6 +1277,7 @@ async function persistirEstadoSupabase() {
         mesesLabels,
         showDataLabels,
         zoomGraficos: chartZoomState,
+        fechamentosMensais,
         theme: currentTheme,
         logo: customLogoSrc
     };
@@ -1336,6 +1362,10 @@ async function carregarDadosCompartilhados(silencioso = false) {
                 : dashboards[0].id;
             mesesLabels = Array.isArray(dataObj.mesesLabels) ? dataObj.mesesLabels.filter(isMonthLabel) : ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
             showDataLabels = dataObj.showDataLabels === true;
+            fechamentosMensais = dataObj.fechamentosMensais && typeof dataObj.fechamentosMensais === 'object' && !Array.isArray(dataObj.fechamentosMensais)
+                ? Object.fromEntries(Object.entries(dataObj.fechamentosMensais).filter(([month, closure]) =>
+                    isMonthLabel(month) && closure && typeof closure.closedAt === 'string' && Number.isFinite(Date.parse(closure.closedAt))))
+                : {};
             Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
             if (dataObj.zoomGraficos && typeof dataObj.zoomGraficos === 'object') {
                 Object.entries(dataObj.zoomGraficos).forEach(([id, value]) => {
@@ -1389,6 +1419,7 @@ function initSystem() {
     populateSetoresDropdown();
     renderTableHeader();
     renderKPIs();
+    renderGovernanceDashboard();
     const dashboardView = document.getElementById('view-dashboard');
     if (dashboardView && !dashboardView.classList.contains('hidden')) {
         renderCharts();
@@ -1396,6 +1427,7 @@ function initSystem() {
     }
     renderTable();
     updateJSONEditor();
+    renderIntelligenceDashboard();
     const detailModal = document.getElementById('modalDetail');
     if (detailModal && !detailModal.classList.contains('hidden') && detailModalIndex !== null) {
         refreshDetailModal(detailModalIndex);
@@ -1452,7 +1484,7 @@ function switchTab(tabName) {
     if (currentView) currentView.classList.add('hidden');
     nextView.classList.remove('hidden');
 
-    ['home', 'dashboard', 'datagrid', 'audit'].forEach(t => {
+    ['home', 'dashboard', 'datagrid', 'intelligence', 'governance', 'audit'].forEach(t => {
         const button = document.getElementById(`tab-${t}`);
         if (button) button.classList.toggle('active', t === tabName);
     });
@@ -1462,6 +1494,10 @@ function switchTab(tabName) {
     if (tabName === 'dashboard') {
         renderCharts();
         renderDynamicCharts();
+    } else if (tabName === 'intelligence') {
+        renderIntelligenceDashboard();
+    } else if (tabName === 'governance') {
+        renderGovernanceDashboard();
     } else if (tabName === 'audit') {
         updateJSONEditor();
         carregarLogsAuditoria();
@@ -1494,6 +1530,104 @@ function getMonthlyData(item) {
         labels: labels.length ? labels : BASE_MONTHS.slice(0, values.length),
         values: values.slice(valueOffset)
     };
+}
+
+function normalizeIndicatorValues(values) {
+    const normalized = (Array.isArray(values) ? values : []).map(value => {
+        if (value === null || value === undefined || value === '') return null;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : null;
+    });
+    while (normalized.length && normalized[normalized.length - 1] === null) normalized.pop();
+    return normalized;
+}
+
+function indicatorValuesChanged(previous, nextValues) {
+    if (!previous) return normalizeIndicatorValues(nextValues).some(value => value !== null);
+    const previousValues = normalizeIndicatorValues(previous.valores);
+    const currentValues = normalizeIndicatorValues(nextValues);
+    return previousValues.length !== currentValues.length || previousValues.some((value, index) => value !== currentValues[index]);
+}
+
+function getIndicatorValueForMonth(item, month, monthLabels) {
+    const values = Array.isArray(item?.valores) ? item.valores : [];
+    const offset = values.length > monthLabels.length ? values.length - monthLabels.length : 0;
+    const monthIndex = monthLabels.indexOf(month);
+    if (monthIndex < 0) return undefined;
+    const value = values[monthIndex + offset];
+    if (value === undefined || value === null || value === '') return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+}
+
+function findClosedMonthMutation(previousIndicators, nextIndicators, previousMonths = mesesLabels, nextMonths = mesesLabels) {
+    const closedMonths = Object.keys(fechamentosMensais).filter(isIntelligenceMonthClosed);
+    if (!closedMonths.length) return null;
+
+    const previousByIdentity = groupIndicatorsByIdentity(previousIndicators);
+    const nextByIdentity = groupIndicatorsByIdentity(nextIndicators);
+    for (const month of closedMonths) {
+        if (!previousMonths.includes(month)) continue;
+        if (!nextMonths.includes(month)) return `O CSV remove o mês fechado ${month}. Reabra o período antes de alterar os meses disponíveis.`;
+
+        for (const [identity, previousItems] of previousByIdentity) {
+            const nextItems = nextByIdentity.get(identity) || [];
+            for (let index = 0; index < previousItems.length; index += 1) {
+                const previous = previousItems[index];
+                const next = nextItems[index];
+                const previousValue = getIndicatorValueForMonth(previous, month, previousMonths);
+                if (!next) {
+                    if (previousValue !== null && previousValue !== undefined) {
+                        return `A importação removeria ${previous.indicador} com dados no mês fechado ${month}. Reabra o período antes de importar.`;
+                    }
+                    continue;
+                }
+                if (getIndicatorValueForMonth(next, month, nextMonths) !== previousValue) {
+                    return `A importação altera ${previous.indicador} no mês fechado ${month}. Reabra o período antes de alterar esses dados.`;
+                }
+            }
+        }
+
+        for (const [identity, nextItems] of nextByIdentity) {
+            const previousCount = previousByIdentity.get(identity)?.length || 0;
+            for (const next of nextItems.slice(previousCount)) {
+                if (getIndicatorValueForMonth(next, month, nextMonths) !== null) {
+                    return `A importação adiciona dados de ${next.indicador} ao mês fechado ${month}. Reabra o período antes de importar.`;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function applyIndicatorUpdateMetadata(indicators, previousIndicators = currentData, updatedAt = new Date().toISOString()) {
+    const previousByIdentity = groupIndicatorsByIdentity(previousIndicators);
+
+    return indicators.map(item => {
+        const previous = previousByIdentity.get(getIndicatorIdentity(item.setor, item.indicador))?.shift();
+        const updated = { ...item };
+        if (indicatorValuesChanged(previous, updated.valores)) {
+            updated.ultimaAtualizacao = updatedAt;
+        } else if (previous?.ultimaAtualizacao) {
+            updated.ultimaAtualizacao = previous.ultimaAtualizacao;
+        } else {
+            delete updated.ultimaAtualizacao;
+        }
+        if (updated.direcaoDesempenho === undefined && previous?.direcaoDesempenho !== undefined) {
+            updated.direcaoDesempenho = previous.direcaoDesempenho;
+        }
+        return updated;
+    });
+}
+
+function formatIndicatorUpdatedAt(value) {
+    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return 'Data não disponível (registro legado)';
+    return new Date(value).toLocaleString('pt-BR');
+}
+
+function isIntelligenceMonthClosed(month) {
+    const closedAt = fechamentosMensais?.[month]?.closedAt;
+    return typeof closedAt === 'string' && Number.isFinite(Date.parse(closedAt));
 }
 
 const getChartMonthData = getMonthlyData;
@@ -1567,6 +1701,618 @@ function getDashboardChartData(item) {
         labels: monthIndexes.map(index => labels[index]),
         values: monthIndexes.map(index => values[index] ?? null)
     };
+}
+
+const INTELLIGENCE_DIRECTION_LABELS = {
+    menor_melhor: 'Menor é melhor',
+    maior_melhor: 'Maior é melhor',
+    neutro: 'Neutra'
+};
+
+function renderGovernanceDashboard() {
+    const rows = document.getElementById('governanceIndicatorRows');
+    const monthContainer = document.getElementById('governanceMonthClosures');
+    if (!rows || !monthContainer) return;
+
+    const configuredCount = currentData.filter(item => getIntelligenceDirection(item)).length;
+    const pendingCount = currentData.length - configuredCount;
+    document.getElementById('governanceConfiguredCount').textContent = configuredCount;
+    document.getElementById('governancePendingCount').textContent = pendingCount;
+    document.getElementById('governanceCompletionPercent').textContent = `${currentData.length ? Math.round(configuredCount / currentData.length * 100) : 0}%`;
+
+    const sectorFilter = document.getElementById('governanceSectorFilter');
+    const previousSector = sectorFilter.value || 'TODOS';
+    sectorFilter.replaceChildren(new Option('Todos os setores', 'TODOS'));
+    [...new Set(currentData.map(item => item.setor).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+        .forEach(sector => sectorFilter.add(new Option(sector, sector)));
+    if ([...sectorFilter.options].some(option => option.value === previousSector)) sectorFilter.value = previousSector;
+
+    const search = document.getElementById('governanceSearch').value.trim().toLocaleLowerCase('pt-BR');
+    const directionFilter = document.getElementById('governanceDirectionFilter').value;
+    const filteredIndicators = currentData.map((item, index) => ({ item, index })).filter(({ item }) => {
+        const direction = getIntelligenceDirection(item);
+        const matchesSector = sectorFilter.value === 'TODOS' || item.setor === sectorFilter.value;
+        const matchesDirection = directionFilter === 'TODOS'
+            || (directionFilter === 'PENDENTE' ? !direction : direction === directionFilter);
+        const searchable = `${item.setor || ''} ${item.indicador || ''}`.toLocaleLowerCase('pt-BR');
+        return matchesSector && matchesDirection && searchable.includes(search);
+    });
+
+    rows.replaceChildren();
+    filteredIndicators.forEach(({ item, index }) => {
+        const row = document.createElement('tr');
+        row.className = 'governance-row hover:bg-slate-800/30 transition';
+        const sectorCell = document.createElement('td');
+        sectorCell.className = 'p-3 text-slate-400';
+        sectorCell.textContent = item.setor || 'Setor não informado';
+        const nameCell = document.createElement('td');
+        nameCell.className = 'p-3 font-semibold text-slate-200';
+        nameCell.textContent = item.indicador || `Indicador ${index + 1}`;
+        const directionCell = document.createElement('td');
+        directionCell.className = 'p-3';
+        const select = document.createElement('select');
+        select.className = 'governance-direction-select rounded-lg border border-slate-700 bg-[#070D1E] px-2.5 py-2 text-xs text-slate-200';
+        select.setAttribute('aria-label', `Direção de desempenho: ${item.indicador}`);
+        select.add(new Option('Pendente de configuração', ''));
+        select.add(new Option(INTELLIGENCE_DIRECTION_LABELS.menor_melhor, 'menor_melhor'));
+        select.add(new Option(INTELLIGENCE_DIRECTION_LABELS.maior_melhor, 'maior_melhor'));
+        select.add(new Option(INTELLIGENCE_DIRECTION_LABELS.neutro, 'neutro'));
+        select.value = getIntelligenceDirection(item) || '';
+        select.addEventListener('change', () => updateIndicatorDirection(index, select.value));
+        directionCell.appendChild(select);
+        const updatedCell = document.createElement('td');
+        updatedCell.className = 'p-3 text-slate-400';
+        updatedCell.textContent = formatIndicatorUpdatedAt(item.ultimaAtualizacao);
+        row.append(sectorCell, nameCell, directionCell, updatedCell);
+        rows.appendChild(row);
+    });
+    document.getElementById('governanceIndicatorCount').textContent = `Exibindo ${filteredIndicators.length} de ${currentData.length} indicadores.`;
+
+    monthContainer.replaceChildren();
+    const availableMonths = [...new Set(mesesLabels.filter(isMonthLabel))];
+    if (!availableMonths.length) {
+        appendIntelligenceText(monthContainer, 'p', 'Nenhum mês disponível para fechamento.', 'text-xs text-slate-400');
+        return;
+    }
+
+    availableMonths.forEach(month => {
+        const closure = fechamentosMensais[month];
+        const isClosed = isIntelligenceMonthClosed(month);
+        const card = document.createElement('article');
+        card.className = `governance-month ${isClosed ? 'governance-month-closed' : 'governance-month-open'}`;
+        const header = document.createElement('div');
+        header.className = 'flex items-center justify-between gap-2';
+        appendIntelligenceText(header, 'h4', month, 'text-sm font-bold text-white');
+        appendIntelligenceText(header, 'span', isClosed ? 'Fechado' : 'Aberto', `governance-month-state ${isClosed ? 'is-closed' : 'is-open'}`);
+        card.appendChild(header);
+
+        if (isClosed) {
+            appendIntelligenceText(card, 'p', `Confirmado em ${formatIndicatorUpdatedAt(closure.closedAt)}`, 'mt-2 text-[11px] text-slate-400');
+            appendIntelligenceText(card, 'p', `Responsável: ${closure.closedBy || 'não informado'}`, 'mt-1 text-[11px] text-slate-400');
+        } else {
+            appendIntelligenceText(card, 'p', 'Período disponível para atualização; não participa das comparações até ser fechado.', 'mt-2 text-[11px] leading-relaxed text-slate-400');
+        }
+
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = isClosed
+            ? 'mt-3 rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10'
+            : 'mt-3 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/10';
+        action.innerHTML = isClosed
+            ? '<i class="fa-solid fa-lock-open mr-1" aria-hidden="true"></i> Reabrir mês'
+            : '<i class="fa-solid fa-lock mr-1" aria-hidden="true"></i> Confirmar fechamento';
+        action.addEventListener('click', () => setMonthClosure(month, !isClosed));
+        card.appendChild(action);
+        monthContainer.appendChild(card);
+    });
+}
+
+function updateIndicatorDirection(index, directionValue) {
+    const item = currentData[index];
+    if (!item) return;
+    const direction = normalizeIndicatorDirection(directionValue);
+    const previousDirection = getIntelligenceDirection(item);
+    if (previousDirection === direction) return;
+
+    if (direction) item.direcaoDesempenho = direction;
+    else delete item.direcaoDesempenho;
+    markStateDirty();
+    renderGovernanceDashboard();
+    renderIntelligenceDashboard();
+    registrarLog('CONFIGURAÇÃO DE DIREÇÃO', `${item.indicador} (${item.setor}): ${INTELLIGENCE_DIRECTION_LABELS[previousDirection] || 'pendente'} → ${INTELLIGENCE_DIRECTION_LABELS[direction] || 'pendente'}`);
+}
+
+function setMonthClosure(month, shouldClose) {
+    if (!mesesLabels.includes(month)) return Promise.resolve(false);
+    const isClosed = isIntelligenceMonthClosed(month);
+    if (isClosed === shouldClose) return Promise.resolve(false);
+
+    const closing = shouldClose;
+    return fireThemedAlert({
+        title: closing ? `Fechar ${escapeHtml(month)}?` : `Reabrir ${escapeHtml(month)}?`,
+        text: closing
+            ? 'O período global será marcado como confirmado e passará a participar das análises. Confirme que os dados foram revisados.'
+            : 'O período deixará de participar das comparações da Inteligência até ser fechado novamente. A ação será registrada na auditoria.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: closing ? '#d97706' : '#e11d48',
+        cancelButtonColor: '#475569',
+        confirmButtonText: closing ? 'Confirmar fechamento' : 'Confirmar reabertura',
+        cancelButtonText: 'Cancelar'
+    }).then(async result => {
+        if (!result.isConfirmed || isIntelligenceMonthClosed(month) !== isClosed) return false;
+
+        const action = closing ? 'FECHAMENTO MENSAL' : 'REABERTURA MENSAL';
+        const actor = currentSession?.user?.email || 'Usuário autenticado';
+        const auditRecorded = await registrarLog(action, `${month} · escopo global · responsável: ${actor}`);
+        if (!auditRecorded) {
+            showAlert('Auditoria indisponível', `Não foi possível registrar a ${closing ? 'confirmação' : 'reabertura'} de ${month}; o estado do mês não foi alterado. Verifique a conexão e tente novamente.`, 'error');
+            return false;
+        }
+
+        if (closing) {
+            fechamentosMensais[month] = {
+                closedAt: new Date().toISOString(),
+                closedBy: actor
+            };
+        } else {
+            delete fechamentosMensais[month];
+        }
+        markStateDirty();
+        renderGovernanceDashboard();
+        renderIntelligenceDashboard();
+        showAlert(closing ? 'Mês fechado' : 'Mês reaberto', `${month} foi ${closing ? 'fechado' : 'reaberto'} e a alteração foi registrada na auditoria. Salve o estado para persistir a governança.`, 'success');
+        return true;
+    });
+}
+
+function getIntelligenceDirection(item) {
+    return Object.prototype.hasOwnProperty.call(INTELLIGENCE_DIRECTION_LABELS, item?.direcaoDesempenho)
+        ? item.direcaoDesempenho
+        : null;
+}
+
+function getIntelligencePoints(item, periodMode = 'dashboard') {
+    const monthly = getMonthlyData(item);
+    let points = monthly.labels.map((month, index) => ({
+        month,
+        index,
+        value: monthly.values[index]
+    })).filter(point => point.value !== null && point.value !== undefined && Number.isFinite(Number(point.value)))
+        .map(point => ({ ...point, value: Number(point.value) }))
+        .filter(point => isIntelligenceMonthClosed(point.month));
+
+    if (periodMode === 'dashboard' && selectedDashboardMonths !== null) {
+        points = points.filter(point => selectedDashboardMonths.includes(point.month));
+    } else if (periodMode === 'last3') {
+        points = points.slice(-3);
+    } else if (periodMode === 'last6') {
+        points = points.slice(-6);
+    }
+    return points;
+}
+
+function getIntelligenceMedian(values) {
+    const sorted = [...values].sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function getIntelligenceTrend(points) {
+    if (points.length < 3) return null;
+    const recent = points.slice(-3);
+    const changes = recent.slice(1).map((point, index) => point.value - recent[index].value);
+    const allUp = changes.every(change => change > 0);
+    const allDown = changes.every(change => change < 0);
+    const baseline = Math.max(...recent.map(point => Math.abs(point.value)), 1);
+    const relativeRange = (Math.max(...recent.map(point => point.value)) - Math.min(...recent.map(point => point.value))) / baseline;
+
+    if (relativeRange <= 0.05) return { kind: 'stable', recent };
+    if (allUp) return { kind: 'up', recent };
+    if (allDown) return { kind: 'down', recent };
+
+    const longer = points.slice(-5);
+    const signs = longer.slice(1).map((point, index) => Math.sign(point.value - longer[index].value)).filter(Boolean);
+    const oscillations = signs.slice(1).filter((sign, index) => sign !== signs[index]).length;
+    return { kind: oscillations >= 2 ? 'oscillating' : 'variable', recent };
+}
+
+function getIntelligenceProjection(points) {
+    if (points.length < 4) return null;
+    const sample = points.slice(-6);
+    const meanX = sample.reduce((sum, point) => sum + point.index, 0) / sample.length;
+    const meanY = sample.reduce((sum, point) => sum + point.value, 0) / sample.length;
+    const numerator = sample.reduce((sum, point) => sum + (point.index - meanX) * (point.value - meanY), 0);
+    const denominator = sample.reduce((sum, point) => sum + (point.index - meanX) ** 2, 0);
+    if (!denominator) return null;
+    const slope = numerator / denominator;
+    const estimate = sample[sample.length - 1].value + slope;
+    if (!Number.isFinite(estimate)) return null;
+    return estimate;
+}
+
+function getIntelligenceSeverityForChange(item, change, changePercent) {
+    const direction = getIntelligenceDirection(item);
+    if (!direction || direction === 'neutro' || change === 0) return 'INFORMATIVO';
+    const isWorsening = direction === 'menor_melhor' ? change > 0 : change < 0;
+    if (!isWorsening) return 'INFORMATIVO';
+    if (changePercent === null) return 'ATENCAO';
+    const magnitude = Math.abs(changePercent);
+    if (magnitude >= 25) return 'CRITICO';
+    if (magnitude >= 10) return 'ATENCAO';
+    return 'INFORMATIVO';
+}
+
+function generateAutomaticAnalyses({ periodMode = 'dashboard', sector = 'TODOS', indicatorIndex = 'TODOS' } = {}) {
+    const analyses = [];
+    const eligible = currentData
+        .map((item, index) => ({ item, index }))
+        .filter(({ item, index }) => (sector === 'TODOS' || item.setor === sector)
+            && (indicatorIndex === 'TODOS' || String(index) === String(indicatorIndex)));
+
+    eligible.forEach(({ item, index }) => {
+        const points = getIntelligencePoints(item, periodMode);
+        const direction = getIntelligenceDirection(item);
+        const base = {
+            indicator: item.indicador || 'Indicador sem nome',
+            sector: item.setor || 'Setor não informado',
+            indicatorIndex: index,
+            direction,
+            unit: item.und || '',
+            points
+        };
+        const add = analysis => analyses.push({ ...base, ...analysis });
+
+        if (typeof item.ultimaAtualizacao !== 'string' || !Number.isFinite(Date.parse(item.ultimaAtualizacao))) {
+            add({
+                category: 'freshness',
+                severity: 'INFORMATIVO',
+                title: 'Data de atualização indisponível',
+                period: 'Registro legado ou sem data',
+                current: null,
+                previous: null,
+                change: null,
+                changePercent: null,
+                explanation: 'Não há uma data confiável registrada para a última atualização deste indicador. O sistema não atribuiu uma data retroativa.',
+                recommendation: 'A data será registrada automaticamente quando os valores deste indicador forem alterados ou importados.',
+                calculation: 'Campo ultimaAtualizacao ausente ou inválido; não foi estimada a idade do dado.'
+            });
+        } else {
+            const ageDays = Math.floor((Date.now() - Date.parse(item.ultimaAtualizacao)) / 86400000);
+            if (ageDays >= 45) {
+                add({
+                    category: 'freshness',
+                    severity: 'ATENCAO',
+                    title: 'Atualização antiga',
+                    period: formatIndicatorUpdatedAt(item.ultimaAtualizacao),
+                    current: null,
+                    previous: null,
+                    change: null,
+                    changePercent: null,
+                    explanation: `A última atualização registrada ocorreu há ${ageDays} dias. O limite de acompanhamento adotado é 45 dias; isso indica idade do registro, não prova que os dados estejam incorretos.`,
+                    recommendation: 'Confirme com o setor responsável se houve atualização mais recente dos valores.',
+                    calculation: `Idade calculada a partir de ultimaAtualizacao: ${ageDays} dia(s); critério informativo do sistema: 45 dias.`
+                });
+            }
+        }
+
+        if (points.length < 2) {
+            add({
+                category: 'insufficient',
+                severity: 'INFORMATIVO',
+                title: points.length
+                    ? 'Histórico insuficiente para comparar'
+                    : mesesLabels.some(month => !isIntelligenceMonthClosed(month))
+                        ? 'Nenhum mês fechado disponível para análise'
+                        : 'Sem dados válidos no período',
+                period: points[0]?.month || 'Período selecionado',
+                current: points[0]?.value ?? null,
+                previous: null,
+                change: null,
+                changePercent: null,
+                explanation: points.length
+                    ? 'Há apenas um valor numérico disponível; não é possível calcular variação ou tendência com confiança.'
+                    : mesesLabels.some(month => !isIntelligenceMonthClosed(month))
+                        ? 'Os valores dos meses abertos são mantidos fora das comparações até o fechamento manual do período.'
+                        : 'Não há valores numéricos disponíveis para este indicador nos meses fechados selecionados.',
+                recommendation: points.length
+                    ? 'Feche outros períodos manualmente ou aguarde novos registros fechados antes de avaliar tendências.'
+                    : 'Feche os meses apropriados na aba Governança e confirme que os valores foram informados.',
+                calculation: `Pontos numéricos em meses fechados: ${points.length}. Valores nulos e períodos abertos foram ignorados.`
+            });
+            return;
+        }
+
+        const current = points[points.length - 1];
+        const previous = points[points.length - 2];
+        const change = current.value - previous.value;
+        const changePercent = previous.value === 0 ? null : (change / Math.abs(previous.value)) * 100;
+
+        if (change !== 0) {
+            const movement = change > 0 ? 'aumento' : 'redução';
+            const directionText = !direction || direction === 'neutro'
+                ? 'A variação é descritiva; a direção de desempenho não permite afirmar melhora ou piora.'
+                : direction === 'menor_melhor'
+                    ? (change < 0 ? 'A variação favorece a direção configurada.' : 'A variação é contrária à direção configurada.')
+                    : (change > 0 ? 'A variação favorece a direção configurada.' : 'A variação é contrária à direção configurada.');
+            add({
+                category: 'variation',
+                severity: getIntelligenceSeverityForChange(item, change, changePercent),
+                title: `${movement[0].toUpperCase()}${movement.slice(1)} em relação ao registro anterior`,
+                period: `${previous.month} → ${current.month}`,
+                current: current.value,
+                previous: previous.value,
+                change,
+                changePercent,
+                explanation: `O valor passou de ${formatChartValue(previous.value, item.und)} em ${previous.month} para ${formatChartValue(current.value, item.und)} em ${current.month}. ${changePercent === null ? 'A variação percentual não foi calculada porque o valor anterior é zero.' : `Variação de ${Math.abs(changePercent).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%.`} ${directionText}`,
+                recommendation: direction && direction !== 'neutro'
+                    ? (getIntelligenceSeverityForChange(item, change, changePercent) === 'CRITICO' || getIntelligenceSeverityForChange(item, change, changePercent) === 'ATENCAO'
+                        ? 'Verifique os registros deste período e acompanhe o próximo valor antes de atribuir causas.'
+                        : 'Mantenha o acompanhamento da série para confirmar a evolução.')
+                    : 'Configure a direção de desempenho no cadastro para habilitar interpretações de melhora ou piora.',
+                calculation: `Variação absoluta: ${formatChartValue(change, item.und)}. Fórmula percentual: (atual − anterior) ÷ |anterior| × 100${previous.value === 0 ? '; indisponível com base zero' : ` = ${changePercent.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`}.`
+            });
+        }
+
+        const meta = item.meta === '' || item.meta === null || item.meta === undefined ? NaN : Number(item.meta);
+        if (Number.isFinite(meta) && direction && direction !== 'neutro') {
+            const isBelowHigherTarget = direction === 'maior_melhor' && current.value < meta;
+            const isAboveLowerTarget = direction === 'menor_melhor' && current.value > meta;
+            const isMet = !isBelowHigherTarget && !isAboveLowerTarget;
+            const distance = direction === 'maior_melhor' ? meta - current.value : current.value - meta;
+            const relativeDistance = meta === 0 ? (distance > 0 ? Infinity : 0) : distance / Math.abs(meta);
+            const severity = isMet
+                ? 'INFORMATIVO'
+                : relativeDistance >= 0.15
+                    ? 'CRITICO'
+                    : 'ATENCAO';
+            const attainment = direction === 'maior_melhor'
+                ? (meta > 0 ? Math.min(100, Math.max(0, current.value / meta * 100)) : null)
+                : (current.value === 0 ? 100 : meta > 0 ? Math.min(100, Math.max(0, meta / current.value * 100)) : null);
+            add({
+                category: 'target',
+                severity,
+                title: isMet ? 'Meta atingida' : relativeDistance <= 0.1 ? 'Próximo do limite da meta' : 'Desvio em relação à meta',
+                period: current.month,
+                current: current.value,
+                previous: null,
+                change: null,
+                changePercent: null,
+                explanation: isMet
+                    ? `O valor de ${formatChartValue(current.value, item.und)} atende à meta de ${formatChartValue(meta, item.und)} segundo a direção configurada (${INTELLIGENCE_DIRECTION_LABELS[direction]}).`
+                    : `O valor atual é ${formatChartValue(current.value, item.und)} e a meta é ${formatChartValue(meta, item.und)} (${direction === 'maior_melhor' ? 'maior é melhor' : 'menor é melhor'}).${attainment === null ? '' : ` Atingimento estimado: ${attainment.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%.`}`,
+                recommendation: isMet
+                    ? 'Continue acompanhando a série para confirmar a manutenção do resultado.'
+                    : 'Acompanhe o indicador e revise os registros relacionados; esta comparação não identifica causas.',
+                calculation: `Distância absoluta até a meta: ${formatChartValue(Math.abs(current.value - meta), item.und)}.${relativeDistance === Infinity ? ' Meta igual a zero; distância percentual relativa não se aplica.' : ` Direção aplicada: ${INTELLIGENCE_DIRECTION_LABELS[direction]}.`}`
+            });
+        }
+
+        const trend = getIntelligenceTrend(points);
+        if (trend) {
+            const recentValues = points.slice(-3).map(point => point.value);
+            const avg3 = recentValues.reduce((sum, value) => sum + value, 0) / recentValues.length;
+            const last6 = points.slice(-6).map(point => point.value);
+            const avg6 = last6.length === 6 ? last6.reduce((sum, value) => sum + value, 0) / last6.length : null;
+            const projection = getIntelligenceProjection(points);
+            const lowestPoint = points.reduce((lowest, point) => point.value < lowest.value ? point : lowest);
+            const highestPoint = points.reduce((highest, point) => point.value > highest.value ? point : highest);
+            const bestPoint = direction === 'maior_melhor' ? highestPoint : direction === 'menor_melhor' ? lowestPoint : null;
+            const worstPoint = direction === 'maior_melhor' ? lowestPoint : direction === 'menor_melhor' ? highestPoint : null;
+            const descriptions = {
+                up: direction === 'menor_melhor' ? 'Crescimento contínuo, contrário à direção configurada.' : direction === 'maior_melhor' ? 'Crescimento contínuo, favorável à direção configurada.' : 'Crescimento contínuo observado, sem interpretação de desempenho.',
+                down: direction === 'maior_melhor' ? 'Redução contínua, contrária à direção configurada.' : direction === 'menor_melhor' ? 'Redução contínua, favorável à direção configurada.' : 'Redução contínua observada, sem interpretação de desempenho.',
+                stable: 'Os três últimos valores apresentam variação relativa de até 5%; a série está estável neste recorte.',
+                oscillating: 'A série alternou direção em mais de um dos últimos intervalos; há oscilação frequente neste recorte.',
+                variable: 'Os últimos valores variaram sem uma direção contínua identificável.'
+            };
+            const trendIsWorse = (trend.kind === 'up' && direction === 'menor_melhor') || (trend.kind === 'down' && direction === 'maior_melhor');
+            add({
+                category: 'trend',
+                severity: trendIsWorse ? 'ATENCAO' : 'INFORMATIVO',
+                title: ({ up: 'Tendência de crescimento', down: 'Tendência de redução', stable: 'Indicador estável', oscillating: 'Oscilações frequentes', variable: 'Comportamento variável' })[trend.kind],
+                period: trend.recent.map(point => point.month).join(' → '),
+                current: current.value,
+                previous: null,
+                change: null,
+                changePercent: null,
+                explanation: `${descriptions[trend.kind]} ${bestPoint && worstPoint
+                    ? `Melhor resultado registrado: ${formatChartValue(bestPoint.value, item.und)} (${bestPoint.month}); pior resultado: ${formatChartValue(worstPoint.value, item.und)} (${worstPoint.month}).`
+                    : `Menor registro: ${formatChartValue(lowestPoint.value, item.und)} (${lowestPoint.month}); maior registro: ${formatChartValue(highestPoint.value, item.und)} (${highestPoint.month}).`}`,
+                recommendation: trendIsWorse
+                    ? 'Acompanhe os próximos registros e investigue os dados operacionais relacionados, sem presumir causalidade.'
+                    : direction && direction !== 'neutro' && trend.kind !== 'stable'
+                        ? 'Mantenha as práticas atuais sob acompanhamento para verificar se a tendência se confirma.'
+                        : 'Use novos períodos para confirmar se o comportamento observado se mantém.',
+                calculation: `Média dos últimos 3 registros válidos: ${formatChartValue(avg3, item.und)}.${avg6 === null ? ' Ainda não há seis registros válidos para média semestral.' : ` Média dos últimos 6 registros válidos: ${formatChartValue(avg6, item.und)}.`}${projection === null ? ' Projeção indisponível: histórico insuficiente.' : ` Estimativa linear para o próximo período: ${formatChartValue(projection, item.und)} (estimativa, não garantia).`}`
+            });
+        }
+
+        if (points.length >= 6) {
+            const values = points.map(point => point.value);
+            const median = getIntelligenceMedian(values);
+            const deviations = values.map(value => Math.abs(value - median));
+            const mad = getIntelligenceMedian(deviations);
+            const currentDeviation = Math.abs(current.value - median);
+            const threshold = mad > 0 ? 3.5 * 1.4826 * mad : Math.max(Math.abs(median) * 0.1, 1);
+            if (currentDeviation > threshold) {
+                const anomalyWorsens = direction === 'menor_melhor'
+                    ? current.value > median
+                    : direction === 'maior_melhor' ? current.value < median : false;
+                add({
+                    category: 'anomaly',
+                    severity: anomalyWorsens ? 'ATENCAO' : 'INFORMATIVO',
+                    title: 'Variação atípica identificada',
+                    period: current.month,
+                    current: current.value,
+                    previous: median,
+                    change: current.value - median,
+                    changePercent: median === 0 ? null : ((current.value - median) / Math.abs(median)) * 100,
+                    explanation: `O valor atual (${formatChartValue(current.value, item.und)}) se distancia da mediana histórica (${formatChartValue(median, item.und)}). O método robusto foi aplicado com ${points.length} registros válidos; isso sinaliza uma diferença estatística, não sua causa.`,
+                    recommendation: 'Confira o registro deste período e os dados de origem antes de tomar uma decisão operacional.',
+                    calculation: `Mediana: ${formatChartValue(median, item.und)}; desvio absoluto mediano (MAD): ${formatChartValue(mad, item.und)}; limiar robusto: ${formatChartValue(threshold, item.und)}.`
+                });
+            }
+        }
+    });
+
+    return analyses;
+}
+
+const INTELLIGENCE_CATEGORY_LABELS = {
+    variation: 'Variação mensal',
+    target: 'Meta',
+    trend: 'Tendência',
+    anomaly: 'Anomalia',
+    freshness: 'Atualização',
+    insufficient: 'Dados insuficientes'
+};
+
+function populateIntelligenceFilters() {
+    const sectorSelect = document.getElementById('intelligenceSectorFilter');
+    const indicatorSelect = document.getElementById('intelligenceIndicatorFilter');
+    if (!sectorSelect || !indicatorSelect) return;
+
+    const previousSector = sectorSelect.value || 'TODOS';
+    const previousIndicator = indicatorSelect.value || 'TODOS';
+    sectorSelect.replaceChildren(new Option('Todos os setores', 'TODOS'));
+    [...new Set(currentData.map(item => item.setor).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+        .forEach(sector => sectorSelect.add(new Option(sector, sector)));
+    if ([...sectorSelect.options].some(option => option.value === previousSector)) sectorSelect.value = previousSector;
+
+    indicatorSelect.replaceChildren(new Option('Todos os indicadores', 'TODOS'));
+    currentData.forEach((item, index) => {
+        if (sectorSelect.value !== 'TODOS' && item.setor !== sectorSelect.value) return;
+        indicatorSelect.add(new Option(item.indicador || `Indicador ${index + 1}`, String(index)));
+    });
+    if ([...indicatorSelect.options].some(option => option.value === previousIndicator)) indicatorSelect.value = previousIndicator;
+}
+
+function getIntelligencePeriodLabel(mode) {
+    const closedMonths = mesesLabels.filter(month => isMonthLabel(month) && isIntelligenceMonthClosed(month));
+    if (mode === 'last3') return 'Últimos 3 meses fechados disponíveis';
+    if (mode === 'last6') return 'Últimos 6 meses fechados disponíveis';
+    const months = mode === 'dashboard' && selectedDashboardMonths !== null
+        ? closedMonths.filter(month => selectedDashboardMonths.includes(month))
+        : closedMonths;
+    return months.length ? months.join(', ') : 'Nenhum mês fechado disponível no período selecionado';
+}
+
+function appendIntelligenceText(parent, tagName, text, className = '') {
+    const element = document.createElement(tagName);
+    element.textContent = text;
+    if (className) element.className = className;
+    parent.appendChild(element);
+    return element;
+}
+
+async function renderIntelligenceDashboard() {
+    const list = document.getElementById('intelligenceAnalysisList');
+    const status = document.getElementById('intelligenceStatus');
+    if (!list || !status) return;
+
+    const renderRevision = ++intelligenceRenderRevision;
+    status.className = 'rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-slate-300';
+    status.textContent = 'Processando os indicadores e períodos disponíveis...';
+    list.replaceChildren();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    if (renderRevision !== intelligenceRenderRevision) return;
+
+    try {
+        populateIntelligenceFilters();
+        const periodMode = document.getElementById('intelligencePeriodFilter')?.value || 'dashboard';
+        const sector = document.getElementById('intelligenceSectorFilter')?.value || 'TODOS';
+        const indicatorIndex = document.getElementById('intelligenceIndicatorFilter')?.value || 'TODOS';
+        const generated = generateAutomaticAnalyses({ periodMode, sector, indicatorIndex });
+        const severityFilter = document.getElementById('intelligenceSeverityFilter')?.value || 'TODOS';
+        const categoryFilter = document.getElementById('intelligenceCategoryFilter')?.value || 'TODOS';
+        const filtered = generated.filter(analysis => (severityFilter === 'TODOS' || analysis.severity === severityFilter)
+            && (categoryFilter === 'TODOS' || analysis.category === categoryFilter));
+        filtered.sort((a, b) => ({ CRITICO: 0, ATENCAO: 1, INFORMATIVO: 2 }[a.severity] - { CRITICO: 0, ATENCAO: 1, INFORMATIVO: 2 }[b.severity]));
+        const visible = filtered.slice(0, intelligenceVisibleLimit);
+        const loadMoreButton = document.getElementById('intelligenceLoadMore');
+        if (loadMoreButton) loadMoreButton.classList.toggle('hidden', visible.length >= filtered.length);
+
+        const counts = generated.reduce((result, analysis) => {
+            result[analysis.severity] += 1;
+            return result;
+        }, { CRITICO: 0, ATENCAO: 0, INFORMATIVO: 0 });
+        document.getElementById('intelligenceCriticalCount').textContent = counts.CRITICO;
+        document.getElementById('intelligenceAttentionCount').textContent = counts.ATENCAO;
+        document.getElementById('intelligenceInfoCount').textContent = counts.INFORMATIVO;
+        document.getElementById('intelligencePeriodLabel').textContent = getIntelligencePeriodLabel(periodMode);
+        document.getElementById('intelligenceUpdatedAt').textContent = new Date().toLocaleString('pt-BR');
+
+        const configuredCandidates = currentData.filter(item => sector === 'TODOS' || item.setor === sector);
+        const unconfiguredCount = configuredCandidates.filter(item => !getIntelligenceDirection(item)).length;
+        status.className = 'rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-xs leading-relaxed text-slate-300';
+        const closedMonthCount = mesesLabels.filter(month => isMonthLabel(month) && isIntelligenceMonthClosed(month)).length;
+        const openMonthCount = mesesLabels.filter(month => isMonthLabel(month) && !isIntelligenceMonthClosed(month)).length;
+        status.textContent = `${visible.length} de ${filtered.length} análise(s) exibida(s) após os filtros (${generated.length} no conjunto selecionado). ${closedMonthCount} mês(es) fechado(s) participam das comparações; ${openMonthCount} mês(es) aberto(s) ficam fora. ${unconfiguredCount} indicador(es) ainda sem direção configurada; variações e tendências desses indicadores são somente descritivas.`;
+
+        if (filtered.length === 0) {
+            if (loadMoreButton) loadMoreButton.classList.add('hidden');
+            status.className = 'rounded-xl border border-slate-700 bg-slate-800/40 p-5 text-sm text-slate-300';
+            status.textContent = currentData.length === 0
+                ? 'Não há indicadores carregados para analisar.'
+                : 'Nenhuma análise corresponde aos filtros atuais. Amplie os filtros ou selecione outro período.';
+            appendIntelligenceText(list, 'div', 'Nenhuma análise encontrada para esta combinação de filtros.', 'col-span-full rounded-xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-400');
+            return;
+        }
+
+        const severityPresentation = {
+            CRITICO: { label: 'Crítico', icon: 'fa-triangle-exclamation', className: 'intelligence-analysis-critical' },
+            ATENCAO: { label: 'Atenção', icon: 'fa-circle-exclamation', className: 'intelligence-analysis-attention' },
+            INFORMATIVO: { label: 'Informativo', icon: 'fa-circle-info', className: 'intelligence-analysis-info' }
+        };
+
+        visible.forEach(analysis => {
+            const presentation = severityPresentation[analysis.severity];
+            const card = document.createElement('article');
+            card.className = `intelligence-analysis ${presentation.className} page-load-item`;
+            const top = document.createElement('div');
+            top.className = 'flex flex-wrap items-center justify-between gap-2';
+            const badge = document.createElement('span');
+            badge.className = 'inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide';
+            badge.innerHTML = `<i class="fa-solid ${presentation.icon}" aria-hidden="true"></i>`;
+            appendIntelligenceText(badge, 'span', presentation.label);
+            top.appendChild(badge);
+            appendIntelligenceText(top, 'span', INTELLIGENCE_CATEGORY_LABELS[analysis.category] || 'Análise', 'text-[10px] font-semibold text-slate-400');
+            card.appendChild(top);
+
+            appendIntelligenceText(card, 'h3', analysis.title, 'mt-3 text-sm font-bold text-white');
+            appendIntelligenceText(card, 'p', analysis.indicator, 'mt-1 text-xs font-semibold text-slate-200');
+            appendIntelligenceText(card, 'p', `${analysis.sector} · ${analysis.period}`, 'mt-1 text-[11px] text-slate-400');
+            appendIntelligenceText(card, 'p', analysis.explanation, 'mt-3 text-xs leading-relaxed text-slate-300');
+
+            const details = document.createElement('details');
+            details.className = 'mt-3 border-t border-slate-700/70 pt-3';
+            appendIntelligenceText(details, 'summary', 'Ver cálculo e recomendação', 'cursor-pointer text-xs font-semibold text-amber-400');
+            appendIntelligenceText(details, 'p', analysis.calculation, 'mt-2 text-[11px] leading-relaxed text-slate-400');
+            appendIntelligenceText(details, 'p', `Recomendação: ${analysis.recommendation}`, 'mt-2 text-xs leading-relaxed text-slate-300');
+            if (analysis.direction) appendIntelligenceText(details, 'p', `Direção configurada: ${INTELLIGENCE_DIRECTION_LABELS[analysis.direction]}.`, 'mt-2 text-[11px] text-slate-400');
+            card.appendChild(details);
+
+            if (Number.isInteger(analysis.indicatorIndex) && currentData[analysis.indicatorIndex]) {
+                const inspectButton = document.createElement('button');
+                inspectButton.type = 'button';
+                inspectButton.className = 'mt-3 inline-flex items-center gap-2 text-xs font-semibold text-amber-400 transition hover:text-amber-300';
+                inspectButton.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Inspecionar indicador';
+                inspectButton.addEventListener('click', () => openDetailModal(analysis.indicatorIndex));
+                card.appendChild(inspectButton);
+            }
+            list.appendChild(card);
+        });
+        initPXStyleAnimations(list);
+    } catch (error) {
+        console.error('Erro ao processar análises de indicadores:', error);
+        status.className = 'rounded-xl border border-rose-500/30 bg-rose-500/5 p-5 text-sm text-rose-300';
+        status.textContent = 'Não foi possível processar as análises. Confira os dados dos indicadores e tente atualizar novamente.';
+        appendIntelligenceText(list, 'div', 'Erro ao processar os indicadores.', 'rounded-xl border border-rose-500/20 p-5 text-sm text-rose-300');
+    }
 }
 
 // CÁLCULOS ANALÍTICOS DINÂMICOS
@@ -2339,6 +3085,7 @@ function refreshDetailModal(index) {
 
     document.getElementById('modalDetailSetor').textContent = item.setor;
     document.getElementById('modalDetailTitle').textContent = item.indicador;
+    document.getElementById('modalDetailUpdatedAt').textContent = `Última atualização: ${formatIndicatorUpdatedAt(item.ultimaAtualizacao)}`;
     document.getElementById('modalDetailMeta').textContent = fmtVal(item.meta, item.und);
     document.getElementById('modalDetailLastLabel').textContent = `Último Valor (${m.lastMonth})`;
     document.getElementById('modalDetailLast').textContent = fmtVal(m.last, item.und);
@@ -2400,10 +3147,11 @@ function renderMonthlyInputs(valoresArray = []) {
 
     mesesLabels.forEach((mes, idx) => {
         const val = (valoresArray[idx] !== undefined && valoresArray[idx] !== null) ? valoresArray[idx] : '';
+        const closed = isIntelligenceMonthClosed(mes);
         const div = document.createElement('div');
         div.innerHTML = `
-            <label for="val_${idx}" class="text-[10px] text-slate-400 block mb-0.5">${escapeHtml(mes)}</label>
-            <input type="number" step="any" id="val_${idx}" value="${val}" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-lg p-2 font-mono">
+            <label for="val_${idx}" class="text-[10px] ${closed ? 'text-amber-400' : 'text-slate-400'} block mb-0.5">${escapeHtml(mes)}${closed ? ' · Fechado' : ''}</label>
+            <input type="number" step="any" id="val_${idx}" value="${val}" ${closed ? 'disabled title="Reabra o mês na aba Governança para alterar este valor"' : ''} class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-lg p-2 font-mono disabled:cursor-not-allowed disabled:opacity-60">
         `;
         container.appendChild(div);
     });
@@ -2417,6 +3165,7 @@ function openNewIndicatorModal() {
     document.getElementById('editIndicador').value = '';
     document.getElementById('editMeta').value = '';
     document.getElementById('editUnd').value = 'Qtd';
+    document.getElementById('editDirection').value = '';
     
     renderMonthlyInputs([]);
     document.getElementById('modalEdit').classList.remove('hidden');
@@ -2431,6 +3180,7 @@ function openEditModal(index) {
     document.getElementById('editIndicador').value = item.indicador;
     document.getElementById('editMeta').value = item.meta ?? '';
     document.getElementById('editUnd').value = item.und;
+    document.getElementById('editDirection').value = getIntelligenceDirection(item) || '';
     
     renderMonthlyInputs(monthly.values);
     document.getElementById('modalEdit').classList.remove('hidden');
@@ -2439,6 +3189,7 @@ function openEditModal(index) {
 async function saveIndicatorForm(e) {
     e.preventDefault();
     const idx = parseInt(document.getElementById('editIndex').value);
+    const metaInput = document.getElementById('editMeta').value.trim();
     const vals = [];
 
     mesesLabels.forEach((_, i) => {
@@ -2450,10 +3201,23 @@ async function saveIndicatorForm(e) {
     const newItem = {
         setor: document.getElementById('editSetor').value,
         indicador: document.getElementById('editIndicador').value,
-        meta: parseFloat(document.getElementById('editMeta').value) || 0,
+        meta: metaInput === '' ? null : Number(metaInput),
         und: document.getElementById('editUnd').value,
+        direcaoDesempenho: document.getElementById('editDirection').value || null,
         valores: vals
     };
+
+    const previousItem = idx >= 0 ? currentData[idx] : null;
+    const closedMonthError = findClosedMonthMutation(previousItem ? [previousItem] : [], [newItem], mesesLabels, mesesLabels);
+    if (closedMonthError) {
+        showAlert('Mês fechado protegido', closedMonthError, 'warning');
+        return;
+    }
+    if (indicatorValuesChanged(previousItem, newItem.valores)) {
+        newItem.ultimaAtualizacao = new Date().toISOString();
+    } else if (previousItem?.ultimaAtualizacao) {
+        newItem.ultimaAtualizacao = previousItem.ultimaAtualizacao;
+    }
 
     if (idx === -1) {
         currentData.push(newItem);
@@ -2508,7 +3272,7 @@ document.addEventListener('keydown', event => {
 async function registrarLog(acao, detalhes = '') {
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
-        if (!session) return;
+        if (!session) return false;
 
         const response = await fetch(`${SUPABASE_URL}/rest/v1/audit_logs`, {
             method: 'POST',
@@ -2526,8 +3290,10 @@ async function registrarLog(acao, detalhes = '') {
         });
 
         if (!response.ok) throw new Error(`Supabase HTTP ${response.status}`);
+        return true;
     } catch (error) {
         console.error('Erro ao registrar log de auditoria:', error);
+        return false;
     }
 }
 
@@ -2599,11 +3365,16 @@ function copyRawJSON() {
 function applyRawJSON() {
     try {
         const parsed = JSON.parse(document.getElementById('jsonEditor').value);
-        saveData(parsed);
+        if (!Array.isArray(parsed)) throw new Error('A raiz do JSON deve ser uma lista de indicadores.');
+        const closedMonthError = findClosedMonthMutation(currentData, parsed);
+        if (closedMonthError) throw new Error(closedMonthError);
+        const updatedData = applyIndicatorUpdateMetadata(parsed);
+        saveData(updatedData);
         initSystem();
+        registrarLog('IMPORTAÇÃO JSON', `Indicadores substituídos por edição JSON: ${updatedData.length}`);
         showAlert('Sucesso!', 'Alterações salvas com sucesso!', 'success');
-    } catch(e) {
-        showAlert('Erro na validação', 'Verifique a sintaxe do JSON.', 'error');
+    } catch(error) {
+        showAlert('Erro na validação', error.message || 'Verifique a sintaxe do JSON.', 'error');
     }
 }
 
@@ -2713,6 +3484,29 @@ str = str.replace(/\./g, '').replace(',', '.');
     return isNaN(num) ? null : num;
 }
 
+function normalizeIndicatorDirection(value) {
+    const normalized = String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s-]+/g, '_');
+    if (['menor_melhor', 'menor_e_melhor', 'menor', 'lower_is_better'].includes(normalized)) return 'menor_melhor';
+    if (['maior_melhor', 'maior_e_melhor', 'maior', 'higher_is_better'].includes(normalized)) return 'maior_melhor';
+    if (['neutro', 'neutra', 'neutral', 'nao_definida', 'sem_direcao'].includes(normalized)) return 'neutro';
+    return null;
+}
+
+function getIndicatorIdentity(sector, indicator) {
+    const normalize = value => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return `${normalize(sector)}::${normalize(indicator)}`;
+}
+
+function groupIndicatorsByIdentity(indicators) {
+    const groups = new Map();
+    (Array.isArray(indicators) ? indicators : []).forEach(item => {
+        const identity = getIndicatorIdentity(item.setor, item.indicador);
+        if (!groups.has(identity)) groups.set(identity, []);
+        groups.get(identity).push(item);
+    });
+    return groups;
+}
+
 // Processador de arquivo com detecção de encoding UTF-8 / ISO
 function processCSV(file) {
     const reader = new FileReader();
@@ -2756,10 +3550,16 @@ complete: function(results) {
     }
 
     const headerRow = rows[headerIndex].map(c => cleanStr(c));
+    const previousMonths = [...mesesLabels];
+    const previousData = currentData;
+    const normalizedHeaders = headerRow.map(header => header.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, ''));
+    const directionColumnIndex = normalizedHeaders.findIndex(header => ['direcao', 'direcaodesempenho', 'direcaodedesempenho'].includes(header));
+    const savedDirections = groupIndicatorsByIdentity(previousData);
+    const directionOccurrences = new Map();
     
     // Identifica onde começam os meses sem tratar a coluna Ano como dado mensal
     const metadataHeaders = new Set([
-        'setor', 'indicador', 'meta', 'und', 'unidade', 'direcao', 'direção', 'ano'
+        'setor', 'indicador', 'meta', 'und', 'unidade', 'direcao', 'direção', 'direcao de desempenho', 'ano'
     ]);
     const monthRegex = /^(jan|janeiro|fev|fevereiro|mar|março|marco|abr|abril|mai|maio|jun|junho|jul|julho|ago|agosto|setembro|out|outubro|nov|novembro|dez|dezembro|\d{1,2}\/\d{2,4})/i;
     let valStartIdx = -1;
@@ -2778,29 +3578,42 @@ complete: function(results) {
         .map((header, index) => ({ header, index }))
         .filter(({ header, index }) => index >= valStartIdx && isMonthLabel(header));
     const extractedMonths = monthIndexes.map(({ header }) => header);
-    if (extractedMonths.length > 0) {
-        syncMonthLabels(extractedMonths);
-    }
 
     // Extrai as linhas de dados
     for (let i = headerIndex + 1; i < rows.length; i++) {
         const row = rows[i].map(c => cleanStr(c));
         if (row.length > 1 && row[0] !== '') {
+            const identity = getIndicatorIdentity(row[0], row[1] || '');
+            const occurrence = directionOccurrences.get(identity) || 0;
+            directionOccurrences.set(identity, occurrence + 1);
+            const direction = directionColumnIndex >= 0
+                ? normalizeIndicatorDirection(row[directionColumnIndex])
+                : getIntelligenceDirection(savedDirections.get(identity)?.[occurrence]) || null;
             newParsed.push({
                 setor: row[0],
                 indicador: row[1] || '',
                 meta: parsePtNum(row[2]),
                 und: row[3] || 'Qtd',
+                direcaoDesempenho: direction,
                 valores: monthIndexes.map(({ index }) => parsePtNum(row[index]))
             });
         }
     }
 
     if (newParsed.length > 0) {
-        saveData(newParsed);
+        const nextMonths = extractedMonths.length ? extractedMonths : previousMonths;
+        const closedMonthError = findClosedMonthMutation(previousData, newParsed, previousMonths, nextMonths);
+        if (closedMonthError) {
+            showAlert('Mês fechado protegido', closedMonthError, 'warning');
+            return;
+        }
+        if (extractedMonths.length) syncMonthLabels(extractedMonths);
+        const updatedData = applyIndicatorUpdateMetadata(newParsed, previousData);
+        saveData(updatedData);
         initSystem();
+        registrarLog('IMPORTAÇÃO CSV', `Indicadores importados de ${sourceName}: ${updatedData.length}`);
         if (!silencioso) {
-            showAlert('Sucesso!', `${newParsed.length} indicadores atualizados com ${mesesLabels.length} meses.`, 'success');
+            showAlert('Sucesso!', `${updatedData.length} indicadores atualizados com ${mesesLabels.length} meses.`, 'success');
         }
     } else {
         if (!silencioso) {
@@ -2812,7 +3625,7 @@ complete: function(results) {
 }
 
 function exportToCSV() {
-    const headers = ['Setor', 'Indicador', 'Meta', 'Und.', ...mesesLabels];
+    const headers = ['Setor', 'Indicador', 'Meta', 'Und.', 'Direção', ...mesesLabels];
     const escapeCSV = value => {
         const text = value === null || value === undefined ? '' : String(value);
         return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -2823,6 +3636,7 @@ function exportToCSV() {
         item.indicador,
         item.meta,
         item.und,
+        item.direcaoDesempenho || '',
         ...mesesLabels.map((_, index) => item.valores?.[index] ?? '')
     ]);
 
@@ -2868,9 +3682,11 @@ function resetData() {
         loadStoredDashboards();
         activeDashboardId = dashboards[0].id;
         showDataLabels = false;
+        fechamentosMensais = {};
         applyTheme('dark');
         initSystem();
         markStateDirty();
+        registrarLog('RESTAURAÇÃO DE DADOS', 'Dados padrões restaurados; fechamentos mensais removidos');
 
         fireThemedAlert({
             title: 'Dados restaurados!',

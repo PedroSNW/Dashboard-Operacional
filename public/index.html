@@ -20,7 +20,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="style.css?v=governance-20261110-3">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <section id="authScreen" class="flex items-center justify-center p-4">
@@ -69,6 +69,8 @@
                 <button onclick="switchTab('home')" id="tab-home" title="Início" aria-label="Início" class="tab-btn active flex shrink-0 items-center justify-center rounded-lg px-3.5 py-2 text-base text-slate-300 transition hover:text-white"><i class="fa-solid fa-house text-amber-400" aria-hidden="true"></i></button>
                 <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-chart-pie text-amber-400"></i> Executive Dashboard</button>
                 <button onclick="switchTab('datagrid')" id="tab-datagrid" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-table"></i> Consulta &amp; Repositório</button>
+                <button onclick="switchTab('intelligence')" id="tab-intelligence" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-chart-line text-amber-400"></i> Inteligência de Indicadores</button>
+                <button onclick="switchTab('governance')" id="tab-governance" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-sliders text-amber-400"></i> Governança</button>
                 <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i id="developerModeLockIcon" class="fa-solid fa-lock text-rose-400" aria-hidden="true"></i><span>Auditoria &amp; JSON Raw</span></button>
                 </nav>
             </div>
@@ -158,6 +160,82 @@
             <section id="dynamicChartsContainer" class="grid grid-cols-1 gap-6 lg:grid-cols-12"></section>
         </div>
 
+        <div id="view-intelligence" class="page-view hidden space-y-6">
+            <section class="glass-card flex flex-col justify-between gap-4 rounded-2xl p-5 lg:flex-row lg:items-center">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400"><i class="fa-solid fa-brain"></i> Núcleo Analítico D'Granel</div>
+                    <h2 class="text-xl font-bold text-white">Inteligência de Indicadores</h2>
+                    <p class="max-w-3xl text-xs leading-relaxed text-slate-300">Análises automáticas e acompanhamento estratégico dos indicadores de Segurança Viária.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="text-xs text-slate-400">Análises atualizadas <span id="intelligenceUpdatedAt" class="font-semibold text-slate-200">Aguardando análise</span><div>Período: <span id="intelligencePeriodLabel" class="font-semibold text-slate-200">-</span></div></div>
+                    <button id="refreshIntelligenceButton" type="button" onclick="renderIntelligenceDashboard()" class="flex items-center gap-2 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-400"><i class="fa-solid fa-rotate"></i> Atualizar análises</button>
+                </div>
+            </section>
+
+            <p class="rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-xs leading-relaxed text-slate-400"><i class="fa-solid fa-circle-info mr-1 text-sky-400"></i> Comparações e tendências usam somente meses fechados manualmente. Indicadores antigos sem registro de atualização são identificados como data indisponível, não como desatualizados.</p>
+
+            <section class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div class="intelligence-summary intelligence-summary-critical"><span>Crítico</span><strong id="intelligenceCriticalCount">0</strong></div>
+                <div class="intelligence-summary intelligence-summary-attention"><span>Atenção</span><strong id="intelligenceAttentionCount">0</strong></div>
+                <div class="intelligence-summary intelligence-summary-info"><span>Informativo</span><strong id="intelligenceInfoCount">0</strong></div>
+            </section>
+
+            <section class="glass-card space-y-4 rounded-2xl p-4">
+                <div class="flex items-center gap-2 text-xs font-bold text-slate-200"><i class="fa-solid fa-filter text-amber-400"></i> Filtros das análises</div>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <select id="intelligenceSectorFilter" aria-label="Filtrar por setor" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todos os setores</option></select>
+                    <select id="intelligenceIndicatorFilter" aria-label="Filtrar por indicador" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todos os indicadores</option></select>
+                    <select id="intelligencePeriodFilter" aria-label="Filtrar período" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="dashboard">Meses fechados do filtro do Dashboard</option><option value="last3">Últimos 3 meses fechados</option><option value="last6">Últimos 6 meses fechados</option><option value="all">Todos os meses fechados</option></select>
+                    <select id="intelligenceSeverityFilter" aria-label="Filtrar criticidade" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todas as criticidades</option><option value="CRITICO">Crítico</option><option value="ATENCAO">Atenção</option><option value="INFORMATIVO">Informativo</option></select>
+                    <select id="intelligenceCategoryFilter" aria-label="Filtrar categoria" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todas as categorias</option><option value="variation">Variação mensal</option><option value="target">Meta</option><option value="trend">Tendência</option><option value="anomaly">Anomalia</option><option value="freshness">Atualização</option><option value="insufficient">Dados insuficientes</option></select>
+                </div>
+            </section>
+
+            <section id="intelligenceStatus" class="hidden rounded-xl border border-slate-700 bg-slate-800/40 p-5 text-sm text-slate-300" role="status" aria-live="polite"></section>
+            <section id="intelligenceAnalysisList" class="grid grid-cols-1 gap-4 xl:grid-cols-2" aria-live="polite"></section>
+            <div class="flex justify-center"><button id="intelligenceLoadMore" type="button" class="hidden rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">Carregar mais análises</button></div>
+        </div>
+
+        <div id="view-governance" class="page-view hidden space-y-6">
+            <section class="glass-card flex flex-col justify-between gap-4 rounded-2xl p-5 lg:flex-row lg:items-center">
+                <div>
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400"><i class="fa-solid fa-shield-halved"></i> Qualidade e ciclo de dados</div>
+                    <h2 class="mt-1 text-xl font-bold text-white">Governança de Indicadores</h2>
+                    <p class="mt-1 text-xs text-slate-400">Configure a direção, acompanhe atualizações e confirme o fechamento mensal da base global.</p>
+                </div>
+            </section>
+
+            <section class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div class="governance-stat"><span>Indicadores configurados</span><strong id="governanceConfiguredCount">0</strong></div>
+                <div class="governance-stat"><span>Pendentes de direção</span><strong id="governancePendingCount">0</strong></div>
+                <div class="governance-stat"><span>Conclusão</span><strong id="governanceCompletionPercent">0%</strong></div>
+            </section>
+
+            <section class="glass-card space-y-4 rounded-2xl p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div><h3 class="text-sm font-bold text-white">Direção e atualização dos indicadores</h3><p class="mt-1 text-xs text-slate-400">Registros antigos sem data permanecem sem data até os valores serem alterados ou importados. O aviso de atualização antiga usa 45 dias como critério operacional.</p></div>
+                    <div class="flex flex-wrap gap-2">
+                        <input id="governanceSearch" type="search" placeholder="Buscar indicador ou setor" aria-label="Buscar indicador ou setor" class="min-w-[220px] rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200">
+                        <select id="governanceSectorFilter" aria-label="Filtrar setor na governança" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200"><option value="TODOS">Todos os setores</option></select>
+                        <select id="governanceDirectionFilter" aria-label="Filtrar direção na governança" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200"><option value="TODOS">Todas as direções</option><option value="PENDENTE">Pendente</option><option value="menor_melhor">Menor é melhor</option><option value="maior_melhor">Maior é melhor</option><option value="neutro">Neutra</option></select>
+                    </div>
+                </div>
+                <div class="overflow-x-auto rounded-xl border border-slate-800">
+                    <table class="w-full min-w-[820px] border-collapse text-left text-xs">
+                        <thead class="bg-[#0A1329] text-amber-400"><tr><th class="p-3">Setor</th><th class="p-3">Indicador</th><th class="p-3">Direção de desempenho</th><th class="p-3">Última atualização</th></tr></thead>
+                        <tbody id="governanceIndicatorRows" class="divide-y divide-slate-800/60 text-slate-300"></tbody>
+                    </table>
+                </div>
+                <p id="governanceIndicatorCount" class="text-xs text-slate-400" aria-live="polite"></p>
+            </section>
+
+            <section class="glass-card space-y-4 rounded-2xl p-4">
+                <div><h3 class="text-sm font-bold text-white">Fechamento mensal</h3><p class="mt-1 text-xs text-slate-400">O fechamento é global porque os meses são compartilhados por todos os indicadores, setores e dashboards. Nenhum mês é fechado automaticamente.</p></div>
+                <div id="governanceMonthClosures" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+            </section>
+        </div>
+
         <div id="view-datagrid" class="page-view hidden space-y-6">
             <section class="glass-card space-y-4 rounded-2xl p-5">
                 <div class="grid grid-cols-2 gap-4 border-b border-slate-800/80 pb-4 sm:grid-cols-4"><div class="rounded-xl border border-slate-800 bg-[#0A1329]/80 p-3"><div class="text-[11px] text-slate-400">Total de Indicadores</div><div id="statTotalRows" class="text-xl font-bold text-white">0</div></div><div class="rounded-xl border border-slate-800 bg-[#0A1329]/80 p-3"><div class="text-[11px] text-emerald-400">Dentro da Meta (em %)</div><div id="statMetaOk" class="text-xl font-bold text-emerald-400">0</div></div><div class="rounded-xl border border-slate-800 bg-[#0A1329]/80 p-3"><div class="text-[11px] text-rose-400">Abaixo da Meta</div><div id="statMetaOff" class="text-xl font-bold text-rose-400">0</div></div><div class="rounded-xl border border-slate-800 bg-[#0A1329]/80 p-3"><div class="text-[11px] text-amber-400">Setores Mapeados</div><div id="statSetoresCount" class="text-xl font-bold text-amber-300">0</div></div></div>
@@ -180,6 +258,7 @@
                 <div>
                     <span id="modalDetailSetor" class="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">SETOR</span>
                     <h3 id="modalDetailTitle" class="text-lg font-bold text-white mt-1">Nome do Indicador</h3>
+                    <p id="modalDetailUpdatedAt" class="mt-1 text-xs text-slate-400">Última atualização: data indisponível</p>
                 </div>
                 <button onclick="closeModal('modalDetail')" class="text-slate-400 hover:text-white p-2">
                     <i class="fa-solid fa-xmark text-lg"></i>
@@ -271,6 +350,16 @@
                 <div class="w-1/2">
                     <label for="editMeta" class="block text-xs text-slate-400 mb-1">Meta Desejada</label>
                     <input type="number" step="any" id="editMeta" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div>
+                    <label for="editDirection" class="block text-xs text-slate-400 mb-1">Direção de desempenho</label>
+                    <select id="editDirection" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                        <option value="">Não definida (análise descritiva)</option>
+                        <option value="menor_melhor">Menor é melhor</option>
+                        <option value="maior_melhor">Maior é melhor</option>
+                        <option value="neutro">Neutra (sem direção de desempenho)</option>
+                    </select>
                 </div>
 
                 <!-- VALORES MENSAIS DINÂMICOS -->
@@ -431,7 +520,7 @@
 
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
-        <script src="main.js"></script>
+        <script src="main.js?v=governance-20261110-6"></script>
 </body>
 </html>
 
