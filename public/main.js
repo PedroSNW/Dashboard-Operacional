@@ -2042,7 +2042,7 @@ function renderDynamicCharts() {
                     maxValue = Math.max(maxValue, Math.max(...values));
                 }
             });
-            maxValue = maxValue > 0 ? maxValue * 1.1 : 100; // Adiciona 10% de margem
+            maxValue = maxValue > 0 ? Math.ceil(maxValue * 1.1) : 100; // Adiciona 10% de margem
         }
 
         const scalesObj = {
