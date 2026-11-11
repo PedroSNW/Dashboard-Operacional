@@ -10,7 +10,7 @@ const MAX_PROMPT_CHARS = 1000;
 const MAX_CONCURRENT_REQUESTS_PER_INSTANCE = 3;
 const USER_RATE_LIMIT = 10;
 const USER_RATE_WINDOW_MS = 60_000;
-const GEMINI_TIMEOUT_MS = 15_000;
+const GEMINI_TIMEOUT_MS = 45_000;
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
@@ -180,6 +180,36 @@ function getGeminiModel(): string {
   return model;
 }
 
+/**
+ * Obtém a chave pública do Supabase com resolução em cascata:
+ * 1. SUPABASE_ANON_KEY (se disponível)
+ * 2. SUPABASE_PUBLISHABLE_KEYS (JSON, utilizando exclusivamente a propriedade 'default')
+ * Retorna string vazia se nenhuma chave for encontrada.
+ */
+function getSupabasePublicKey(): string {
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim();
+  if (anonKey) return anonKey;
+
+  const rawPublishableKeys = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")?.trim();
+  if (rawPublishableKeys) {
+    try {
+      const parsed = JSON.parse(rawPublishableKeys);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof parsed.default === "string" &&
+        parsed.default.trim()
+      ) {
+        return parsed.default.trim();
+      }
+    } catch {
+      // Ignora falha de parse JSON e retorna string vazia para validação controlada
+    }
+  }
+
+  return "";
+}
+
 serve(async (req: Request) => {
   // CORS preflight.
   if (req.method === "OPTIONS") {
@@ -227,16 +257,16 @@ serve(async (req: Request) => {
 
     // 2. Valida o JWT consultando o Supabase Auth no servidor.
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const supabaseKey = getSupabasePublicKey();
 
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseKey) {
       throw new HttpError(
         "Configuração do servidor Supabase incompleta.",
         500,
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabaseClient = createClient(supabaseUrl, supabaseKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -247,7 +277,7 @@ serve(async (req: Request) => {
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser(token);
+    } = await supabaseClient.auth.getUser(token);
 
     if (userError || !user?.id) {
       throw new HttpError(
@@ -434,6 +464,10 @@ serve(async (req: Request) => {
         error: error.message,
       }, error.status);
     }
+
+    // Registra diagnóstico sanitizado no servidor sem expor tokens, chaves, cabeçalhos ou payloads
+    const errorType = error instanceof Error ? error.name : "UnknownError";
+    console.error(`[Central IA Error] Tipo: ${errorType} | Falha não tratada durante a execução da função.`);
 
     // Não devolve mensagens, stack traces, tokens ou detalhes internos ao cliente.
     return jsonResponse(req, {
