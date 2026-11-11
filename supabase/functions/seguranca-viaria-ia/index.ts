@@ -10,7 +10,7 @@ const MAX_PROMPT_CHARS = 1000;
 const MAX_CONCURRENT_REQUESTS_PER_INSTANCE = 3;
 const USER_RATE_LIMIT = 10;
 const USER_RATE_WINDOW_MS = 60_000;
-const GEMINI_TIMEOUT_MS = 45_000;
+const GEMINI_TIMEOUT_MS = 35_000;
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
@@ -348,37 +348,70 @@ serve(async (req: Request) => {
       },
     };
 
-    // 6. Chama a Gemini API com timeout.
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(
-      () => abortController.abort(),
-      GEMINI_TIMEOUT_MS,
-    );
+    // 6. Chama a Gemini API com timeout e retry on 503 (up to 2 retries)
+    const maxAttempts = 3; // original request + 2 retries
+    let attempt = 0;
+    let geminiResponse: Response | null = null;
 
-    let geminiResponse: Response;
-    try {
-      geminiResponse = await fetch(geminiEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": geminiApiKey,
-        },
-        body: JSON.stringify(geminiPayload),
-        signal: abortController.signal,
-      });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+    // helper to pause between retries
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    while (attempt < maxAttempts) {
+      attempt++;
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), GEMINI_TIMEOUT_MS);
+      try {
+        geminiResponse = await fetch(geminiEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": geminiApiKey,
+          },
+          body: JSON.stringify(geminiPayload),
+          signal: abortController.signal,
+        });
+      } catch (error) {
+        // Log minimal diagnostic info – only the error name (no message, no credentials)
+        console.error("Gemini fetch error", { attempt, name: (error as any)?.name });
+        if (error instanceof DOMException && error.name === "AbortError") {
+          // Timeout – do NOT retry, propagate as 504
+          throw new HttpError(
+            "Tempo limite esgotado ao aguardar resposta da Gemini API.",
+            504,
+          );
+        }
+        // Other network failures – treat as generic 502 (no retry)
         throw new HttpError(
-          "Tempo limite esgotado ao aguardar resposta da Gemini API.",
-          504,
+          "Falha de conexão com a Gemini API. Tente novamente mais tarde.",
+          502,
         );
+      } finally {
+        clearTimeout(timeoutId);
       }
-      throw new HttpError(
-        "Falha de conexão com a Gemini API. Tente novamente mais tarde.",
-        502,
-      );
-    } finally {
-      clearTimeout(timeoutId);
+
+      // If response is OK, break the loop and continue processing
+      if (geminiResponse.ok) {
+        break;
+      }
+
+      // Log the HTTP status for this attempt
+      console.error("Gemini API response status", { attempt, status: geminiResponse.status });
+
+      // Retry only on 503 (UNAVAILABLE) and if we have attempts left
+      if (geminiResponse.status === 503 && attempt < maxAttempts) {
+        const backoff = attempt === 1 ? 2000 : 4000; // 2s after first, 4s after second
+        await sleep(backoff);
+        // continue to next iteration
+        continue;
+      }
+
+      // For any other non‑OK status, stop retrying
+      break;
+    }
+
+    // Guard against unexpected null response (should not happen)
+    if (!geminiResponse) {
+      throw new HttpError("Falha inesperada ao chamar a Gemini API.", 502);
     }
 
     if (!geminiResponse.ok) {
