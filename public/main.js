@@ -2,8 +2,9 @@
 const initialData = [{"setor": "Controle de Sinistro", "indicador": "ACIDENTE POR (MILHAO) DE KM RODADO - Mensal", "meta": 0.0, "und": "%", "valores": [3.5, 4.43, 4.17, 5.51, 3.58, 4.09, null]}, {"setor": "Controlde de Sinistro", "indicador": "Acidentes com culpa - Mensal", "meta": 0.0, "und": "Qtd", "valores": [11.0, 12.0, 8.0, 17.0, 21.0, 13.0, 16.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de acidentes com lesões - veículos proprios - Mensal", "meta": 0.0, "und": "Qtd", "valores": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de acidentes com lesões envolvendo Terceiros - Mensal", "meta": 0.0, "und": "Qtd", "valores": [0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1.0]}, {"setor": "Controle de Sinistro", "indicador": "Numero de mortes - proprios - Mensal", "meta": 0.0, "und": "Qtd", "valores": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]}, {"setor": "Controle de Sinistro", "indicador": "Número de mortes -Terceiros - Mensal", "meta": 0.0, "und": "Qtd", "valores": [0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 1.0]}, {"setor": "Controle de Sinistro", "indicador": "Total de acidentes - Mensal", "meta": 40.0, "und": "Qtd", "valores": [26.0, 33.0, 38.0, 49.0, 32.0, 38.0, 43.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "VEÍCULOS ATIVOS (semirreboques)", "meta": 2500.0, "und": "Qtd", "valores": [2015.0, 1972.0, 1968.0, 1959.0, 1947.0, 1947.0, 1932.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "VEÍCULOS ATIVOS (cavalo mecânico)", "meta": 1300.0, "und": "Qtd", "valores": [1234.0, 1208.0, 1223.0, 1231.0, 1221.0, 1204.0, 1190.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Cronotacógrafo - Mensal", "meta": 100.0, "und": "%", "valores": [62.25, 64.29, 64.37, 97.44, 98.61, 98.51, 98.43]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Veículos emplacados - Mensal", "meta": 0.0, "und": "Qtd", "valores": [68.0, 36.0, 36.0, 31.0, 31.0, 23.0, 11.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "Veículos Vendidos", "meta": 0.0, "und": "Qtd", "valores": [27.0, 24.0, 35.0, 35.0, 23.0, 45.0, 49.0]}, {"setor": "Controle de Veículos / Documentação", "indicador": "% CRLV LIBERADOS - Mensal", "meta": 100.0, "und": "%", "valores": [5.13, 79.45, 91.9, 96.51, 97.3, 99.18, 99.59]}, {"setor": "Controle de Penalidade/Autuações", "indicador": "Redução quantidade de multas por frota - Mensal", "meta": 0.35, "und": "%", "valores": [0.59, 0.46, 0.5, 0.58, 0.35, 0.55, null]}, {"setor": "Controle de Penalidade", "indicador": "% de multas pagas com 20% de desconto - Mensal", "meta": 20.0, "und": "%", "valores": [20.0, 18.0, 15.0, 23.0, 16.0, 10.67, 12.08]}, {"setor": "Controle de Penalidade", "indicador": "% de multas pagas com 40% de desconto - Mensal", "meta": 10.0, "und": "%", "valores": [42.0, 39.0, 56.0, 38.0, 55.0, 48.71, 47.35]}, {"setor": "Controle de Penalidade", "indicador": "Multas Cobradas Motoristas - Mensal", "meta": 50000.0, "und": "Qtd", "valores": [159.0, 161.0, 188.0, 99.0, 185.0, 245.0, 297.0]}, {"setor": "Controle de Penalidade", "indicador": "Multas Mapeadas Mês - Mensal", "meta": 0.0, "und": "Qtd", "valores": [595.0, 528.0, 651.0, 924.0, 407.0, 644.0, 478.0]}, {"setor": "Controle de Penalidade", "indicador": "Multas Pagas Mês - Mensal", "meta": 0.0, "und": "Qtd", "valores": [843.0, 707.0, 602.0, 556.0, 854.0, 1199.0, 1134.0]}, {"setor": "Controle de de Autuações", "indicador": "Defesas administrativas", "meta": 50000.0, "und": "Qtd", "valores": [3.0, 16.0, 6.0, 2.0, 29.0, 35.0, 13.0]}, {"setor": "Controle de de Autuações", "indicador": "Autuações tratadas", "meta": 50000.0, "und": "Qtd", "valores": [267.0, 100.0, 229.0, 278.0, 262.0, 278.0, 246.0]}, {"setor": "Controle de de Autuações", "indicador": "Responsabilidade da empresa", "meta": 50000.0, "und": "Qtd", "valores": [96.0, 28.0, 70.0, 30.0, 30.0, 37.0, 13.0]}, {"setor": "Controle de de Autuações", "indicador": "Já identificado pelo agente", "meta": 50000.0, "und": "Qtd", "valores": [17.0, 4.0, 5.0, 14.0, 6.0, 12.0, 16.0]}, {"setor": "Controle de de Autuações", "indicador": "Identificar (solicitou ser identificado, mas não possui termo)", "meta": 50000.0, "und": "Qtd", "valores": [27.0, 36.0, 46.0, 40.0, 42.0, 39.0, 32.0]}, {"setor": "Controle de de Autuações", "indicador": "PRF", "meta": 50000.0, "und": "Qtd", "valores": [42.0, 12.0, 47.0, 65.0, 84.0, 93.0, 72.0]}, {"setor": "Controle de de Autuações", "indicador": "Identificado", "meta": 50000.0, "und": "Qtd", "valores": [27.0, 36.0, 46.0, 40.0, 42.0, 43.0, 49.0]}, {"setor": "Controle de de Autuações", "indicador": "Agregados Identificados", "meta": 50000.0, "und": "Qtd", "valores": [1.0, null, 1.0, 2.0, 8.0, 3.0, 6.0]}, {"setor": "Controle de de Autuações", "indicador": "Agregados não Identificado", "meta": 50000.0, "und": "Qtd", "valores": [null, null, 15.0, 7.0, 14.0, 2.0, 8.0]}, {"setor": "Controle de de Autuações", "indicador": "Não Identificado frota", "meta": 50000.0, "und": "Qtd", "valores": [33.0, 3.0, 13.0, 47.0, 22.0, 32.0, 28.0]}, {"setor": "Controle de de Autuações", "indicador": "Não Identificado 24h", "meta": 50000.0, "und": "Qtd", "valores": [12.0, 1.0, 11.0, 19.0, 14.0, 17.0, 22.0]}, {"setor": "Controle de de Autuações", "indicador": "Defesas ANTT", "meta": 50000.0, "und": "Qtd", "valores": [null, null, null, null, 28.0, 29.0, null]}, {"setor": "Controle de SCORE do motorista", "indicador": "SCORE - Mensal", "meta": 600.0, "und": "Qtd", "valores": [249.0, 318.0, 405.0, 460.0, 497.0, 589.0, null]}, {"setor": "Controle de Velocidade", "indicador": "Numero de motoristas com ocorrencias acima da velocidade permitida - Mensal", "meta": 0.0, "und": "Qtd", "valores": [542.0, 580.0, 673.0, 640.0, 584.0, 597.0, 540.0]}];
 
 const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhsYXNxdXJ0aG5uaG1zem9qcmNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczMzE3MjQsImV4cCI6MjEwMjkwNzcyNH0.m_Om19_gEfT_ab1QjeUVQWF-oimhtasu7_xXsNMHPrg';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w6wowhTeTPXuDiZTgSjCgA_pw_5UuQO';
 const SUPABASE_STATE_ENDPOINT = `${SUPABASE_URL}/rest/v1/dashboard_state`;
+const SUPABASE_AI_FUNCTION_ENDPOINT = `${SUPABASE_URL}/functions/v1/seguranca-viaria-ia`;
 const DEFAULT_LOGO_SRC = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&s=10.png';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -3716,4 +3717,135 @@ function resetData() {
             confirmButtonColor: '#EAB308'
         });
     });
+}
+
+// ==========================================
+// CENTRAL DE IA — ETAPA 1: INTEGRAÇÃO GEMINI
+// ==========================================
+
+/**
+ * Função de comunicação reutilizável com a Supabase Edge Function do Gemini.
+ * Garante envio seguro de requisições autenticadas sem expor credenciais sensíveis.
+ * 
+ * @param {string} prompt Mensagem ou pergunta a ser processada pelo Gemini.
+ * @param {object} [options] Configurações opcionais adicionais.
+ * @returns {Promise<{success: boolean, response: string, model: string, meta: object}>}
+ */
+async function chamarEdgeFunctionIA(prompt, options = {}) {
+    // 1. Obtém sessão ativa do Supabase Auth garantindo renovação de token se expirado
+    const { data, error: sessionError } = await supabaseClient.auth.getSession();
+    if (sessionError) {
+        throw new Error('Falha ao validar a sessão com o Supabase. Tente fazer login novamente.');
+    }
+    const session = data?.session;
+
+    if (!session || !session.access_token) {
+        throw new Error('Sessão expirada ou não autenticada. Faça login novamente para utilizar a IA.');
+    }
+
+    // 2. Dispara requisição HTTP POST para a Edge Function
+    const response = await fetch(SUPABASE_AI_FUNCTION_ENDPOINT, {
+        method: 'POST',
+        headers: {
+            'apikey': SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            prompt: prompt || 'Explique brevemente o que é Segurança Viária.',
+            ...options
+        })
+    });
+
+    const responseData = await response.json().catch(() => null);
+
+    // 3. Tratamento de respostas e códigos de status
+    if (!response.ok) {
+        if (response.status === 404) {
+            throw new Error('Edge Function "seguranca-viaria-ia" ainda não foi publicada no Supabase. Publique a função no painel do Supabase para ativar a integração.');
+        }
+        const errorMsg = responseData?.error || responseData?.message || responseData?.detail || `Erro na comunicação com a IA (HTTP ${response.status}).`;
+        throw new Error(errorMsg);
+    }
+
+    if (!responseData || !responseData.success) {
+        throw new Error(responseData?.error || 'A Edge Function não retornou uma resposta válida.');
+    }
+
+    return responseData;
+}
+
+/**
+ * Manipulador do botão de teste da interface do Dashboard.
+ * Controla os estados de carregamento, latência, exibição de resultados e mensagens amigáveis de erro.
+ */
+async function executarTesteGeminiIA() {
+    const input = document.getElementById('aiPromptInput');
+    const btn = document.getElementById('aiTestButton');
+    const btnIcon = document.getElementById('aiTestButtonIcon');
+    const btnText = document.getElementById('aiTestButtonText');
+    const statusDot = document.getElementById('aiStatusDot');
+    const statusText = document.getElementById('aiStatusText');
+    const responseContainer = document.getElementById('aiResponseContainer');
+    const responseBody = document.getElementById('aiResponseBody');
+    const responseMeta = document.getElementById('aiResponseMeta');
+
+    const prompt = input?.value?.trim() || 'Explique brevemente o que é Segurança Viária.';
+
+    // Atualiza interface para estado de carregamento
+    if (btn) btn.disabled = true;
+    if (btnIcon) btnIcon.className = 'fa-solid fa-spinner fa-spin';
+    if (btnText) btnText.textContent = 'Processando...';
+    if (statusDot) statusDot.className = 'h-2 w-2 rounded-full bg-amber-400 animate-pulse';
+    if (statusText) statusText.textContent = 'Consultando Gemini AI...';
+
+    if (responseContainer) responseContainer.classList.remove('hidden');
+    if (responseBody) responseBody.innerHTML = '<span class="text-slate-400 italic flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin text-amber-400"></i> Enviando solicitação autenticada à Edge Function...</span>';
+    if (responseMeta) responseMeta.textContent = 'Aguardando...';
+
+    const startTime = performance.now();
+
+    try {
+        const resultado = await chamarEdgeFunctionIA(prompt);
+        const durationSec = ((performance.now() - startTime) / 1000).toFixed(2);
+
+        // Sucesso
+        if (statusDot) statusDot.className = 'h-2 w-2 rounded-full bg-emerald-400';
+        if (statusText) statusText.textContent = `Respondido em ${durationSec}s`;
+
+        if (responseBody) {
+            responseBody.textContent = resultado.response;
+        }
+
+        if (responseMeta) {
+            const tokens = resultado.meta?.totalTokens ? ` • ${resultado.meta.totalTokens} tokens` : '';
+            responseMeta.textContent = `${resultado.model || 'Gemini'} • ${durationSec}s${tokens}`;
+        }
+    } catch (error) {
+        const durationSec = ((performance.now() - startTime) / 1000).toFixed(2);
+
+        // Erro
+        if (statusDot) statusDot.className = 'h-2 w-2 rounded-full bg-rose-400';
+        if (statusText) statusText.textContent = 'Falha na comunicação';
+
+        if (responseBody) {
+            responseBody.innerHTML = `
+                <div class="text-rose-400 font-semibold mb-1 flex items-center gap-1.5">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Não foi possível obter resposta:
+                </div>
+                <div class="text-slate-300 text-xs bg-rose-950/30 border border-rose-900/40 rounded-lg p-3">
+                    ${escapeHtml(error.message)}
+                </div>
+            `;
+        }
+
+        if (responseMeta) {
+            responseMeta.textContent = `Erro (${durationSec}s)`;
+        }
+    } finally {
+        // Restaura botão
+        if (btn) btn.disabled = false;
+        if (btnIcon) btnIcon.className = 'fa-solid fa-paper-plane';
+        if (btnText) btnText.textContent = 'Testar Conexão';
+    }
 }
