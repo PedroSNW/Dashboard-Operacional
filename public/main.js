@@ -22,7 +22,6 @@ let chart1Inst = null, chart2Inst = null, chart3Inst = null, chart4Inst = null, 
 let dynamicChartInstances = {};
 let showDataLabels = false;
 let selectedDashboardMonths = null;
-let fechamentosMensais = {};
 let currentTheme = 'dark';
 let customLogoSrc = null;
 let lastSupabaseSavedAt = null;
@@ -462,7 +461,6 @@ async function handleAuthSession(session) {
         appInitialized = false;
         supabaseStateLoaded = false;
         Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
-        fechamentosMensais = {};
         return;
     }
 
@@ -476,7 +474,6 @@ async function handleAuthSession(session) {
     dashboards = [{ id: 'dashboard_main', name: 'Geral', widgets: getDefaultDashboardWidgets() }];
     activeDashboardId = dashboards[0].id;
     showDataLabels = false;
-    fechamentosMensais = {};
     currentTheme = 'dark';
     customLogoSrc = null;
     applyTheme(currentTheme);
@@ -1277,7 +1274,6 @@ async function persistirEstadoSupabase() {
         mesesLabels,
         showDataLabels,
         zoomGraficos: chartZoomState,
-        fechamentosMensais,
         theme: currentTheme,
         logo: customLogoSrc
     };
@@ -1362,10 +1358,6 @@ async function carregarDadosCompartilhados(silencioso = false) {
                 : dashboards[0].id;
             mesesLabels = Array.isArray(dataObj.mesesLabels) ? dataObj.mesesLabels.filter(isMonthLabel) : ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
             showDataLabels = dataObj.showDataLabels === true;
-            fechamentosMensais = dataObj.fechamentosMensais && typeof dataObj.fechamentosMensais === 'object' && !Array.isArray(dataObj.fechamentosMensais)
-                ? Object.fromEntries(Object.entries(dataObj.fechamentosMensais).filter(([month, closure]) =>
-                    isMonthLabel(month) && closure && typeof closure.closedAt === 'string' && Number.isFinite(Date.parse(closure.closedAt))))
-                : {};
             Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
             if (dataObj.zoomGraficos && typeof dataObj.zoomGraficos === 'object') {
                 Object.entries(dataObj.zoomGraficos).forEach(([id, value]) => {
@@ -1498,6 +1490,7 @@ function switchTab(tabName) {
         renderIntelligenceDashboard();
     } else if (tabName === 'governance') {
         renderGovernanceDashboard();
+        loadCompetencyAuditHistory();
     } else if (tabName === 'audit') {
         updateJSONEditor();
         carregarLogsAuditoria();
@@ -1549,55 +1542,149 @@ function indicatorValuesChanged(previous, nextValues) {
     return previousValues.length !== currentValues.length || previousValues.some((value, index) => value !== currentValues[index]);
 }
 
-function getIndicatorValueForMonth(item, month, monthLabels) {
+function getValueForCompetency(item, month, labels) {
     const values = Array.isArray(item?.valores) ? item.valores : [];
-    const offset = values.length > monthLabels.length ? values.length - monthLabels.length : 0;
-    const monthIndex = monthLabels.indexOf(month);
-    if (monthIndex < 0) return undefined;
-    const value = values[monthIndex + offset];
-    if (value === undefined || value === null || value === '') return null;
+    const offset = values.length > labels.length ? values.length - labels.length : 0;
+    const index = labels.indexOf(month);
+    if (index < 0) return null;
+    const value = values[index + offset];
+    if (value === null || value === undefined || value === '') return null;
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : null;
 }
 
-function findClosedMonthMutation(previousIndicators, nextIndicators, previousMonths = mesesLabels, nextMonths = mesesLabels) {
-    const closedMonths = Object.keys(fechamentosMensais).filter(isIntelligenceMonthClosed);
-    if (!closedMonths.length) return null;
+function compareIndicatorCompetencies(previous, next, previousMonths = mesesLabels, nextMonths = mesesLabels) {
+    const labels = [...new Set([...previousMonths, ...nextMonths].filter(isMonthLabel))];
+    const nextLabels = nextMonths.filter(isMonthLabel);
+    const previousLabels = previousMonths.filter(isMonthLabel);
+    const latestAvailable = nextLabels[nextLabels.length - 1] || previousLabels[previousLabels.length - 1];
+    return labels.flatMap(month => {
+        const previousValue = getValueForCompetency(previous, month, previousMonths);
+        const newValue = getValueForCompetency(next, month, nextMonths);
+        if (previousValue === newValue) return [];
+        return [{
+            indicator: next?.indicador || previous?.indicador || 'Indicador sem nome',
+            sector: next?.setor || previous?.setor || 'Setor não informado',
+            competency: month,
+            previousValue,
+            newValue,
+            isRetroactive: month !== latestAvailable
+        }];
+    });
+}
 
-    const previousByIdentity = groupIndicatorsByIdentity(previousIndicators);
-    const nextByIdentity = groupIndicatorsByIdentity(nextIndicators);
-    for (const month of closedMonths) {
-        if (!previousMonths.includes(month)) continue;
-        if (!nextMonths.includes(month)) return `O CSV remove o mês fechado ${month}. Reabra o período antes de alterar os meses disponíveis.`;
+function collectCompetencyChanges(previousIndicators, nextIndicators, previousMonths = mesesLabels, nextMonths = mesesLabels) {
+    const previousGroups = groupIndicatorsByIdentity(previousIndicators);
+    const nextGroups = groupIndicatorsByIdentity(nextIndicators);
+    const identities = new Set([...previousGroups.keys(), ...nextGroups.keys()]);
+    const changes = [];
 
-        for (const [identity, previousItems] of previousByIdentity) {
-            const nextItems = nextByIdentity.get(identity) || [];
-            for (let index = 0; index < previousItems.length; index += 1) {
-                const previous = previousItems[index];
-                const next = nextItems[index];
-                const previousValue = getIndicatorValueForMonth(previous, month, previousMonths);
-                if (!next) {
-                    if (previousValue !== null && previousValue !== undefined) {
-                        return `A importação removeria ${previous.indicador} com dados no mês fechado ${month}. Reabra o período antes de importar.`;
-                    }
-                    continue;
-                }
-                if (getIndicatorValueForMonth(next, month, nextMonths) !== previousValue) {
-                    return `A importação altera ${previous.indicador} no mês fechado ${month}. Reabra o período antes de alterar esses dados.`;
-                }
-            }
+    identities.forEach(identity => {
+        const previousItems = previousGroups.get(identity) || [];
+        const nextItems = nextGroups.get(identity) || [];
+        const count = Math.max(previousItems.length, nextItems.length);
+        for (let index = 0; index < count; index += 1) {
+            changes.push(...compareIndicatorCompetencies(previousItems[index] || null, nextItems[index] || null, previousMonths, nextMonths));
+        }
+    });
+    return changes;
+}
+
+function formatAuditNumber(value) {
+    return value === null || value === undefined ? '(vazio)' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 8 });
+}
+
+function formatCompetencyAuditDetails(changes, updatedAt = new Date().toISOString()) {
+    const changedAt = new Date(updatedAt).toLocaleString('pt-BR');
+    return [
+        `Data/hora da atualização no Dashboard: ${changedAt}.`,
+        'A data de atualização não identifica a data do evento de origem.',
+        ...changes.map(change => `${change.indicator} · Setor: ${change.sector} · Competência: ${change.competency} · ${change.isRetroactive ? 'Alteração retroativa (anterior à competência mais recente disponível)' : 'Alteração na competência mais recente disponível'} · valor anterior: ${formatAuditNumber(change.previousValue)} · novo valor: ${formatAuditNumber(change.newValue)}`)
+    ].join('\n');
+}
+
+function logCompetencyChanges(action, changes, updatedAt = new Date().toISOString(), source = '') {
+    if (!changes.length) return registrarLog(action, `${source ? `Origem: ${source}. ` : ''}Nenhuma competência teve alteração de valor.`);
+    return registrarLog(action, `${source ? `Origem: ${source}.\n` : ''}${formatCompetencyAuditDetails(changes, updatedAt)}`);
+}
+
+async function loadCompetencyAuditHistory() {
+    const status = document.getElementById('competencyAuditStatus');
+    const container = document.getElementById('competencyAuditHistory');
+    if (!status || !container) return;
+    status.textContent = 'Carregando alterações de competências...';
+    container.replaceChildren();
+
+    try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) {
+            status.textContent = 'Entre para consultar o histórico de alterações.';
+            return;
         }
 
-        for (const [identity, nextItems] of nextByIdentity) {
-            const previousCount = previousByIdentity.get(identity)?.length || 0;
-            for (const next of nextItems.slice(previousCount)) {
-                if (getIndicatorValueForMonth(next, month, nextMonths) !== null) {
-                    return `A importação adiciona dados de ${next.indicador} ao mês fechado ${month}. Reabra o período antes de importar.`;
-                }
+        const query = new URLSearchParams({
+            select: 'created_at,user_email,acao,detalhes',
+            acao: 'ilike.*ALTERAÇÃO DE VALORES*',
+            order: 'created_at.desc',
+            limit: '50'
+        });
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/audit_logs?${query}`, {
+            headers: {
+                apikey: SUPABASE_PUBLISHABLE_KEY,
+                Authorization: `Bearer ${session.access_token}`
             }
+        });
+        if (!response.ok) throw new Error(`Supabase HTTP ${response.status}`);
+
+        const logs = await response.json();
+        if (!logs.length) {
+            status.textContent = 'Ainda não há alterações de valores registradas.';
+            return;
         }
+
+        let competencyCount = 0;
+        logs.forEach(log => {
+            const detailLines = String(log.detalhes || '').split(/\r?\n/);
+            const competencyLines = detailLines.filter(line => line.includes('Competência:'));
+            if (!competencyLines.length) return;
+            competencyCount += competencyLines.length;
+
+            const entry = document.createElement('article');
+            entry.className = 'competency-audit-entry';
+            const heading = document.createElement('div');
+            heading.className = 'flex flex-wrap items-center justify-between gap-2';
+            const action = document.createElement('span');
+            action.className = 'text-[11px] font-bold uppercase text-amber-400';
+            action.textContent = log.acao || 'Alteração de valores';
+            heading.appendChild(action);
+            const updatedAt = document.createElement('time');
+            updatedAt.className = 'text-[11px] text-slate-400';
+            updatedAt.dateTime = log.created_at || '';
+            updatedAt.textContent = log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : 'Data da auditoria indisponível';
+            heading.appendChild(updatedAt);
+            entry.appendChild(heading);
+
+            const actor = document.createElement('p');
+            actor.className = 'mt-1 text-[11px] text-slate-400';
+            actor.textContent = `Usuário: ${log.user_email || 'não informado'}`;
+            entry.appendChild(actor);
+            competencyLines.forEach(line => {
+                const detail = document.createElement('p');
+                detail.className = `mt-2 text-xs leading-relaxed ${line.includes('Alteração retroativa') ? 'font-semibold text-amber-300' : 'text-slate-300'}`;
+                detail.textContent = line;
+                entry.appendChild(detail);
+            });
+            container.appendChild(entry);
+        });
+
+        status.textContent = competencyCount
+            ? `${competencyCount} alteração(ões) de competência nos 50 registros mais recentes.`
+            : 'Os registros recentes não contêm alterações de competência.';
+    } catch (error) {
+        console.error('Erro ao carregar histórico de competências:', error);
+        status.textContent = 'Não foi possível carregar o histórico. Verifique a conexão e as permissões de leitura da auditoria.';
+        status.className = 'text-xs text-rose-400';
     }
-    return null;
 }
 
 function applyIndicatorUpdateMetadata(indicators, previousIndicators = currentData, updatedAt = new Date().toISOString()) {
@@ -1623,11 +1710,6 @@ function applyIndicatorUpdateMetadata(indicators, previousIndicators = currentDa
 function formatIndicatorUpdatedAt(value) {
     if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return 'Data não disponível (registro legado)';
     return new Date(value).toLocaleString('pt-BR');
-}
-
-function isIntelligenceMonthClosed(month) {
-    const closedAt = fechamentosMensais?.[month]?.closedAt;
-    return typeof closedAt === 'string' && Number.isFinite(Date.parse(closedAt));
 }
 
 const getChartMonthData = getMonthlyData;
@@ -1711,8 +1793,7 @@ const INTELLIGENCE_DIRECTION_LABELS = {
 
 function renderGovernanceDashboard() {
     const rows = document.getElementById('governanceIndicatorRows');
-    const monthContainer = document.getElementById('governanceMonthClosures');
-    if (!rows || !monthContainer) return;
+    if (!rows) return;
 
     const configuredCount = currentData.filter(item => getIntelligenceDirection(item)).length;
     const pendingCount = currentData.length - configuredCount;
@@ -1768,44 +1849,6 @@ function renderGovernanceDashboard() {
         rows.appendChild(row);
     });
     document.getElementById('governanceIndicatorCount').textContent = `Exibindo ${filteredIndicators.length} de ${currentData.length} indicadores.`;
-
-    monthContainer.replaceChildren();
-    const availableMonths = [...new Set(mesesLabels.filter(isMonthLabel))];
-    if (!availableMonths.length) {
-        appendIntelligenceText(monthContainer, 'p', 'Nenhum mês disponível para fechamento.', 'text-xs text-slate-400');
-        return;
-    }
-
-    availableMonths.forEach(month => {
-        const closure = fechamentosMensais[month];
-        const isClosed = isIntelligenceMonthClosed(month);
-        const card = document.createElement('article');
-        card.className = `governance-month ${isClosed ? 'governance-month-closed' : 'governance-month-open'}`;
-        const header = document.createElement('div');
-        header.className = 'flex items-center justify-between gap-2';
-        appendIntelligenceText(header, 'h4', month, 'text-sm font-bold text-white');
-        appendIntelligenceText(header, 'span', isClosed ? 'Fechado' : 'Aberto', `governance-month-state ${isClosed ? 'is-closed' : 'is-open'}`);
-        card.appendChild(header);
-
-        if (isClosed) {
-            appendIntelligenceText(card, 'p', `Confirmado em ${formatIndicatorUpdatedAt(closure.closedAt)}`, 'mt-2 text-[11px] text-slate-400');
-            appendIntelligenceText(card, 'p', `Responsável: ${closure.closedBy || 'não informado'}`, 'mt-1 text-[11px] text-slate-400');
-        } else {
-            appendIntelligenceText(card, 'p', 'Período disponível para atualização; não participa das comparações até ser fechado.', 'mt-2 text-[11px] leading-relaxed text-slate-400');
-        }
-
-        const action = document.createElement('button');
-        action.type = 'button';
-        action.className = isClosed
-            ? 'mt-3 rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10'
-            : 'mt-3 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/10';
-        action.innerHTML = isClosed
-            ? '<i class="fa-solid fa-lock-open mr-1" aria-hidden="true"></i> Reabrir mês'
-            : '<i class="fa-solid fa-lock mr-1" aria-hidden="true"></i> Confirmar fechamento';
-        action.addEventListener('click', () => setMonthClosure(month, !isClosed));
-        card.appendChild(action);
-        monthContainer.appendChild(card);
-    });
 }
 
 function updateIndicatorDirection(index, directionValue) {
@@ -1823,50 +1866,6 @@ function updateIndicatorDirection(index, directionValue) {
     registrarLog('CONFIGURAÇÃO DE DIREÇÃO', `${item.indicador} (${item.setor}): ${INTELLIGENCE_DIRECTION_LABELS[previousDirection] || 'pendente'} → ${INTELLIGENCE_DIRECTION_LABELS[direction] || 'pendente'}`);
 }
 
-function setMonthClosure(month, shouldClose) {
-    if (!mesesLabels.includes(month)) return Promise.resolve(false);
-    const isClosed = isIntelligenceMonthClosed(month);
-    if (isClosed === shouldClose) return Promise.resolve(false);
-
-    const closing = shouldClose;
-    return fireThemedAlert({
-        title: closing ? `Fechar ${escapeHtml(month)}?` : `Reabrir ${escapeHtml(month)}?`,
-        text: closing
-            ? 'O período global será marcado como confirmado e passará a participar das análises. Confirme que os dados foram revisados.'
-            : 'O período deixará de participar das comparações da Inteligência até ser fechado novamente. A ação será registrada na auditoria.',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: closing ? '#d97706' : '#e11d48',
-        cancelButtonColor: '#475569',
-        confirmButtonText: closing ? 'Confirmar fechamento' : 'Confirmar reabertura',
-        cancelButtonText: 'Cancelar'
-    }).then(async result => {
-        if (!result.isConfirmed || isIntelligenceMonthClosed(month) !== isClosed) return false;
-
-        const action = closing ? 'FECHAMENTO MENSAL' : 'REABERTURA MENSAL';
-        const actor = currentSession?.user?.email || 'Usuário autenticado';
-        const auditRecorded = await registrarLog(action, `${month} · escopo global · responsável: ${actor}`);
-        if (!auditRecorded) {
-            showAlert('Auditoria indisponível', `Não foi possível registrar a ${closing ? 'confirmação' : 'reabertura'} de ${month}; o estado do mês não foi alterado. Verifique a conexão e tente novamente.`, 'error');
-            return false;
-        }
-
-        if (closing) {
-            fechamentosMensais[month] = {
-                closedAt: new Date().toISOString(),
-                closedBy: actor
-            };
-        } else {
-            delete fechamentosMensais[month];
-        }
-        markStateDirty();
-        renderGovernanceDashboard();
-        renderIntelligenceDashboard();
-        showAlert(closing ? 'Mês fechado' : 'Mês reaberto', `${month} foi ${closing ? 'fechado' : 'reaberto'} e a alteração foi registrada na auditoria. Salve o estado para persistir a governança.`, 'success');
-        return true;
-    });
-}
-
 function getIntelligenceDirection(item) {
     return Object.prototype.hasOwnProperty.call(INTELLIGENCE_DIRECTION_LABELS, item?.direcaoDesempenho)
         ? item.direcaoDesempenho
@@ -1880,8 +1879,7 @@ function getIntelligencePoints(item, periodMode = 'dashboard') {
         index,
         value: monthly.values[index]
     })).filter(point => point.value !== null && point.value !== undefined && Number.isFinite(Number(point.value)))
-        .map(point => ({ ...point, value: Number(point.value) }))
-        .filter(point => isIntelligenceMonthClosed(point.month));
+        .map(point => ({ ...point, value: Number(point.value) }));
 
     if (periodMode === 'dashboard' && selectedDashboardMonths !== null) {
         points = points.filter(point => selectedDashboardMonths.includes(point.month));
@@ -2002,11 +2000,7 @@ function generateAutomaticAnalyses({ periodMode = 'dashboard', sector = 'TODOS',
             add({
                 category: 'insufficient',
                 severity: 'INFORMATIVO',
-                title: points.length
-                    ? 'Histórico insuficiente para comparar'
-                    : mesesLabels.some(month => !isIntelligenceMonthClosed(month))
-                        ? 'Nenhum mês fechado disponível para análise'
-                        : 'Sem dados válidos no período',
+                title: points.length ? 'Histórico insuficiente para comparar' : 'Sem dados válidos no período',
                 period: points[0]?.month || 'Período selecionado',
                 current: points[0]?.value ?? null,
                 previous: null,
@@ -2014,13 +2008,11 @@ function generateAutomaticAnalyses({ periodMode = 'dashboard', sector = 'TODOS',
                 changePercent: null,
                 explanation: points.length
                     ? 'Há apenas um valor numérico disponível; não é possível calcular variação ou tendência com confiança.'
-                    : mesesLabels.some(month => !isIntelligenceMonthClosed(month))
-                        ? 'Os valores dos meses abertos são mantidos fora das comparações até o fechamento manual do período.'
-                        : 'Não há valores numéricos disponíveis para este indicador nos meses fechados selecionados.',
+                    : 'Não há valores numéricos disponíveis para este indicador no período selecionado.',
                 recommendation: points.length
-                    ? 'Feche outros períodos manualmente ou aguarde novos registros fechados antes de avaliar tendências.'
-                    : 'Feche os meses apropriados na aba Governança e confirme que os valores foram informados.',
-                calculation: `Pontos numéricos em meses fechados: ${points.length}. Valores nulos e períodos abertos foram ignorados.`
+                    ? 'Aguarde novos registros mensais antes de avaliar tendências.'
+                    : 'Atualize o histórico do indicador antes de tirar conclusões.',
+                calculation: `Pontos numéricos disponíveis: ${points.length}. Valores nulos foram ignorados.`
             });
             return;
         }
@@ -2192,13 +2184,13 @@ function populateIntelligenceFilters() {
 }
 
 function getIntelligencePeriodLabel(mode) {
-    const closedMonths = mesesLabels.filter(month => isMonthLabel(month) && isIntelligenceMonthClosed(month));
-    if (mode === 'last3') return 'Últimos 3 meses fechados disponíveis';
-    if (mode === 'last6') return 'Últimos 6 meses fechados disponíveis';
-    const months = mode === 'dashboard' && selectedDashboardMonths !== null
-        ? closedMonths.filter(month => selectedDashboardMonths.includes(month))
-        : closedMonths;
-    return months.length ? months.join(', ') : 'Nenhum mês fechado disponível no período selecionado';
+    if (mode === 'last3') return 'Últimos 3 registros válidos por indicador';
+    if (mode === 'last6') return 'Últimos 6 registros válidos por indicador';
+    if (mode === 'all') return 'Todo o histórico disponível';
+    const months = selectedDashboardMonths === null
+        ? mesesLabels.filter(isMonthLabel)
+        : selectedDashboardMonths;
+    return months.length ? months.join(', ') : 'Nenhum mês selecionado no Dashboard';
 }
 
 function appendIntelligenceText(parent, tagName, text, className = '') {
@@ -2249,9 +2241,7 @@ async function renderIntelligenceDashboard() {
         const configuredCandidates = currentData.filter(item => sector === 'TODOS' || item.setor === sector);
         const unconfiguredCount = configuredCandidates.filter(item => !getIntelligenceDirection(item)).length;
         status.className = 'rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-xs leading-relaxed text-slate-300';
-        const closedMonthCount = mesesLabels.filter(month => isMonthLabel(month) && isIntelligenceMonthClosed(month)).length;
-        const openMonthCount = mesesLabels.filter(month => isMonthLabel(month) && !isIntelligenceMonthClosed(month)).length;
-        status.textContent = `${visible.length} de ${filtered.length} análise(s) exibida(s) após os filtros (${generated.length} no conjunto selecionado). ${closedMonthCount} mês(es) fechado(s) participam das comparações; ${openMonthCount} mês(es) aberto(s) ficam fora. ${unconfiguredCount} indicador(es) ainda sem direção configurada; variações e tendências desses indicadores são somente descritivas.`;
+        status.textContent = `${visible.length} de ${filtered.length} análise(s) exibida(s) após os filtros (${generated.length} no conjunto selecionado). ${unconfiguredCount} indicador(es) ainda sem direção configurada; variações e tendências desses indicadores são somente descritivas. A competência mais recente pode receber atualizações posteriores.`;
 
         if (filtered.length === 0) {
             if (loadMoreButton) loadMoreButton.classList.add('hidden');
@@ -3147,11 +3137,10 @@ function renderMonthlyInputs(valoresArray = []) {
 
     mesesLabels.forEach((mes, idx) => {
         const val = (valoresArray[idx] !== undefined && valoresArray[idx] !== null) ? valoresArray[idx] : '';
-        const closed = isIntelligenceMonthClosed(mes);
         const div = document.createElement('div');
         div.innerHTML = `
-            <label for="val_${idx}" class="text-[10px] ${closed ? 'text-amber-400' : 'text-slate-400'} block mb-0.5">${escapeHtml(mes)}${closed ? ' · Fechado' : ''}</label>
-            <input type="number" step="any" id="val_${idx}" value="${val}" ${closed ? 'disabled title="Reabra o mês na aba Governança para alterar este valor"' : ''} class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-lg p-2 font-mono disabled:cursor-not-allowed disabled:opacity-60">
+            <label for="val_${idx}" class="text-[10px] text-slate-400 block mb-0.5">${escapeHtml(mes)}</label>
+            <input type="number" step="any" id="val_${idx}" value="${val}" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-lg p-2 font-mono">
         `;
         container.appendChild(div);
     });
@@ -3208,13 +3197,10 @@ async function saveIndicatorForm(e) {
     };
 
     const previousItem = idx >= 0 ? currentData[idx] : null;
-    const closedMonthError = findClosedMonthMutation(previousItem ? [previousItem] : [], [newItem], mesesLabels, mesesLabels);
-    if (closedMonthError) {
-        showAlert('Mês fechado protegido', closedMonthError, 'warning');
-        return;
-    }
+    const updatedAt = new Date().toISOString();
+    const competencyChanges = compareIndicatorCompetencies(previousItem, newItem, mesesLabels, mesesLabels);
     if (indicatorValuesChanged(previousItem, newItem.valores)) {
-        newItem.ultimaAtualizacao = new Date().toISOString();
+        newItem.ultimaAtualizacao = updatedAt;
     } else if (previousItem?.ultimaAtualizacao) {
         newItem.ultimaAtualizacao = previousItem.ultimaAtualizacao;
     }
@@ -3226,7 +3212,11 @@ async function saveIndicatorForm(e) {
     }
 
     saveData(currentData);
-    await registrarLog('ATUALIZAÇÃO/CRIAÇÃO', `Indicador: ${newItem.indicador} (Setor: ${newItem.setor})`);
+    if (competencyChanges.length) {
+        await logCompetencyChanges('ALTERAÇÃO DE VALORES', competencyChanges, updatedAt);
+    } else {
+        await registrarLog(idx === -1 ? 'CRIAÇÃO DE INDICADOR' : 'ATUALIZAÇÃO DE CADASTRO', `Indicador: ${newItem.indicador} · Setor: ${newItem.setor} · Sem alteração de valores mensais.`);
+    }
     closeModal('modalEdit');
     initSystem();
 }
@@ -3340,7 +3330,7 @@ async function carregarLogsAuditoria() {
                         ? 'p-3 text-slate-400'
                         : index === 2
                             ? 'p-3 font-semibold text-white'
-                            : 'p-3 text-slate-300';
+                            : 'p-3 min-w-[360px] whitespace-pre-wrap break-words text-slate-300';
                 cell.textContent = value;
                 row.appendChild(cell);
             });
@@ -3366,12 +3356,13 @@ function applyRawJSON() {
     try {
         const parsed = JSON.parse(document.getElementById('jsonEditor').value);
         if (!Array.isArray(parsed)) throw new Error('A raiz do JSON deve ser uma lista de indicadores.');
-        const closedMonthError = findClosedMonthMutation(currentData, parsed);
-        if (closedMonthError) throw new Error(closedMonthError);
-        const updatedData = applyIndicatorUpdateMetadata(parsed);
+        const previousData = currentData;
+        const updatedAt = new Date().toISOString();
+        const updatedData = applyIndicatorUpdateMetadata(parsed, previousData, updatedAt);
+        const competencyChanges = collectCompetencyChanges(previousData, updatedData, mesesLabels, mesesLabels);
         saveData(updatedData);
         initSystem();
-        registrarLog('IMPORTAÇÃO JSON', `Indicadores substituídos por edição JSON: ${updatedData.length}`);
+        logCompetencyChanges(competencyChanges.length ? 'ALTERAÇÃO DE VALORES VIA JSON' : 'IMPORTAÇÃO JSON', competencyChanges, updatedAt, `Editor JSON; ${updatedData.length} indicadores`);
         showAlert('Sucesso!', 'Alterações salvas com sucesso!', 'success');
     } catch(error) {
         showAlert('Erro na validação', error.message || 'Verifique a sintaxe do JSON.', 'error');
@@ -3507,6 +3498,37 @@ function groupIndicatorsByIdentity(indicators) {
     return groups;
 }
 
+function mergeImportedIndicators(previousIndicators, importedIndicators, previousMonths, importedMonths) {
+    const mergedMonths = [...new Set([...previousMonths, ...importedMonths])];
+    const importedGroups = groupIndicatorsByIdentity(importedIndicators);
+    const consumed = new Map();
+    const mergedIndicators = previousIndicators.map(previous => {
+        const identity = getIndicatorIdentity(previous.setor, previous.indicador);
+        const occurrence = consumed.get(identity) || 0;
+        consumed.set(identity, occurrence + 1);
+        const incoming = importedGroups.get(identity)?.[occurrence];
+        const values = mergedMonths.map(month => importedMonths.includes(month)
+            ? getValueForCompetency(incoming, month, importedMonths)
+            : getValueForCompetency(previous, month, previousMonths));
+
+        return { ...previous, valores: values };
+    });
+
+    importedGroups.forEach((items, identity) => {
+        const alreadyConsumed = consumed.get(identity) || 0;
+        items.slice(alreadyConsumed).forEach(incoming => {
+            mergedIndicators.push({
+                ...incoming,
+                valores: mergedMonths.map(month => importedMonths.includes(month)
+                    ? getValueForCompetency(incoming, month, importedMonths)
+                    : null)
+            });
+        });
+    });
+
+    return { indicators: mergedIndicators, months: mergedMonths };
+}
+
 // Processador de arquivo com detecção de encoding UTF-8 / ISO
 function processCSV(file) {
     const reader = new FileReader();
@@ -3601,17 +3623,15 @@ complete: function(results) {
     }
 
     if (newParsed.length > 0) {
-        const nextMonths = extractedMonths.length ? extractedMonths : previousMonths;
-        const closedMonthError = findClosedMonthMutation(previousData, newParsed, previousMonths, nextMonths);
-        if (closedMonthError) {
-            showAlert('Mês fechado protegido', closedMonthError, 'warning');
-            return;
-        }
-        if (extractedMonths.length) syncMonthLabels(extractedMonths);
-        const updatedData = applyIndicatorUpdateMetadata(newParsed, previousData);
+        const merged = mergeImportedIndicators(previousData, newParsed, previousMonths, extractedMonths);
+        const nextMonths = merged.months;
+        const updatedAt = new Date().toISOString();
+        const updatedData = applyIndicatorUpdateMetadata(merged.indicators, previousData, updatedAt);
+        const competencyChanges = collectCompetencyChanges(previousData, updatedData, previousMonths, nextMonths);
+        if (nextMonths.length) syncMonthLabels(nextMonths);
         saveData(updatedData);
         initSystem();
-        registrarLog('IMPORTAÇÃO CSV', `Indicadores importados de ${sourceName}: ${updatedData.length}`);
+        logCompetencyChanges(competencyChanges.length ? 'ALTERAÇÃO DE VALORES VIA CSV' : 'IMPORTAÇÃO CSV', competencyChanges, updatedAt, `${sourceName}; ${updatedData.length} indicadores`);
         if (!silencioso) {
             showAlert('Sucesso!', `${updatedData.length} indicadores atualizados com ${mesesLabels.length} meses.`, 'success');
         }
@@ -3682,11 +3702,10 @@ function resetData() {
         loadStoredDashboards();
         activeDashboardId = dashboards[0].id;
         showDataLabels = false;
-        fechamentosMensais = {};
         applyTheme('dark');
         initSystem();
         markStateDirty();
-        registrarLog('RESTAURAÇÃO DE DADOS', 'Dados padrões restaurados; fechamentos mensais removidos');
+        registrarLog('RESTAURAÇÃO DE DADOS', 'Dados padrões restaurados.');
 
         fireThemedAlert({
             title: 'Dados restaurados!',

@@ -460,24 +460,6 @@ body.light-theme ::-webkit-scrollbar-thumb:hover { background: #d97706; }
 .governance-stat strong { color: #fbbf24; font-size: 20px; }
 .governance-direction-select { width: 100%; max-width: 220px; }
 .governance-row > td { vertical-align: middle; }
-.governance-month {
-    min-width: 0;
-    padding: 16px;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 12px;
-    background: rgba(7, 13, 30, 0.3);
-}
-.governance-month-closed { border-left: 3px solid #10b981; }
-.governance-month-open { border-left: 3px solid #64748b; }
-.governance-month-state {
-    border-radius: 999px;
-    padding: 4px 8px;
-    font-size: 10px;
-    font-weight: 700;
-}
-.governance-month-state.is-closed { background: rgba(16, 185, 129, 0.12); color: #34d399; }
-.governance-month-state.is-open { background: rgba(148, 163, 184, 0.12); color: #94a3b8; }
-input:disabled { cursor: not-allowed; opacity: 0.6; }
 body.light-theme .intelligence-summary,
 body.light-theme .intelligence-analysis {
     background: rgba(255, 255, 255, 0.82);
@@ -495,20 +477,22 @@ body.light-theme .intelligence-analysis-critical > div:first-child { color: #be1
 body.light-theme .intelligence-analysis-attention > div:first-child { color: #b45309; }
 body.light-theme .intelligence-analysis-info > div:first-child { color: #0369a1; }
 body.light-theme .governance-stat,
-body.light-theme .governance-month {
+body.light-theme #view-governance .glass-card {
     background: rgba(255, 255, 255, 0.84);
     border-color: #e2e8f0;
     color: #475569;
     box-shadow: 0 3px 12px rgba(15, 23, 42, 0.04);
 }
 body.light-theme .governance-stat strong { color: #b45309; }
-body.light-theme .governance-month-closed { border-left-color: #059669; }
-body.light-theme .governance-month-open { border-left-color: #94a3b8; }
-body.light-theme .governance-month-state.is-closed { background: #d1fae5; color: #047857; }
-body.light-theme .governance-month-state.is-open { background: #f1f5f9; color: #475569; }
 @media (prefers-reduced-motion: reduce) {
     .intelligence-analysis,
     .intelligence-analysis:hover { transition: none; transform: none; }
+}
+
+#auditLogsTableBody td:last-child {
+    min-width: 360px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 body:not(.developer-mode) #view-audit {
