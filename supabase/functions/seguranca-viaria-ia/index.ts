@@ -384,6 +384,32 @@ serve(async (req: Request) => {
     if (!geminiResponse.ok) {
       const status = geminiResponse.status;
 
+      // Diagnostic instrumentation – captures status and possible error payload
+      let parsedCode: unknown = undefined;
+      let parsedStatus: unknown = undefined;
+      let parsedMessage: string | undefined = undefined;
+      try {
+        const bodyText = await geminiResponse.text(); // read once
+        const parsed = JSON.parse(bodyText);
+        if (parsed && typeof parsed === "object" && "error" in parsed) {
+          const err = (parsed as any).error;
+          parsedCode = err?.code;
+          parsedStatus = err?.status;
+          if (typeof err?.message === "string") {
+            parsedMessage = err.message.slice(0, 300);
+          }
+        }
+      } catch {
+        // If parsing fails or no error.message, keep parsedMessage undefined
+      }
+
+      console.error("Gemini API error response", {
+        status,
+        code: parsedCode,
+        errorStatus: parsedStatus,
+        message: parsedMessage,
+      });
+
       if (status === 429) {
         throw new HttpError(
           "Limite de uso da Gemini API atingido. Tente novamente em instantes.",
