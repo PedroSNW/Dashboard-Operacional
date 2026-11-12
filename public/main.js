@@ -461,13 +461,16 @@ async function handleAuthSession(session) {
     if (!session) {
         appInitialized = false;
         supabaseStateLoaded = false;
+        supabaseReady = false;
+        currentData = [];
         Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
         return;
     }
 
     if (appInitialized) return;
     appInitialized = true;
-    currentData = JSON.parse(JSON.stringify(initialData));
+    currentData = [];
+    hasUnsavedChanges = false;
     sectors = [];
     customCharts = [];
     kpiCards = [];
@@ -908,7 +911,7 @@ function setDashboardLogo(src) {
         const container = document.querySelector('.relative.group.cursor-pointer');
         if (container) {
             container.innerHTML = `
-                <img id="dashboardLogo" src="${src}" alt="D'Granel Logo" class="h-full w-full object-cover rounded-[10px]" onerror="handleLogoError(this)">
+                <img id="dashboardLogo" src="${escapeHtml(src)}" alt="D'Granel Logo" class="h-full w-full object-cover rounded-[10px]" onerror="handleLogoError(this)">
                 <div class="absolute inset-0 bg-slate-950/80 text-amber-400 text-[9px] font-bold uppercase tracking-tighter flex items-center justify-center text-center opacity-0 group-hover:opacity-100 transition-opacity p-1 select-none">Alterar<br>Logo</div>
             `;
         }
@@ -1319,13 +1322,20 @@ async function carregarDadosSupabase(silencioso = false) {
 }
 
 async function carregarDadosCompartilhados(silencioso = false) {
+    if (silencioso && hasUnsavedChanges) return;
     try {
         const sharedState = await carregarDadosSupabase(silencioso);
+        if (silencioso && hasUnsavedChanges) return;
         const remoteSavedAt = sharedState?.updated_at
             ? new Date(sharedState.updated_at).getTime()
             : null;
         if (silencioso && Number.isFinite(remoteSavedAt) && remoteSavedAt <= lastSupabaseSavedAt) return;
 
+        const remoteData = sharedState?.data;
+        const remoteIndicators = Array.isArray(remoteData) ? remoteData : remoteData?.indicadores;
+        if (!Array.isArray(remoteIndicators)) {
+            throw new Error('Estado remoto ausente ou inválido. Indicadores padrão não serão utilizados.');
+        }
         supabaseStateLoaded = true;
         if (Number.isFinite(remoteSavedAt)) {
             lastSupabaseSavedAt = remoteSavedAt;
@@ -1335,7 +1345,7 @@ async function carregarDadosCompartilhados(silencioso = false) {
         if (sharedState && sharedState.data) {
             const dataObj = sharedState.data;
             const sharedIndicators = Array.isArray(dataObj) ? dataObj : dataObj.indicadores;
-            currentData = Array.isArray(sharedIndicators) ? sharedIndicators : JSON.parse(JSON.stringify(initialData));
+            currentData = sharedIndicators;
             sectors = Array.isArray(dataObj.setores) ? dataObj.setores : [];
             if (!sectors.length) syncSectorsFromData();
             customCharts = Array.isArray(dataObj.graficos) ? dataObj.graficos : [];
@@ -1388,6 +1398,7 @@ async function carregarDadosCompartilhados(silencioso = false) {
         supabaseReady = false;
         supabaseStateLoaded = false;
         console.error('Erro ao carregar dados compartilhados:', error);
+        if (!silencioso) showAlert('Indicadores indisponíveis', 'Não foi possível carregar os indicadores reais. Os dados padrão não serão usados. Recarregue a página para tentar novamente.', 'error');
         initSystem();
     }
 }
@@ -2764,8 +2775,8 @@ function renderKPIs() {
                 <span class="text-slate-300">Meta: ${fmtVal(indicator.meta, unit === '%' ? '%' : '')}${unit && unit !== '%' && indicator.meta !== null && indicator.meta !== undefined ? ` ${unit}` : ''}</span>
             </div>
             <div class="flex justify-end gap-1 mt-3">
-                <button onclick="openKpiModal('${escapeHtml(c.id)}')" title="Editar Balão" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
-                <button onclick="deleteKpi('${escapeHtml(c.id)}')" title="Excluir Balão" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                <button onclick="openKpiModal(${escapeHtml(JSON.stringify(c.id))})" title="Editar Balão" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
+                <button onclick="deleteKpi(${escapeHtml(JSON.stringify(c.id))})" title="Excluir Balão" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
             </div>
         `;
         kpiContainer.appendChild(el);
@@ -3212,10 +3223,10 @@ function renderDynamicCharts() {
                     <button onclick="downloadChart(${escapeHtml(JSON.stringify(`canvas_${c.id}`))}, ${escapeHtml(JSON.stringify(c.title || `Grafico_${c.id}`))})" title="Baixar Gráfico em PNG" class="p-1.5 bg-slate-800 hover:bg-emerald-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs">
                         <i class="fa-solid fa-download"></i>
                     </button>
-                    <button onclick="openChartModal('${escapeHtml(c.id)}')" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs">
+                    <button onclick="openChartModal(${escapeHtml(JSON.stringify(c.id))})" title="Editar Gráfico" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs">
                         <i class="fa-solid fa-pen"></i>
                     </button>
-                    <button onclick="deleteCustomChart('${escapeHtml(c.id)}')" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs">
+                    <button onclick="deleteCustomChart(${escapeHtml(JSON.stringify(c.id))})" title="Excluir Gráfico" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs">
                         <i class="fa-solid fa-trash"></i>
                     </button>
                 </div>
@@ -3756,82 +3767,6 @@ function applyRawJSON() {
     }
 }
 
-function parseCSVContent(csvText, sourceName = "CSV", silencioso = false) {
-    Papa.parse(csvText, {
-encoding: "ISO-8859-1",
-skipEmptyLines: 'greedy',
-complete: function(results) {
-    const rows = results.data;
-    let newParsed = [];
-    let headerIndex = -1;
-
-    // Localiza a linha de cabeçalho
-    for (let i = 0; i < rows.length; i++) {
-        const r = rows[i].map(c => String(c).trim());
-        if (r[0] === 'Setor' && r.includes('Indicador')) {
-            headerIndex = i;
-            break;
-        }
-    }
-
-    if (headerIndex === -1) {
-        showAlert('Cabeçalho não encontrado', 'Não foi possível localizar o cabeçalho no arquivo CSV.', 'error');
-        return;
-    }
-
-    const headerRow = rows[headerIndex].map(c => String(c).trim());
-    
-    const metaCols = ['Setor', 'Indicador', 'Meta', 'Und.', 'Und', 'Unidade', 'Direção', 'Direcao', 'Ano'];
-
-    let valStartIdx = 6;
-
-    // Identifica dinamicamente onde começam os meses ignorando colunas de cadastro
-    for (let c = 7; c < headerRow.length; c++) {
-        const col = headerRow[c].toLowerCase();
-        
-        // Pula colunas fixas (evita que 'Setor' seja lido como 'Setembro')
-        if (metaCols.includes(col)) continue;
-
-        if (BASE_MONTHS.some(bm => col.startsWith(bm.toLowerCase()))) {
-            valStartIdx = c;
-            break;
-        }
-    }
-
-    // Extrai apenas os nomes dos meses
-    const monthIndexes = headerRow
-        .map((header, index) => ({ header, index }))
-        .filter(({ header, index }) => index >= valStartIdx && isMonthLabel(header));
-    const extractedMonths = monthIndexes.map(({ header }) => header);
-    if (extractedMonths.length > 0 && typeof syncMonthLabels === 'function') {
-        syncMonthLabels(extractedMonths);
-    }
-
-    // Mapeia os dados do indicador apontando os valores apenas a partir da coluna de meses
-    for (let i = headerIndex + 1; i < rows.length; i++) {
-        const row = rows[i].map(c => String(c).trim());
-        if (row.length > 1 && row[0] !== '') {
-            newParsed.push({
-                setor: row[0],
-                indicador: row[1] || '',
-                meta: parsePtNum(row[2]),
-                und: row[3] || 'Qtd',
-                valores: monthIndexes.map(({ index }) => parsePtNum(row[index]))
-            });
-        }
-    }
-
-    if (newParsed.length > 0) {
-        if (typeof saveData === 'function') saveData(newParsed);
-        if (typeof initSystem === 'function') initSystem();
-        showAlert('Sincronização concluída', `${newParsed.length} indicadores sincronizados de [${sourceName}] com ${extractedMonths.length} meses.`, 'success');
-    } else {
-        showAlert('Nenhum dado válido', 'A planilha foi lida, mas nenhum dado válido foi encontrado.', 'warning');
-    }
-}
-    });
-}
-
 // IMPORTAR / EXPORTAR DADOS
 function setupDragAndDrop() {
     const dropZone = document.getElementById('dropZone');
@@ -3921,7 +3856,7 @@ function processCSV(file) {
     const reader = new FileReader();
     reader.onload = function(e) {
 let content = e.target.result;
-if (content.includes('')) {
+if (content.includes('\uFFFD')) {
     const r2 = new FileReader();
     r2.onload = (e2) => parseCSVContent(e2.target.result, file.name);
     r2.readAsText(file, "ISO-8859-1");
@@ -4176,6 +4111,12 @@ function setAiProvider(provider) {
  * Os valores permanecem associados às competências correspondentes; null continua sendo ausência.
  */
 function prepararContextoIndicadoresIA(prompt) {
+    if (!supabaseStateLoaded || !supabaseReady) {
+        throw new Error('Os indicadores reais do Supabase ainda não estão disponíveis. Recarregue o Dashboard e tente novamente.');
+    }
+    if (hasUnsavedChanges) {
+        throw new Error('Salve as alterações pendentes antes de consultar os indicadores pela IA.');
+    }
     const normalizar = value => String(value ?? '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -4199,6 +4140,7 @@ function prepararContextoIndicadoresIA(prompt) {
         { termos: ['multa', 'multas', 'autuacao', 'autuacoes'], regex: /multa|autuac/ },
         { termos: ['velocidade'], regex: /velocidade/ },
         { termos: ['score'], regex: /score/ },
+        { termos: ['documentacao', 'documentos'], regex: /document|crlv|cronotac|emplac/ },
         { termos: ['veiculo', 'veiculos', 'frota', 'crlv', 'cronotacografo'], regex: /veicul|frota|crlv|cronotac/ }
     ];
     const temasSolicitados = temas.filter(tema => tema.termos.some(termo => pergunta.includes(termo)));
@@ -4206,6 +4148,7 @@ function prepararContextoIndicadoresIA(prompt) {
         const nome = normalizar(item.indicador);
         const setor = normalizar(item.setor);
         let pontos = termos.reduce((soma, termo) => soma + (nome.includes(termo) ? 5 : setor.includes(termo) ? 1 : 0), 0);
+        if (nome && pergunta.includes(nome)) pontos += 100;
         if (temasSolicitados.some(tema => tema.regex.test(nome))) pontos += 9;
         else if (temasSolicitados.some(tema => tema.regex.test(setor))) pontos += 2;
         if (pergunta.includes('culpa') && nome.includes('culpa')) pontos += 15;
@@ -4224,18 +4167,21 @@ function prepararContextoIndicadoresIA(prompt) {
     // As competências são enviadas uma única vez, evitando repetir a string do
     // mês para cada valor e reduzindo drasticamente o tamanho da requisição.
     const contexto = {
+        versao: 1,
+        origem: 'supabase',
         totalIndicadoresNoDashboard: currentData.length,
         totalIndicadoresSelecionados: candidatos.length,
         totalIndicadoresEnviados: 0,
         contextoParcial: false,
-        observacao: 'Dados agregados. Cada valor em valores corresponde à competência na mesma posição de competencias. null significa ausência, nunca zero. Um contexto parcial não representa todos os indicadores do dashboard.',
+        observacao: 'Dados agregados sujeitos a revisão retroativa. Cada valor corresponde à competência na mesma posição; null é ausência. Não deduzir ano de rótulos sem ano. Atualização não é competência. Contexto parcial não representa todo o dashboard.',
         competencias: [...mesesLabels],
         indicadores: []
     };
     const encoder = new TextEncoder();
     const LIMITE_CONTEXTO_BYTES = 17 * 1024; // margem segura abaixo do limite da Edge Function
-    for (const { item } of candidatos) {
+    for (const { item, index } of candidatos) {
         const indicador = {
+            id: item.id ?? `indice:${index}`,
             indicador: item.indicador ?? null,
             setor: item.setor ?? null,
             meta: item.meta ?? null,
@@ -4254,6 +4200,9 @@ function prepararContextoIndicadoresIA(prompt) {
     contexto.contextoParcial = contexto.totalIndicadoresEnviados < candidatos.length;
     if (contexto.contextoParcial) {
         contexto.observacao += ' Foram omitidos indicadores que não couberam no limite. Não conclua que eles não existem; informe que a análise é parcial.';
+    }
+    if (encoder.encode(JSON.stringify(contexto)).length > 18 * 1024) {
+        throw new Error('O contexto excedeu o limite de 18 KB. Especifique os indicadores desejados.');
     }
     if (!contexto.indicadores.length && candidatos.length) {
         throw new Error('Não foi possível compactar os indicadores para a consulta. Verifique se há campos excessivamente longos nos registros.');
@@ -4314,7 +4263,15 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
         throw new Error(responseData?.error || `A Edge Function não retornou uma resposta válida para o provedor ${provider}.`);
     }
 
-    return responseData;
+    if (responseData.contextVersion !== 1) {
+        throw new Error('A Edge Function publicada não confirma o contrato de contexto atual. Publique a versão local de seguranca-viaria-ia antes de consultar os indicadores.');
+    }
+
+    return { ...responseData, contexto: {
+        enviados: contextoIndicadores.totalIndicadoresEnviados,
+        selecionados: contextoIndicadores.totalIndicadoresSelecionados,
+        parcial: contextoIndicadores.contextoParcial
+    } };
 }
 
 /**
@@ -4380,7 +4337,10 @@ async function executarTesteIA(targetProvider = null) {
 
         if (responseMeta) {
             const tokens = resultado.meta?.totalTokens ? ` • ${resultado.meta.totalTokens} tokens` : '';
-            responseMeta.textContent = `${resultado.model || providerName} • ${durationSec}s${tokens}`;
+            const recorte = resultado.contexto
+                ? ` • ${resultado.contexto.enviados}/${resultado.contexto.selecionados} indicadores selecionados${resultado.contexto.parcial ? ' • ANÁLISE PARCIAL: há indicadores omitidos' : ''}`
+                : '';
+            responseMeta.textContent = `${resultado.model || providerName} • ${durationSec}s${tokens}${recorte}`;
         }
     } catch (error) {
         const durationSec = ((performance.now() - startTime) / 1000).toFixed(2);

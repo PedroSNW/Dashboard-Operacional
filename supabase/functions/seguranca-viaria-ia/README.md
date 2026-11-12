@@ -17,7 +17,19 @@ Dashboard (Browser)
    - **Google Gemini**: Leitura de `GEMINI_API_KEY` → chamada à Gemini API (`generateContent`) com retry para 503 e timeout individual de 35s.
 → Retorno estruturado e sanitizado ao Dashboard.
 
-A função não lê nem altera `dashboard_state`, `audit_logs` ou os indicadores cadastrados no banco.
+A função lê `dashboard_state` com o JWT do usuário para conferir os indicadores recebidos, respeitando RLS. Não altera indicadores, tabelas, políticas nem `audit_logs`.
+
+## Contrato de contexto v1
+
+O Dashboard envia `context` com `versao: 1`, `origem: "supabase"`, competências, contagens e indicadores selecionados. Limites: 18 KiB de contexto, 25 KiB de corpo total e 1000 caracteres de pergunta. As medições usam bytes UTF-8. A seleção usa até 17 KiB antes de incluir a observação de parcialidade e mantém as séries completas.
+
+Cada indicador contém `id` (ID persistido ou `indice:N`), nome, setor, meta, unidade, direção e valores. O servidor compara esses campos com `dashboard_state` e rejeita dados adulterados/desatualizados com HTTP 409. Falha de leitura autorizada retorna 403. O estado deve ter `mesesLabels` persistido e compatível com as séries; rótulos sem ano não autorizam inferir o ano.
+
+Os dados verificados seguem na mensagem do usuário; as regras seguem separadas em `system`, `instructions` ou `systemInstruction`. Texto livre de observação do cliente não é encaminhado. Respostas de sucesso incluem `contextVersion: 1`; o frontend detecta uma função antiga sem essa confirmação. Publique a função antes do frontend.
+
+Antes de consultar, carregue os dados e salve eventuais edições. A interface exibe quantos indicadores selecionados foram enviados e avisa quando houve omissões por tamanho. Não há truncamento das séries. A defesa por instruções reduz prompt injection, mas não garante a fidelidade de toda resposta gerada.
+
+Testes locais sem rede: `node tests/ia-context.test.js`, na raiz do repositório. Consulte `AUDITORIA-IA.md` para resultados, limitações e publicação.
 
 ## Secrets e variáveis de ambiente
 
