@@ -13,6 +13,8 @@ const USER_RATE_WINDOW_MS = 60_000;
 const GEMINI_TIMEOUT_MS = 35_000;
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+const AI_TIMEOUT_MS = 35_000;
 
 // Controle em memória por instância.
 // Importante: Edge Functions podem executar em várias instâncias; este controle
@@ -180,6 +182,17 @@ function getGeminiModel(): string {
   return model;
 }
 
+function getOpenAiModel(): string {
+  const model = (Deno.env.get("OPENAI_MODEL") || DEFAULT_OPENAI_MODEL).trim();
+
+  // Evita que o valor do Secret altere a estrutura do endpoint.
+  if (!/^[a-zA-Z0-9._-]{1,100}$/.test(model)) {
+    throw new HttpError("O Secret OPENAI_MODEL possui um identificador inválido.", 500);
+  }
+
+  return model;
+}
+
 /**
  * Obtém a chave pública do Supabase com resolução em cascata:
  * 1. SUPABASE_ANON_KEY (se disponível)
@@ -318,7 +331,174 @@ serve(async (req: Request) => {
       );
     }
 
-    // 5. Obtém a chave Gemini exclusivamente dos Secrets do servidor.
+    const rawProvider = typeof body.provider === "string" ? body.provider.trim().toLowerCase() : "gemini";
+    if (rawProvider !== "gemini" && rawProvider !== "openai") {
+      throw new HttpError("Provedor de IA inválido. Escolha 'gemini' ou 'openai'.", 400);
+    }
+    const provider = rawProvider;
+
+    const SYSTEM_INSTRUCTION_TEXT =
+      "Você é o analista e assistente de Inteligência Artificial da Central de Segurança Viária da D'Granel Transportes. " +
+      "Responda sempre em português brasileiro de forma clara, profissional, concisa e objetiva. " +
+      "Não invente dados, indicadores ou causas. Não trate dados ausentes como zero. " +
+      "Não execute, planeje ou sugira alterações em banco de dados ou indicadores. " +
+      "Separe fatos observados, interpretações técnicas e recomendações operacionais quando aplicável, " +
+      "sempre considerando a direção de desempenho dos indicadores.";
+
+    // 5. Integração com OpenAI (Responses API)
+    if (provider === "openai") {
+      const openaiApiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+      if (!openaiApiKey) {
+        throw new HttpError(
+          "Chave OPENAI_API_KEY não configurada nos Secrets do Supabase.",
+          500,
+        );
+      }
+
+      const openaiModel = getOpenAiModel();
+      const openaiEndpoint = "https://api.openai.com/v1/responses";
+
+      const openaiPayload = {
+        model: openaiModel,
+        instructions: SYSTEM_INSTRUCTION_TEXT,
+        input: prompt,
+      };
+
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
+      let openaiResponse: Response;
+
+      try {
+        openaiResponse = await fetch(openaiEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${openaiApiKey}`,
+          },
+          body: JSON.stringify(openaiPayload),
+          signal: abortController.signal,
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new HttpError(
+            "A inteligência artificial (OpenAI) demorou mais que o esperado para responder. Tente novamente em alguns instantes.",
+            504,
+          );
+        }
+        throw new HttpError(
+          "Falha de conexão com a OpenAI API. Tente novamente mais tarde.",
+          502,
+        );
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!openaiResponse.ok) {
+        const status = openaiResponse.status;
+        console.error("OpenAI API error response", { status });
+
+        if (status === 401 || status === 403) {
+          throw new HttpError(
+            "A OpenAI API recusou as credenciais (OPENAI_API_KEY) configuradas no servidor.",
+            502,
+          );
+        }
+
+        if (status === 429) {
+          throw new HttpError(
+            "Limite de uso ou cota da OpenAI API atingido. Verifique o plano da conta ou tente novamente em instantes.",
+            429,
+          );
+        }
+
+        if (status === 400) {
+          throw new HttpError(
+            "A OpenAI API rejeitou a solicitação. Verifique o modelo e o formato da requisição.",
+            502,
+          );
+        }
+
+        if (status === 503 || status === 500) {
+          throw new HttpError(
+            "A OpenAI API está temporariamente sobrecarregada ou indisponível. Aguarde alguns instantes e tente novamente.",
+            503,
+          );
+        }
+
+        throw new HttpError(
+          "Não foi possível concluir a solicitação na OpenAI API.",
+          502,
+        );
+      }
+
+      let openaiData: Record<string, unknown>;
+      try {
+        openaiData = await openaiResponse.json();
+      } catch {
+        throw new HttpError(
+          "A OpenAI API retornou uma resposta inválida.",
+          502,
+        );
+      }
+
+      let candidateText = "";
+      if (typeof openaiData.output_text === "string" && openaiData.output_text.trim()) {
+        candidateText = openaiData.output_text.trim();
+      } else if (Array.isArray(openaiData.output)) {
+        for (const item of openaiData.output) {
+          if (item && typeof item === "object") {
+            const obj = item as Record<string, unknown>;
+            if (obj.type === "message" && Array.isArray(obj.content)) {
+              for (const part of obj.content) {
+                if (part && typeof part === "object") {
+                  const partObj = part as Record<string, unknown>;
+                  if (typeof partObj.text === "string") {
+                    candidateText += (candidateText ? "\n" : "") + partObj.text;
+                  }
+                }
+              }
+            }
+          }
+        }
+        candidateText = candidateText.trim();
+      }
+
+      if (!candidateText && Array.isArray(openaiData.choices)) {
+        const firstChoice = openaiData.choices[0] as Record<string, unknown> | undefined;
+        const msg = firstChoice?.message as Record<string, unknown> | undefined;
+        if (typeof msg?.content === "string") {
+          candidateText = msg.content.trim();
+        }
+      }
+
+      if (!candidateText) {
+        throw new HttpError(
+          "A OpenAI API não retornou uma resposta textual válida.",
+          502,
+        );
+      }
+
+      const usage = (openaiData.usage as Record<string, number> | undefined) ?? {};
+      const promptTokens = usage.input_tokens ?? usage.prompt_tokens ?? 0;
+      const outputTokens = usage.output_tokens ?? usage.completion_tokens ?? 0;
+      const totalTokens = usage.total_tokens ?? (promptTokens + outputTokens);
+
+      return jsonResponse(req, {
+        success: true,
+        provider: "openai",
+        model: openaiModel,
+        prompt,
+        response: candidateText,
+        meta: {
+          promptTokens,
+          candidatesTokens: outputTokens,
+          totalTokens,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    // 6. Obtém a chave Gemini exclusivamente dos Secrets do servidor.
     const geminiApiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
     if (!geminiApiKey) {
       throw new HttpError(
@@ -334,8 +514,7 @@ serve(async (req: Request) => {
     const geminiPayload = {
       systemInstruction: {
         parts: [{
-          text:
-            "Você é o assistente de Inteligência Artificial da Central de Segurança Viária da D'Granel Transportes. Responda sempre em português brasileiro de forma clara, profissional, concisa e objetiva. Não invente dados, indicadores ou causas. Quando não houver informação suficiente, deixe isso explícito.",
+          text: SYSTEM_INSTRUCTION_TEXT,
         }],
       },
       contents: [{
@@ -536,6 +715,7 @@ serve(async (req: Request) => {
 
     return jsonResponse(req, {
       success: true,
+      provider: "gemini",
       model: geminiModel,
       prompt,
       response: candidateText,

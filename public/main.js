@@ -1421,6 +1421,7 @@ function initSystem() {
     renderTable();
     updateJSONEditor();
     renderIntelligenceDashboard();
+    updateHeaderAlertsBadge();
     const detailModal = document.getElementById('modalDetail');
     if (detailModal && !detailModal.classList.contains('hidden') && detailModalIndex !== null) {
         refreshDetailModal(detailModalIndex);
@@ -2530,6 +2531,33 @@ function populateAlertSectorsFilter() {
     }
 }
 
+function updateHeaderAlertsBadge(explicitCount = null) {
+    const badge = document.getElementById('headerAlertsBadge');
+    if (!badge) return;
+
+    let unreadCount = explicitCount;
+    if (unreadCount === null) {
+        const alerts = generateDeterministicAlerts();
+        unreadCount = alerts.filter(a => !a.isRead).length;
+    }
+
+    if (unreadCount > 0) {
+        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+function navigateToAlerts() {
+    switchTab('intelligence');
+    switchIntelligenceSubtab('alerts');
+    const container = document.getElementById('alertsContainer') || document.getElementById('subtab-content-alerts');
+    if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
 function renderAlertsList() {
     const container = document.getElementById('alertsContainer');
     if (!container) return;
@@ -2543,6 +2571,8 @@ function renderAlertsList() {
         if (!a.isRead) acc.unreadTotal += 1;
         return acc;
     }, { CRITICO: 0, ATENCAO: 0, INFORMATIVO: 0, unreadTotal: 0 });
+
+    updateHeaderAlertsBadge(counts.unreadTotal);
 
     const elCrit = document.getElementById('alertsCountCritical');
     const elAtt = document.getElementById('alertsCountAttention');
@@ -4076,18 +4106,73 @@ function resetData() {
 }
 
 // ==========================================
-// CENTRAL DE IA — ETAPA 1: INTEGRAÇÃO GEMINI
+// CENTRAL DE IA — PILOTO MULTIPROVEDOR (GEMINI & OPENAI)
 // ==========================================
 
+let currentAiProvider = 'gemini';
+
 /**
- * Função de comunicação reutilizável com a Supabase Edge Function do Gemini.
+ * Altera o provedor de IA selecionado na interface (Google Gemini ou OpenAI).
+ */
+function setAiProvider(provider) {
+    const prov = provider === 'openai' ? 'openai' : 'gemini';
+    currentAiProvider = prov;
+
+    const btnGemini = document.getElementById('provider-btn-gemini');
+    const btnOpenai = document.getElementById('provider-btn-openai');
+    const badgeGemini = document.getElementById('badge-provider-gemini');
+    const badgeOpenai = document.getElementById('badge-provider-openai');
+    const label = document.getElementById('currentProviderLabel');
+    const apiInfo = document.getElementById('currentProviderApiInfo');
+    const promptLabel = document.getElementById('aiPromptLabel');
+    const btnText = document.getElementById('aiTestButtonText');
+
+    if (prov === 'gemini') {
+        if (btnGemini) {
+            btnGemini.className = 'flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-amber-500/25';
+        }
+        if (btnOpenai) {
+            btnOpenai.className = 'flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white';
+        }
+        if (badgeGemini) badgeGemini.classList.remove('hidden');
+        if (badgeOpenai) badgeOpenai.classList.add('hidden');
+        if (label) {
+            label.textContent = 'Google Gemini (gemini-3.8-flash)';
+            label.className = 'text-amber-400 font-bold';
+        }
+        if (apiInfo) apiInfo.textContent = 'API GenerativeLanguage v1beta';
+        if (promptLabel) promptLabel.textContent = 'Pergunta ou solicitação para o Google Gemini:';
+        if (btnText) btnText.textContent = 'Enviar para Gemini';
+    } else {
+        if (btnGemini) {
+            btnGemini.className = 'flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white';
+        }
+        if (btnOpenai) {
+            btnOpenai.className = 'flex items-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500/25';
+        }
+        if (badgeGemini) badgeGemini.classList.add('hidden');
+        if (badgeOpenai) badgeOpenai.classList.remove('hidden');
+        if (label) {
+            label.textContent = 'OpenAI (gpt-4o-mini)';
+            label.className = 'text-emerald-400 font-bold';
+        }
+        if (apiInfo) apiInfo.textContent = 'Responses API (v1/responses)';
+        if (promptLabel) promptLabel.textContent = 'Pergunta ou solicitação para a OpenAI:';
+        if (btnText) btnText.textContent = 'Enviar para OpenAI';
+    }
+}
+
+/**
+ * Função de comunicação reutilizável com a Supabase Edge Function seguranca-viaria-ia.
  * Garante envio seguro de requisições autenticadas sem expor credenciais sensíveis.
  * 
- * @param {string} prompt Mensagem ou pergunta a ser processada pelo Gemini.
- * @param {object} [options] Configurações opcionais adicionais.
- * @returns {Promise<{success: boolean, response: string, model: string, meta: object}>}
+ * @param {string} prompt Mensagem ou pergunta a ser processada.
+ * @param {object} [options] Opções adicionais (provedor, temperatura, etc).
+ * @returns {Promise<{success: boolean, provider: string, response: string, model: string, meta: object}>}
  */
 async function chamarEdgeFunctionIA(prompt, options = {}) {
+    const provider = options.provider || currentAiProvider || 'gemini';
+
     // 1. Obtém sessão ativa do Supabase Auth garantindo renovação de token se expirado
     const { data, error: sessionError } = await supabaseClient.auth.getSession();
     if (sessionError) {
@@ -4108,7 +4193,8 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            prompt: prompt || 'Explique brevemente o que é Segurança Viária.',
+            prompt: prompt || 'Explique brevemente o que é Segurança Viária na operação de transporte pesado.',
+            provider,
             ...options
         })
     });
@@ -4120,12 +4206,13 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
         if (response.status === 404) {
             throw new Error('Edge Function "seguranca-viaria-ia" ainda não foi publicada no Supabase. Publique a função no painel do Supabase para ativar a integração.');
         }
-        const errorMsg = responseData?.error || responseData?.message || responseData?.detail || `Erro na comunicação com a IA (HTTP ${response.status}).`;
+        const provName = provider === 'openai' ? 'OpenAI' : 'Gemini';
+        const errorMsg = responseData?.error || responseData?.message || responseData?.detail || `Erro na comunicação com a IA (${provName} - HTTP ${response.status}).`;
         throw new Error(errorMsg);
     }
 
     if (!responseData || !responseData.success) {
-        throw new Error(responseData?.error || 'A Edge Function não retornou uma resposta válida.');
+        throw new Error(responseData?.error || `A Edge Function não retornou uma resposta válida para o provedor ${provider}.`);
     }
 
     return responseData;
@@ -4134,8 +4221,14 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
 /**
  * Manipulador do botão de teste da interface do Dashboard.
  * Controla os estados de carregamento, latência, exibição de resultados e mensagens amigáveis de erro.
+ * 
+ * @param {string|null} [targetProvider] Opcionalmente força um provedor específico ('gemini' ou 'openai').
  */
-async function executarTesteGeminiIA() {
+async function executarTesteIA(targetProvider = null) {
+    const provider = targetProvider || currentAiProvider || 'gemini';
+    const isOp = provider === 'openai';
+    const providerName = isOp ? 'OpenAI' : 'Google Gemini';
+
     const input = document.getElementById('aiPromptInput');
     const btn = document.getElementById('aiTestButton');
     const btnIcon = document.getElementById('aiTestButtonIcon');
@@ -4145,24 +4238,34 @@ async function executarTesteGeminiIA() {
     const responseContainer = document.getElementById('aiResponseContainer');
     const responseBody = document.getElementById('aiResponseBody');
     const responseMeta = document.getElementById('aiResponseMeta');
+    const responseIcon = document.getElementById('aiResponseIcon');
+    const responseProviderName = document.getElementById('aiResponseProviderName');
 
-    const prompt = input?.value?.trim() || 'Explique brevemente o que é Segurança Viária.';
+    const prompt = input?.value?.trim() || 'Explique brevemente o que é Segurança Viária na operação de transporte pesado.';
 
     // Atualiza interface para estado de carregamento
     if (btn) btn.disabled = true;
     if (btnIcon) btnIcon.className = 'fa-solid fa-spinner fa-spin';
-    if (btnText) btnText.textContent = 'Processando...';
+    if (btnText) btnText.textContent = `Consultando ${providerName}...`;
     if (statusDot) statusDot.className = 'h-2 w-2 rounded-full bg-amber-400 animate-pulse';
-    if (statusText) statusText.textContent = 'Consultando Gemini AI...';
+    if (statusText) statusText.textContent = `Aguardando ${providerName}...`;
 
     if (responseContainer) responseContainer.classList.remove('hidden');
-    if (responseBody) responseBody.innerHTML = '<span class="text-slate-400 italic flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin text-amber-400"></i> Enviando solicitação autenticada à Edge Function...</span>';
-    if (responseMeta) responseMeta.textContent = 'Aguardando...';
+    if (responseIcon) {
+        responseIcon.className = isOp ? 'fa-solid fa-bolt text-emerald-400' : 'fa-brands fa-google text-amber-400';
+    }
+    if (responseProviderName) {
+        responseProviderName.textContent = `Resposta do ${providerName}`;
+    }
+    if (responseBody) {
+        responseBody.innerHTML = `<span class="text-slate-400 italic flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin ${isOp ? 'text-emerald-400' : 'text-amber-400'}"></i> Enviando solicitação autenticada à Edge Function (${providerName})...</span>`;
+    }
+    if (responseMeta) responseMeta.textContent = 'Processando...';
 
     const startTime = performance.now();
 
     try {
-        const resultado = await chamarEdgeFunctionIA(prompt);
+        const resultado = await chamarEdgeFunctionIA(prompt, { provider });
         const durationSec = ((performance.now() - startTime) / 1000).toFixed(2);
 
         // Sucesso
@@ -4175,21 +4278,21 @@ async function executarTesteGeminiIA() {
 
         if (responseMeta) {
             const tokens = resultado.meta?.totalTokens ? ` • ${resultado.meta.totalTokens} tokens` : '';
-            responseMeta.textContent = `${resultado.model || 'Gemini'} • ${durationSec}s${tokens}`;
+            responseMeta.textContent = `${resultado.model || providerName} • ${durationSec}s${tokens}`;
         }
     } catch (error) {
         const durationSec = ((performance.now() - startTime) / 1000).toFixed(2);
 
         // Erro
         if (statusDot) statusDot.className = 'h-2 w-2 rounded-full bg-rose-400';
-        if (statusText) statusText.textContent = 'Falha na comunicação';
+        if (statusText) statusText.textContent = `Falha em ${providerName}`;
 
         if (responseBody) {
             responseBody.innerHTML = `
                 <div class="text-rose-400 font-semibold mb-1 flex items-center gap-1.5">
-                    <i class="fa-solid fa-triangle-exclamation"></i> Não foi possível obter resposta:
+                    <i class="fa-solid fa-triangle-exclamation"></i> Não foi possível obter resposta de ${providerName}:
                 </div>
-                <div class="text-slate-300 text-xs bg-rose-950/30 border border-rose-900/40 rounded-lg p-3">
+                <div class="text-slate-300 text-xs bg-rose-950/30 border border-rose-900/40 rounded-lg p-3 leading-relaxed">
                     ${escapeHtml(error.message)}
                 </div>
             `;
@@ -4199,9 +4302,23 @@ async function executarTesteGeminiIA() {
             responseMeta.textContent = `Erro (${durationSec}s)`;
         }
     } finally {
-        // Restaura botão
         if (btn) btn.disabled = false;
         if (btnIcon) btnIcon.className = 'fa-solid fa-paper-plane';
-        if (btnText) btnText.textContent = 'Testar Conexão';
+        if (btnText) btnText.textContent = `Enviar para ${currentAiProvider === 'openai' ? 'OpenAI' : 'Gemini'}`;
     }
+}
+
+/**
+ * Executa teste rápido de conexão direta para um provedor específico.
+ */
+function executarTesteConexaoDireta(provider) {
+    setAiProvider(provider);
+    executarTesteIA(provider);
+}
+
+/**
+ * Mantém compatibilidade com chamadas legadas ao Gemini.
+ */
+function executarTesteGeminiIA() {
+    executarTesteConexaoDireta('gemini');
 }

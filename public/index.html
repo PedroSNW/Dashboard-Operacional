@@ -76,6 +76,10 @@
             </div>
 
             <div class="order-2 flex w-full flex-wrap items-center justify-end gap-2 lg:order-2 lg:ml-auto lg:w-auto">
+                <button id="headerAlertsBtn" onclick="navigateToAlerts()" title="Central de Notificações & Alertas Operacionais" aria-label="Central de Notificações & Alertas Operacionais" class="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition hover:border-amber-500/40 hover:bg-slate-700 hover:text-white">
+                    <i class="fa-solid fa-bell text-sm" aria-hidden="true"></i>
+                    <span id="headerAlertsBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-md shadow-rose-500/40">0</span>
+                </button>
                 <button id="saveStateButton" title="Salvar todas as alterações" aria-label="Salvar todas as alterações" class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"><i id="saveStateButtonIcon" class="fa-solid fa-floppy-disk text-sm" aria-hidden="true"></i></button>
                 <button onclick="openChartModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-bold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-chart-line text-amber-400"></i> + Criar Gráfico</button>
                 <button onclick="openNewIndicatorModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-plus text-amber-400"></i> Novo Indicador</button>
@@ -280,21 +284,21 @@
                 <div class="flex justify-center"><button id="intelligenceLoadMore" type="button" class="hidden rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">Carregar mais análises</button></div>
             </div>
 
-            <!-- CONTEÚDO SUBABA 3: PILOTO CENTRAL DE IA (EXISTENTE PRESERVADO) -->
+            <!-- CONTEÚDO SUBABA 3: PILOTO CENTRAL DE IA (MULTIPROVEDOR GEMINI & OPENAI) -->
             <div id="subtab-content-pilot" class="hidden space-y-6">
-                <!-- Painel Piloto Central de IA (Etapa 1 - Validação Técnica) -->
-                <section id="aiIntegrationTestCard" class="glass-card space-y-4 rounded-2xl border border-amber-500/30 p-5">
-                    <div class="flex flex-col justify-between gap-3 border-b border-slate-800 pb-3 sm:flex-row sm:items-center">
+                <!-- Painel Piloto Central de IA -->
+                <section id="aiIntegrationTestCard" class="glass-card space-y-5 rounded-2xl border border-amber-500/30 p-5">
+                    <div class="flex flex-col justify-between gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center">
                         <div class="flex items-center gap-3">
                             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
                                 <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
                             </div>
                             <div>
                                 <div class="flex items-center gap-2">
-                                    <h3 class="text-sm font-bold text-white">Central de IA — Piloto de Integração</h3>
-                                    <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Etapa 1</span>
+                                    <h3 class="text-sm font-bold text-white">Central de IA — Piloto Multiprovedor</h3>
+                                    <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Gemini &amp; OpenAI</span>
                                 </div>
-                                <p class="text-xs text-slate-400">Validação técnica: Dashboard → Supabase Edge Function → Gemini API.</p>
+                                <p class="text-xs text-slate-400">Validação técnica: Dashboard → Supabase Edge Function → Provedor Selecionado (Gemini / OpenAI).</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 text-xs text-slate-400">
@@ -303,22 +307,60 @@
                         </div>
                     </div>
 
+                    <!-- Seletor de Provedor de IA -->
+                    <div class="space-y-2 rounded-xl border border-slate-800/80 bg-slate-900/40 p-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-300">Escolha o Provedor de Inteligência Artificial:</span>
+                            <span class="text-[11px] text-slate-400">Secrets mantidos exclusivamente no backend</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 pt-1">
+                            <button id="provider-btn-gemini" type="button" onclick="setAiProvider('gemini')" class="flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-amber-500/25">
+                                <i class="fa-brands fa-google text-amber-400"></i>
+                                <span>Google Gemini</span>
+                                <span id="badge-provider-gemini" class="ml-1 rounded-full bg-amber-500/30 px-2 py-0.5 text-[10px] font-extrabold text-amber-300">Ativo</span>
+                            </button>
+                            <button id="provider-btn-openai" type="button" onclick="setAiProvider('openai')" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white">
+                                <i class="fa-solid fa-bolt text-emerald-400"></i>
+                                <span>OpenAI</span>
+                                <span id="badge-provider-openai" class="hidden ml-1 rounded-full bg-emerald-500/30 px-2 py-0.5 text-[10px] font-extrabold text-emerald-300">Ativo</span>
+                            </button>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
+                            <span>Provedor ativo:</span>
+                            <strong id="currentProviderLabel" class="text-amber-400 font-bold">Google Gemini (gemini-3.8-flash)</strong>
+                            <span class="text-slate-600">·</span>
+                            <span id="currentProviderApiInfo" class="text-slate-400 text-[10px]">API GenerativeLanguage v1beta</span>
+                        </div>
+                    </div>
+
                     <div class="space-y-3">
                         <div>
-                            <label for="aiPromptInput" class="mb-1.5 block text-xs font-semibold text-slate-300">Mensagem para o Gemini:</label>
+                            <label for="aiPromptInput" id="aiPromptLabel" class="mb-1.5 block text-xs font-semibold text-slate-300">Pergunta ou solicitação para a IA:</label>
                             <div class="flex flex-col gap-2 sm:flex-row">
-                                <input id="aiPromptInput" type="text" value="Explique brevemente o que é Segurança Viária." class="flex-1 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Digite uma pergunta para a IA...">
-                                <button id="aiTestButton" type="button" onclick="executarTesteGeminiIA()" class="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <input id="aiPromptInput" type="text" value="Explique brevemente o que é Segurança Viária na operação de transporte pesado." class="flex-1 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Digite uma pergunta para a IA...">
+                                <button id="aiTestButton" type="button" onclick="executarTesteIA()" class="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i id="aiTestButtonIcon" class="fa-solid fa-paper-plane"></i>
-                                    <span id="aiTestButtonText">Testar Conexão</span>
+                                    <span id="aiTestButtonText">Enviar para Gemini</span>
                                 </button>
                             </div>
                         </div>
 
+                        <!-- Testes rápidos de conectividade individual -->
+                        <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/60">
+                            <span class="text-[11px] text-slate-400">Testar conexão direta:</span>
+                            <button type="button" onclick="executarTesteConexaoDireta('gemini')" class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-amber-500/40 hover:bg-slate-700">
+                                <i class="fa-brands fa-google text-amber-400"></i> Testar Gemini
+                            </button>
+                            <button type="button" onclick="executarTesteConexaoDireta('openai')" class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-emerald-500/40 hover:bg-slate-700">
+                                <i class="fa-solid fa-bolt text-emerald-400"></i> Testar OpenAI
+                            </button>
+                        </div>
+
                         <div id="aiResponseContainer" class="hidden space-y-2 rounded-xl border border-slate-800 bg-[#070D1E]/80 p-4">
-                            <div class="flex items-center justify-between border-b border-slate-800/80 pb-2 text-xs text-slate-400">
-                                <span class="flex items-center gap-1.5 font-semibold text-amber-400">
-                                    <i class="fa-solid fa-robot"></i> Resposta do Gemini
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2 text-xs text-slate-400">
+                                <span class="flex items-center gap-2 font-bold" id="aiResponseHeader">
+                                    <i id="aiResponseIcon" class="fa-brands fa-google text-amber-400"></i>
+                                    <span id="aiResponseProviderName" class="text-white">Resposta</span>
                                 </span>
                                 <span id="aiResponseMeta" class="font-mono text-[11px] text-slate-400"></span>
                             </div>

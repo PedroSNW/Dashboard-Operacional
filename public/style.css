@@ -587,3 +587,44 @@ details#headerToolsMenu summary i.fa-chevron-down {
     transition: transform 200ms ease;
 }
 
+/* Central de Notificações - Botão de Cabeçalho & Piloto Multiprovedor */
+#headerAlertsBtn {
+    position: relative;
+    cursor: pointer;
+}
+#headerAlertsBadge {
+    pointer-events: none;
+    box-shadow: 0 0 10px rgba(244, 63, 94, 0.6);
+}
+body.light-theme #headerAlertsBtn {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #475569;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05);
+}
+body.light-theme #headerAlertsBtn:hover {
+    background: #f8fafc;
+    color: #0f172a;
+    border-color: #f59e0b;
+}
+body.light-theme #aiIntegrationTestCard {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: #e2e8f0;
+}
+body.light-theme #aiIntegrationTestCard .bg-slate-900\/40 {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+body.light-theme #aiPromptInput {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+body.light-theme #aiResponseContainer {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+body.light-theme #aiResponseBody {
+    color: #1e293b;
+}
+

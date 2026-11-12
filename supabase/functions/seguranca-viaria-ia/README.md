@@ -1,78 +1,64 @@
 # Supabase Edge Function: seguranca-viaria-ia
-D'Granel Transportes — Central de Inteligência Artificial (Etapa 1)
+D'Granel Transportes — Central de Inteligência Artificial Multiprovedor (Gemini & OpenAI)
 
-Esta função realiza a ponte entre o Dashboard Operacional da D'Granel e a Gemini API do Google. A função valida o usuário no Supabase Auth e mantém a chave Gemini exclusivamente nos Secrets do servidor.
+Esta função realiza a ponte segura entre o Dashboard Operacional da D'Granel e os provedores oficiais de Inteligência Artificial: **Google Gemini API** e **OpenAI Responses API**. 
+
+A função valida o token JWT do usuário no Supabase Auth corporativo e mantém todas as credenciais de API exclusivamente nos Secrets protegidos do servidor.
 
 ## Arquitetura
 
 Dashboard (Browser)
 → Supabase Edge Function `seguranca-viaria-ia`
-→ validação do JWT via `supabase.auth.getUser(token)`
-→ leitura de `GEMINI_API_KEY` nos Secrets
-→ Gemini API (`v1beta`, `generateContent`)
-→ resposta ao Dashboard
+→ Validação do JWT via `supabase.auth.getUser(token)`
+→ Verificação de domínio corporativo (`@dgranel.com.br`)
+→ Roteamento por provedor selecionado no payload (`provider: "gemini" | "openai"`):
+   - **Google Gemini**: Leitura de `GEMINI_API_KEY` → chamada à Gemini API (`generateContent`) com retry para 503 e timeout individual de 35s.
+   - **OpenAI**: Leitura de `OPENAI_API_KEY` → chamada à Responses API oficial (`https://api.openai.com/v1/responses`) com autenticação Bearer e timeout de 35s.
+→ Retorno estruturado e sanitizado ao Dashboard.
 
-A função não lê nem altera `dashboard_state`, `audit_logs` ou os indicadores.
+A função não lê nem altera `dashboard_state`, `audit_logs` ou os indicadores cadastrados no banco.
 
-## Secrets e variáveis
+## Secrets e variáveis de ambiente
 
-Configure no Supabase Dashboard:
+Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 
-- `GEMINI_API_KEY` — obrigatório; chave criada no Google AI Studio.
-- `GEMINI_MODEL` — opcional; padrão `gemini-3.8-flash`.
-- `DASHBOARD_ALLOWED_ORIGINS` — opcional, mas recomendado em produção; lista de origens permitidas separadas por vírgula, por exemplo `https://seu-dominio.com,https://www.seu-dominio.com`.
+### Credenciais Google Gemini:
+- `GEMINI_API_KEY` — obrigatório para consultas Gemini; chave obtida no Google AI Studio.
+- `GEMINI_MODEL` — opcional; padrão: `gemini-3.8-flash`.
 
-As variáveis `SUPABASE_URL` e `SUPABASE_ANON_KEY` são fornecidas pelo ambiente da Edge Function do Supabase.
+### Credenciais OpenAI:
+- `OPENAI_API_KEY` — obrigatório para consultas OpenAI; chave da API OpenAI com permissão para Responses API.
+- `OPENAI_MODEL` — opcional; padrão: `gpt-4o-mini` (compatível com Responses API).
 
-Se `DASHBOARD_ALLOWED_ORIGINS` não estiver configurada, a função usa `Access-Control-Allow-Origin: *` para facilitar o primeiro teste. Configure a lista de origens antes de disponibilizar a função em produção. CORS não substitui autenticação.
+### Configurações de Domínio e Supabase:
+- `DASHBOARD_ALLOWED_ORIGINS` — opcional, mas recomendado em produção; lista de origens permitidas separadas por vírgula (ex.: `https://seu-dominio.com,https://www.seu-dominio.com`).
+- `SUPABASE_URL` e `SUPABASE_ANON_KEY` — injetados automaticamente pelo ambiente Supabase Edge Function.
+
+## Endpoints das APIs Externas
+
+1. **Google Gemini:**
+   `https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent`
+   Chave enviada no cabeçalho `x-goog-api-key`.
+
+2. **OpenAI Responses API:**
+   `https://api.openai.com/v1/responses`
+   Autenticação enviada via cabeçalho HTTP `Authorization: Bearer {OPENAI_API_KEY}`.
 
 ## Proteções implementadas
 
-- Aceita apenas `POST` e trata preflight `OPTIONS`.
-- Valida o JWT consultando o Supabase Auth no servidor.
-- Restringe o acesso a e-mails terminados exatamente em `@dgranel.com.br`.
-- Limita o corpo a 25 KB e o prompt a 1.000 caracteres.
-- Rejeita JSON inválido e prompts vazios ou acima do limite.
-- Timeout de 15 segundos na chamada à Gemini API.
-- Limite local de 3 chamadas simultâneas por instância.
-- Limite local de 10 chamadas por usuário por janela de 60 segundos.
-- Não retorna stack trace ou mensagens internas inesperadas ao navegador.
-- Não executa operações no banco de dados do Dashboard.
-
-**Limitação dos limites locais:** Supabase Edge Functions podem atender requisições em várias instâncias. Os limites de concorrência e frequência implementados em memória são proteções básicas por instância e não constituem rate limiting global/distribuído. Para controle global em produção, será necessário um mecanismo compartilhado (por exemplo, Redis/Upstash ou uma solução persistente com operação atômica).
-
-## Endpoint Gemini
-
-A função utiliza:
-
-`https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent`
-
-A chave é enviada no cabeçalho `x-goog-api-key`, nunca na URL nem ao frontend.
-
-Modelo padrão configurado: `gemini-3.8-flash`. Confirme a disponibilidade e as cotas do modelo no projeto Google AI Studio antes do teste real.
+- Aceita apenas método `POST` e responde preflight `OPTIONS` (CORS).
+- Validação estrita do JWT consultando o Supabase Auth no servidor.
+- Restrição obrigatória a e-mails corporativos terminados em `@dgranel.com.br`.
+- Validação e sanitização de payload (limite de 25 KB no corpo e 1.000 caracteres no prompt).
+- Limite em memória por instância (concorrência máxima de 3 requisições simultâneas e taxa de 10 chamadas/minuto por usuário).
+- Timeout individual de 35 segundos em ambas as APIs com `AbortController`.
+- Sanitização de respostas de erro: nenhuma chave, token ou stack trace interno é retornado ao cliente ou exposto em logs.
 
 ## Implantação pelo Supabase Dashboard (sem CLI)
 
-1. Abra o projeto no Supabase Dashboard.
-2. Entre em **Edge Functions**.
-3. Crie ou abra a função `seguranca-viaria-ia`.
-4. Cole o conteúdo do `index.ts` revisado.
-5. Publique a função.
-6. Em **Edge Functions > Secrets**, configure `GEMINI_API_KEY`.
-7. Configure `GEMINI_MODEL` apenas se desejar substituir o padrão.
-8. Configure `DASHBOARD_ALLOWED_ORIGINS` com a origem real do Dashboard antes da produção.
-
-## Testes pendentes
-
-Após publicar e configurar os Secrets, testar:
-
-1. `OPTIONS` com origem permitida e origem não permitida.
-2. `POST` sem JWT (esperado: 401).
-3. `POST` com JWT inválido/expirado (esperado: 401).
-4. Conta fora do domínio corporativo (esperado: 403).
-5. JSON inválido, corpo acima de 25 KB e prompt acima de 1.000 caracteres.
-6. Limite local de frequência e concorrência.
-7. Chamada autenticada com `GEMINI_API_KEY` e modelo válidos.
-8. Confirmar nos logs que não há chave, JWT ou stack trace expostos.
-
-Nenhum teste de integração com Supabase ou Gemini é declarado como executado por este arquivo.
+1. Acesse o projeto no painel do Supabase.
+2. Navegue até **Edge Functions**.
+3. Selecione a função `seguranca-viaria-ia` (ou crie-a caso ainda não exista).
+4. Substitua o código pelo conteúdo de `supabase/functions/seguranca-viaria-ia/index.ts`.
+5. Salve e implante a função.
+6. Em **Edge Functions > Secrets**, cadastre `GEMINI_API_KEY` e `OPENAI_API_KEY`.
