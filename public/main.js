@@ -4170,6 +4170,79 @@ function setAiProvider(provider) {
  * @param {object} [options] Opções adicionais (provedor, temperatura, etc).
  * @returns {Promise<{success: boolean, provider: string, response: string, model: string, meta: object}>}
  */
+
+/**
+ * Prepara um recorte compacto e fiel dos indicadores atuais para a Central de IA.
+ * Os valores permanecem associados às competências correspondentes; null continua sendo ausência.
+ */
+function prepararContextoIndicadoresIA(prompt) {
+    const normalizar = value => String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+
+    const pergunta = normalizar(prompt);
+    const termosIgnorados = new Set([
+        'para', 'sobre', 'quais', 'qual', 'todos', 'todas', 'liste', 'listar',
+        'relatorio', 'analise', 'analisar', 'indicadores', 'indicador', 'dados',
+        'mensais', 'mensal', 'disponiveis', 'recebidos', 'contexto', 'minha',
+        'meus', 'com', 'sem', 'uma', 'dos', 'das', 'por', 'que', 'como'
+    ]);
+
+    let indicadoresSelecionados = currentData;
+    const temas = [
+        { termos: ['acidente', 'acidentes', 'sinistro', 'sinistros'], regex: /acident|sinistr/ },
+        { termos: ['multa', 'multas', 'autuacao', 'autuacoes'], regex: /multa|autuac/ },
+        { termos: ['velocidade'], regex: /velocidade/ },
+        { termos: ['score'], regex: /score/ },
+        { termos: ['veiculo', 'veiculos', 'frota', 'crlv', 'cronotacografo'], regex: /veicul|frota|crlv|cronotac/ }
+    ];
+    const temaSolicitado = temas.find(tema => tema.termos.some(termo => pergunta.includes(termo)));
+
+    if (temaSolicitado) {
+        indicadoresSelecionados = currentData.filter(item =>
+            temaSolicitado.regex.test(normalizar(`${item.indicador} ${item.setor}`))
+        );
+    } else {
+        const termos = pergunta.match(/[a-z0-9]{4,}/g) || [];
+        const termosRelevantes = [...new Set(termos.filter(termo => !termosIgnorados.has(termo)))];
+        const correspondentes = currentData.filter(item => {
+            const texto = normalizar(`${item.indicador} ${item.setor}`);
+            return termosRelevantes.some(termo => texto.includes(termo));
+        });
+        if (correspondentes.length) indicadoresSelecionados = correspondentes;
+    }
+
+    const indicadores = indicadoresSelecionados.map(item => ({
+        indicador: item.indicador ?? null,
+        setor: item.setor ?? null,
+        meta: item.meta ?? null,
+        unidade: item.und ?? null,
+        direcaoDesempenho: item.direcaoDesempenho ?? null,
+        ultimaAtualizacao: item.ultimaAtualizacao ?? null,
+        valoresMensais: (Array.isArray(item.valores) ? item.valores : []).map((valor, index) => ({
+            competencia: mesesLabels[index] ?? null,
+            valor: valor === undefined ? null : valor
+        }))
+    }));
+
+    const contexto = {
+        totalIndicadoresNoDashboard: currentData.length,
+        totalIndicadoresEnviados: indicadores.length,
+        observacao: 'Dados agregados do Dashboard. Valores null representam ausência de dado, nunca zero.',
+        indicadores
+    };
+
+    const tamanhoBytes = new TextEncoder().encode(JSON.stringify(contexto)).length;
+    if (tamanhoBytes > 18 * 1024) {
+        throw new Error(
+            'O contexto selecionado é muito grande para enviar com segurança. Faça uma pergunta mais específica, indicando o setor ou o tema.'
+        );
+    }
+
+    return contexto;
+}
+
 async function chamarEdgeFunctionIA(prompt, options = {}) {
     const provider = options.provider || currentAiProvider || 'gemini';
 
@@ -4184,7 +4257,19 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
         throw new Error('Sessão expirada ou não autenticada. Faça login novamente para utilizar a IA.');
     }
 
-    // 2. Dispara requisição HTTP POST para a Edge Function
+    // 2. Prepara e envia o contexto real dos indicadores junto da pergunta.
+    const contextoIndicadores = prepararContextoIndicadoresIA(prompt);
+    const payload = {
+        prompt: prompt || 'Explique brevemente o que é Segurança Viária na operação de transporte pesado.',
+        provider,
+        ...options,
+        context: contextoIndicadores
+    };
+    const payloadBytes = new TextEncoder().encode(JSON.stringify(payload)).length;
+    if (payloadBytes > 25 * 1024) {
+        throw new Error('A solicitação com os dados do Dashboard ultrapassa o limite de 25 KB. Faça uma pergunta mais específica.');
+    }
+
     const response = await fetch(SUPABASE_AI_FUNCTION_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -4192,11 +4277,7 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
             'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            prompt: prompt || 'Explique brevemente o que é Segurança Viária na operação de transporte pesado.',
-            provider,
-            ...options
-        })
+        body: JSON.stringify(payload)
     });
 
     const responseData = await response.json().catch(() => null);
@@ -4206,7 +4287,7 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
         if (response.status === 404) {
             throw new Error('Edge Function "seguranca-viaria-ia" ainda não foi publicada no Supabase. Publique a função no painel do Supabase para ativar a integração.');
         }
-        const provName = provider === 'openai' ? 'OpenAI' : 'Gemini';
+        const provName = provider === 'openai' ? 'OpenAI' : provider === 'groq' ? 'Groq' : 'Gemini';
         const errorMsg = responseData?.error || responseData?.message || responseData?.detail || `Erro na comunicação com a IA (${provName} - HTTP ${response.status}).`;
         throw new Error(errorMsg);
     }
