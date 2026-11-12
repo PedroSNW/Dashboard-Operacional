@@ -2719,8 +2719,9 @@ function calcMetrics(item) {
     const first = valid[0] ?? last;
     const diff = (last !== null && first !== null) ? last - first : 0;
     const meta = item.meta === null || item.meta === undefined || item.meta === '' ? NaN : Number(item.meta);
-    const lowerIsBetter = /acidente|sinistro|morte|multa|autua[cç][aã]o|velocidade|ocorr[eê]ncia|redu[cç][aã]o|n[aã]o identificado/i.test(item.indicador);
-    const status = !Number.isFinite(meta) ? 'N/A' : (lowerIsBetter ? last <= meta : last >= meta) ? 'OK' : 'ACOMPANHAR';
+    const direction = getIntelligenceDirection(item);
+    const status = !Number.isFinite(meta) || !direction || direction === 'neutro' ? 'N/A'
+        : (direction === 'menor_melhor' ? last <= meta : last >= meta) ? 'OK' : 'ACOMPANHAR';
 
     return { avg, min, max, last, lastMonth: lastObj.month, status, diff };
 }

@@ -21,6 +21,10 @@ A função lê `dashboard_state` com o JWT do usuário para conferir os indicado
 
 ## Contrato de contexto v1
 
+### Camada matemática
+
+`analytics.js` calcula estatísticas após validar o snapshot e enriquece o contexto de todos os provedores. O servidor gera a seção numérica da resposta; o modelo fornece interpretação qualitativa sem números. Texto livre com algarismos ou `%` é omitido conservadoramente. A regra não valida toda afirmação semântica. Consulte `PRECISAO-ANALITICA.md` para métodos, testes e limitações. Teste adicional: `node tests/analytics.test.mjs`. Inclua o módulo `analytics.js` na publicação da função.
+
 O Dashboard envia `context` com `versao: 1`, `origem: "supabase"`, competências, contagens e indicadores selecionados. Limites: 18 KiB de contexto, 25 KiB de corpo total e 1000 caracteres de pergunta. As medições usam bytes UTF-8. A seleção usa até 17 KiB antes de incluir a observação de parcialidade e mantém as séries completas.
 
 Cada indicador contém `id` (ID persistido ou `indice:N`), nome, setor, meta, unidade, direção e valores. O servidor compara esses campos com `dashboard_state` e rejeita dados adulterados/desatualizados com HTTP 409. Falha de leitura autorizada retorna 403. O estado deve ter `mesesLabels` persistido e compatível com as séries; rótulos sem ano não autorizam inferir o ano.
