@@ -1,0 +1,7 @@
+{
+  "compilerOptions": { "strict": true },
+  "lock": false,
+  "tasks": {
+    "check": "deno check seguranca-viaria-ia/index.ts"
+  }
+}

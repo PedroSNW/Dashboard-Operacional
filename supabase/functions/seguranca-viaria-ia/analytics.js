@@ -18,27 +18,28 @@ export function analyzeIndicator(item, labels) {
     if (comparable) points.sort((a,b) => (a.year ?? 0) - (b.year ?? 0) || a.month - b.month);
     const valid = points.filter(p => p.valor !== null);
     const values = valid.map(p => p.valor);
-    const total = values.reduce((a,b) => a+b, 0);
-    const mean = values.length ? total / values.length : null;
+    const finite = v => Number.isFinite(v) ? v : null;
+    const total = finite(values.reduce((a,b) => a+b, 0));
+    const mean = values.length ? (total === null ? finite(values.reduce((a,b) => a+b/values.length, 0)) : total / values.length) : null;
     const unit = String(item.unidade ?? '').toLowerCase();
     const rate = /%|taxa|milhao|milhão|por\s+.*km|\/.*km/.test(unit + ' ' + String(item.indicador).toLowerCase());
     const additive = !rate && /^(qtd|quantidade|un|unidade|r\$)$/.test(unit.trim()) && !/score|media|média|indice|índice/.test(String(item.indicador).toLowerCase());
     const direction = ['menor_melhor','maior_melhor','neutro'].includes(item.direcaoDesempenho) ? item.direcaoDesempenho : null;
     const target = numeric(item.meta) ? item.meta : null;
-    const change = (a,b) => ({absoluta: b-a, percentual: a === 0 ? null : (b-a)/Math.abs(a)*100, pontosPercentuais: unit.includes('%') ? b-a : null});
+    const change = (a,b) => ({absoluta: finite(b-a), percentual: a === 0 ? null : finite((b-a)/Math.abs(a)*100), pontosPercentuais: unit.includes('%') ? finite(b-a) : null});
     const monthly = points.map((p,i) => {
         const previous = points[i-1];
         const adjacent = previous && (dated ? p.year*12+p.month - (previous.year*12+previous.month) === 1 : p.month-previous.month === 1);
         return {competencia:p.competencia, valor:p.valor,
             estado:p.valor === null ? 'ausente' : p.valor === 0 ? 'zero_registrado' : 'valor_registrado',
             variacaoAnterior: comparable && adjacent && previous.valor !== null && p.valor !== null ? change(previous.valor,p.valor) : null,
-            desvioMediaPercentual: p.valor === null || mean === null || mean === 0 ? null : (p.valor-mean)/Math.abs(mean)*100,
+            desvioMediaPercentual: p.valor === null || mean === null || mean === 0 ? null : finite((p.valor-mean)/Math.abs(mean)*100),
             desvioMeta: p.valor === null || target === null ? null : change(target,p.valor)};
     });
     let streak = 0, longestImprove = 0, longestWorse = 0, kind = null;
     for (const p of monthly) {
         const d = p.variacaoAnterior?.absoluta;
-        const next = d === undefined || d === 0 || !direction || direction === 'neutro' ? null : (direction === 'menor_melhor' ? d < 0 : d > 0) ? 'melhora' : 'piora';
+        const next = d === undefined || d === null || d === 0 || !direction || direction === 'neutro' ? null : (direction === 'menor_melhor' ? d < 0 : d > 0) ? 'melhora' : 'piora';
         streak = next && next === kind ? streak+1 : next ? 1 : 0; kind = next;
         if (kind === 'melhora') longestImprove = Math.max(longestImprove,streak);
         if (kind === 'piora') longestWorse = Math.max(longestWorse,streak);

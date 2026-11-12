@@ -40,7 +40,11 @@ export function runAnalyticsTests(analyze = analyzeIndicator, render = analytica
     assert(analyze(item([]),labels.slice(0,2)).ausentes===2,'Posições inexistentes');
     assert(analyze(item([9,9],{meta:null}),labels.slice(0,2)).meta===null,'Meta ausente');
     assert(analyze(item([1,2],{meta:40}),labels.slice(0,2)).meta===40,'K: meta do snapshot');
-    return 'Cenários analíticos A–F, H–I, K e casos de precisão/ordenação passaram.';
+    const huge = analyze(item([Number.MAX_VALUE, Number.MAX_VALUE]),labels.slice(0,2));
+    assert(huge.soma === null && Number.isFinite(huge.media), 'Overflow da soma');
+    const delta = analyze(item([-Number.MAX_VALUE,Number.MAX_VALUE]),labels.slice(0,2));
+    assert(delta.primeiroUltimo.absoluta === null && delta.primeiroUltimo.percentual === null && delta.tendencia.maiorSequenciaPiora === 0, 'Overflow da variação');
+    return 'Cenários analíticos A–F, H–I, K e casos de precisão/ordenação/overflow passaram.';
 }
 if (typeof process !== 'undefined') {
     console.log(runAnalyticsTests());
