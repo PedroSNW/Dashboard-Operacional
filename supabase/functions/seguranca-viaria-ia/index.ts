@@ -14,6 +14,7 @@ const GEMINI_TIMEOUT_MS = 35_000;
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 const AI_TIMEOUT_MS = 35_000;
 
 // Controle em memória por instância.
@@ -186,8 +187,19 @@ function getOpenAiModel(): string {
   const model = (Deno.env.get("OPENAI_MODEL") || DEFAULT_OPENAI_MODEL).trim();
 
   // Evita que o valor do Secret altere a estrutura do endpoint.
-  if (!/^[a-zA-Z0-9._-]{1,100}$/.test(model)) {
+  if (!/^[a-zA-Z0-9._/-]{1,100}$/.test(model)) {
     throw new HttpError("O Secret OPENAI_MODEL possui um identificador inválido.", 500);
+  }
+
+  return model;
+}
+
+function getGroqModel(): string {
+  const model = (Deno.env.get("GROQ_MODEL") || DEFAULT_GROQ_MODEL).trim();
+
+  // Permite "/" no identificador do modelo (ex: openai/gpt-oss-120b)
+  if (!/^[a-zA-Z0-9._/-]{1,100}$/.test(model)) {
+    throw new HttpError("O Secret GROQ_MODEL possui um identificador inválido.", 500);
   }
 
   return model;
@@ -332,8 +344,8 @@ serve(async (req: Request) => {
     }
 
     const rawProvider = typeof body.provider === "string" ? body.provider.trim().toLowerCase() : "gemini";
-    if (rawProvider !== "gemini" && rawProvider !== "openai") {
-      throw new HttpError("Provedor de IA inválido. Escolha 'gemini' ou 'openai'.", 400);
+    if (rawProvider !== "gemini" && rawProvider !== "openai" && rawProvider !== "groq") {
+      throw new HttpError("Provedor de IA inválido. Escolha 'gemini', 'openai' ou 'groq'.", 400);
     }
     const provider = rawProvider;
 
@@ -346,8 +358,7 @@ serve(async (req: Request) => {
       "sempre considerando a direção de desempenho dos indicadores.";
 
     // 5. Integração com OpenAI (Responses API)
-    if (provider === "openai") {
-      const openaiApiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+    if (provider === "openai") {      const openaiApiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
       if (!openaiApiKey) {
         throw new HttpError(
           "Chave OPENAI_API_KEY não configurada nos Secrets do Supabase.",
@@ -498,7 +509,145 @@ serve(async (req: Request) => {
       });
     }
 
-    // 6. Obtém a chave Gemini exclusivamente dos Secrets do servidor.
+    // 6. Integração com Groq (Chat Completions API)
+    if (provider === "groq") {
+      const groqApiKey = Deno.env.get("GROQ_API_KEY")?.trim();
+      if (!groqApiKey) {
+        throw new HttpError(
+          "Chave GROQ_API_KEY não configurada nos Secrets do Supabase.",
+          500,
+        );
+      }
+
+      const groqModel = getGroqModel();
+      const groqEndpoint = "https://api.groq.com/openai/v1/chat/completions";
+
+      const groqPayload = {
+        model: groqModel,
+        messages: [
+          { role: "system", content: SYSTEM_INSTRUCTION_TEXT },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 1024,
+      };
+
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
+      let groqResponse: Response;
+
+      try {
+        groqResponse = await fetch(groqEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${groqApiKey}`,
+          },
+          body: JSON.stringify(groqPayload),
+          signal: abortController.signal,
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new HttpError(
+            "A Groq API demorou mais que o esperado para responder (timeout de 35s). Tente novamente em instantes.",
+            504,
+          );
+        }
+        throw new HttpError(
+          "Falha de conexão com a Groq API. Verifique a conectividade e tente novamente.",
+          502,
+        );
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!groqResponse.ok) {
+        const status = groqResponse.status;
+        console.error("Groq API error response", { status });
+
+        if (status === 429) {
+          throw new HttpError(
+            "Limite de uso gratuito da Groq API atingido. Aguarde alguns instantes e tente novamente, ou verifique sua cota no painel da Groq.",
+            429,
+          );
+        }
+
+        if (status === 401 || status === 403) {
+          throw new HttpError(
+            "A Groq API recusou as credenciais (GROQ_API_KEY) configuradas no servidor.",
+            502,
+          );
+        }
+
+        if (status === 400) {
+          throw new HttpError(
+            "A Groq API rejeitou a solicitação. Verifique o modelo configurado em GROQ_MODEL e tente novamente.",
+            502,
+          );
+        }
+
+        if (status === 404) {
+          throw new HttpError(
+            `O modelo '${groqModel}' não foi encontrado na Groq API. Verifique o Secret GROQ_MODEL ou aguarde a disponibilização do modelo na sua conta.`,
+            502,
+          );
+        }
+
+        if (status === 503 || status === 500) {
+          throw new HttpError(
+            "A Groq API está temporariamente sobrecarregada ou indisponível. Aguarde alguns instantes e tente novamente.",
+            503,
+          );
+        }
+
+        throw new HttpError(
+          "Não foi possível concluir a solicitação na Groq API.",
+          502,
+        );
+      }
+
+      let groqData: Record<string, unknown>;
+      try {
+        groqData = await groqResponse.json();
+      } catch {
+        throw new HttpError(
+          "A Groq API retornou uma resposta inválida.",
+          502,
+        );
+      }
+
+      const groqChoices = groqData.choices as Array<Record<string, unknown>> | undefined;
+      const groqFirstChoice = groqChoices?.[0];
+      const groqMessage = groqFirstChoice?.message as Record<string, unknown> | undefined;
+      const groqText = typeof groqMessage?.content === "string"
+        ? groqMessage.content.trim()
+        : "";
+
+      if (!groqText) {
+        throw new HttpError(
+          "A Groq API não retornou uma resposta textual válida.",
+          502,
+        );
+      }
+
+      const groqUsage = (groqData.usage as Record<string, number> | undefined) ?? {};
+
+      return jsonResponse(req, {
+        success: true,
+        provider: "groq",
+        model: groqData.model ?? groqModel,
+        prompt,
+        response: groqText,
+        meta: {
+          promptTokens: groqUsage.prompt_tokens ?? 0,
+          candidatesTokens: groqUsage.completion_tokens ?? 0,
+          totalTokens: groqUsage.total_tokens ?? 0,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    // 7. Obtém a chave Gemini exclusivamente dos Secrets do servidor.
     const geminiApiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
     if (!geminiApiKey) {
       throw new HttpError(

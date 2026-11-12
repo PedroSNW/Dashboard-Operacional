@@ -628,3 +628,14 @@ body.light-theme #aiResponseBody {
     color: #1e293b;
 }
 
+/* Groq — light-theme overrides */
+body.light-theme .text-violet-400 { color: #7c3aed !important; }
+body.light-theme #provider-btn-groq {
+    color: #475569;
+}
+body.light-theme #provider-btn-groq.border-violet-500\/50 {
+    background: rgba(124, 58, 237, 0.08);
+    border-color: rgba(124, 58, 237, 0.4);
+    color: #5b21b6;
+}
+

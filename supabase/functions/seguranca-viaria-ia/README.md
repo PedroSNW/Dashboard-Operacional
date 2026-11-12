@@ -1,7 +1,7 @@
 # Supabase Edge Function: seguranca-viaria-ia
-D'Granel Transportes — Central de Inteligência Artificial Multiprovedor (Gemini & OpenAI)
+D'Granel Transportes — Central de Inteligência Artificial Multiprovedor (Gemini, OpenAI & Groq)
 
-Esta função realiza a ponte segura entre o Dashboard Operacional da D'Granel e os provedores oficiais de Inteligência Artificial: **Google Gemini API** e **OpenAI Responses API**. 
+Esta função realiza a ponte segura entre o Dashboard Operacional da D'Granel e os provedores oficiais de Inteligência Artificial: **Google Gemini API**, **OpenAI Responses API** e **Groq Chat Completions API**.
 
 A função valida o token JWT do usuário no Supabase Auth corporativo e mantém todas as credenciais de API exclusivamente nos Secrets protegidos do servidor.
 
@@ -11,9 +11,10 @@ Dashboard (Browser)
 → Supabase Edge Function `seguranca-viaria-ia`
 → Validação do JWT via `supabase.auth.getUser(token)`
 → Verificação de domínio corporativo (`@dgranel.com.br`)
-→ Roteamento por provedor selecionado no payload (`provider: "gemini" | "openai"`):
-   - **Google Gemini**: Leitura de `GEMINI_API_KEY` → chamada à Gemini API (`generateContent`) com retry para 503 e timeout individual de 35s.
+→ Roteamento por provedor selecionado no payload (`provider: "gemini" | "openai" | "groq"`):
    - **OpenAI**: Leitura de `OPENAI_API_KEY` → chamada à Responses API oficial (`https://api.openai.com/v1/responses`) com autenticação Bearer e timeout de 35s.
+   - **Groq**: Leitura de `GROQ_API_KEY` → chamada à Chat Completions API (`https://api.groq.com/openai/v1/chat/completions`) com autenticação Bearer e timeout de 35s.
+   - **Google Gemini**: Leitura de `GEMINI_API_KEY` → chamada à Gemini API (`generateContent`) com retry para 503 e timeout individual de 35s.
 → Retorno estruturado e sanitizado ao Dashboard.
 
 A função não lê nem altera `dashboard_state`, `audit_logs` ou os indicadores cadastrados no banco.
@@ -30,6 +31,10 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 - `OPENAI_API_KEY` — obrigatório para consultas OpenAI; chave da API OpenAI com permissão para Responses API.
 - `OPENAI_MODEL` — opcional; padrão: `gpt-4o-mini` (compatível com Responses API).
 
+### Credenciais Groq:
+- `GROQ_API_KEY` — obrigatório para consultas Groq; chave obtida em console.groq.com.
+- `GROQ_MODEL` — opcional; padrão: `openai/gpt-oss-120b` (MoE ~117B parâmetros, ~500 tok/s, 128k ctx).
+
 ### Configurações de Domínio e Supabase:
 - `DASHBOARD_ALLOWED_ORIGINS` — opcional, mas recomendado em produção; lista de origens permitidas separadas por vírgula (ex.: `https://seu-dominio.com,https://www.seu-dominio.com`).
 - `SUPABASE_URL` e `SUPABASE_ANON_KEY` — injetados automaticamente pelo ambiente Supabase Edge Function.
@@ -44,6 +49,10 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
    `https://api.openai.com/v1/responses`
    Autenticação enviada via cabeçalho HTTP `Authorization: Bearer {OPENAI_API_KEY}`.
 
+3. **Groq Chat Completions API:**
+   `https://api.groq.com/openai/v1/chat/completions`
+   Autenticação enviada via cabeçalho HTTP `Authorization: Bearer {GROQ_API_KEY}`.
+
 ## Proteções implementadas
 
 - Aceita apenas método `POST` e responde preflight `OPTIONS` (CORS).
@@ -51,7 +60,7 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 - Restrição obrigatória a e-mails corporativos terminados em `@dgranel.com.br`.
 - Validação e sanitização de payload (limite de 25 KB no corpo e 1.000 caracteres no prompt).
 - Limite em memória por instância (concorrência máxima de 3 requisições simultâneas e taxa de 10 chamadas/minuto por usuário).
-- Timeout individual de 35 segundos em ambas as APIs com `AbortController`.
+- Timeout individual de 35 segundos em todos os provedores com `AbortController`.
 - Sanitização de respostas de erro: nenhuma chave, token ou stack trace interno é retornado ao cliente ou exposto em logs.
 
 ## Implantação pelo Supabase Dashboard (sem CLI)
@@ -61,4 +70,7 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 3. Selecione a função `seguranca-viaria-ia` (ou crie-a caso ainda não exista).
 4. Substitua o código pelo conteúdo de `supabase/functions/seguranca-viaria-ia/index.ts`.
 5. Salve e implante a função.
-6. Em **Edge Functions > Secrets**, cadastre `GEMINI_API_KEY` e `OPENAI_API_KEY`.
+6. Em **Edge Functions > Secrets**, cadastre os Secrets necessários:
+   - `GEMINI_API_KEY` (Gemini)
+   - `OPENAI_API_KEY` (OpenAI)
+   - `GROQ_API_KEY` (Groq — obtenha em console.groq.com)

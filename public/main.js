@@ -4115,50 +4115,50 @@ let currentAiProvider = 'gemini';
  * Altera o provedor de IA selecionado na interface (Google Gemini ou OpenAI).
  */
 function setAiProvider(provider) {
-    const prov = provider === 'openai' ? 'openai' : 'gemini';
+    const prov = provider === 'openai' ? 'openai' : provider === 'groq' ? 'groq' : 'gemini';
     currentAiProvider = prov;
 
     const btnGemini = document.getElementById('provider-btn-gemini');
     const btnOpenai = document.getElementById('provider-btn-openai');
+    const btnGroq   = document.getElementById('provider-btn-groq');
     const badgeGemini = document.getElementById('badge-provider-gemini');
     const badgeOpenai = document.getElementById('badge-provider-openai');
+    const badgeGroq   = document.getElementById('badge-provider-groq');
     const label = document.getElementById('currentProviderLabel');
     const apiInfo = document.getElementById('currentProviderApiInfo');
     const promptLabel = document.getElementById('aiPromptLabel');
     const btnText = document.getElementById('aiTestButtonText');
 
+    // Reset all provider buttons to inactive style
+    const inactiveClass = 'flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white';
+    if (btnGemini) btnGemini.className = inactiveClass;
+    if (btnOpenai) btnOpenai.className = inactiveClass;
+    if (btnGroq)   btnGroq.className   = inactiveClass;
+    if (badgeGemini) badgeGemini.classList.add('hidden');
+    if (badgeOpenai) badgeOpenai.classList.add('hidden');
+    if (badgeGroq)   badgeGroq.classList.add('hidden');
+
     if (prov === 'gemini') {
-        if (btnGemini) {
-            btnGemini.className = 'flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-amber-500/25';
-        }
-        if (btnOpenai) {
-            btnOpenai.className = 'flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white';
-        }
+        if (btnGemini) btnGemini.className = 'flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-amber-500/25';
         if (badgeGemini) badgeGemini.classList.remove('hidden');
-        if (badgeOpenai) badgeOpenai.classList.add('hidden');
-        if (label) {
-            label.textContent = 'Google Gemini (gemini-3.8-flash)';
-            label.className = 'text-amber-400 font-bold';
-        }
+        if (label) { label.textContent = 'Google Gemini (gemini-3.8-flash)'; label.className = 'text-amber-400 font-bold'; }
         if (apiInfo) apiInfo.textContent = 'API GenerativeLanguage v1beta';
         if (promptLabel) promptLabel.textContent = 'Pergunta ou solicitação para o Google Gemini:';
         if (btnText) btnText.textContent = 'Enviar para Gemini';
-    } else {
-        if (btnGemini) {
-            btnGemini.className = 'flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white';
-        }
-        if (btnOpenai) {
-            btnOpenai.className = 'flex items-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500/25';
-        }
-        if (badgeGemini) badgeGemini.classList.add('hidden');
+    } else if (prov === 'openai') {
+        if (btnOpenai) btnOpenai.className = 'flex items-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500/25';
         if (badgeOpenai) badgeOpenai.classList.remove('hidden');
-        if (label) {
-            label.textContent = 'OpenAI (gpt-4o-mini)';
-            label.className = 'text-emerald-400 font-bold';
-        }
+        if (label) { label.textContent = 'OpenAI (gpt-4o-mini)'; label.className = 'text-emerald-400 font-bold'; }
         if (apiInfo) apiInfo.textContent = 'Responses API (v1/responses)';
         if (promptLabel) promptLabel.textContent = 'Pergunta ou solicitação para a OpenAI:';
         if (btnText) btnText.textContent = 'Enviar para OpenAI';
+    } else {
+        if (btnGroq) btnGroq.className = 'flex items-center gap-2 rounded-xl border border-violet-500/50 bg-violet-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-violet-500/25';
+        if (badgeGroq) badgeGroq.classList.remove('hidden');
+        if (label) { label.textContent = 'Groq (openai/gpt-oss-120b)'; label.className = 'text-violet-400 font-bold'; }
+        if (apiInfo) apiInfo.textContent = 'Chat Completions API (api.groq.com)';
+        if (promptLabel) promptLabel.textContent = 'Pergunta ou solicitação para a Groq:';
+        if (btnText) btnText.textContent = 'Enviar para Groq';
     }
 }
 
@@ -4222,12 +4222,15 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
  * Manipulador do botão de teste da interface do Dashboard.
  * Controla os estados de carregamento, latência, exibição de resultados e mensagens amigáveis de erro.
  * 
- * @param {string|null} [targetProvider] Opcionalmente força um provedor específico ('gemini' ou 'openai').
+ * @param {string|null} [targetProvider] Opcionalmente força um provedor específico ('gemini', 'openai' ou 'groq').
  */
 async function executarTesteIA(targetProvider = null) {
     const provider = targetProvider || currentAiProvider || 'gemini';
+    const isGroq = provider === 'groq';
     const isOp = provider === 'openai';
-    const providerName = isOp ? 'OpenAI' : 'Google Gemini';
+    const providerName = isGroq ? 'Groq' : isOp ? 'OpenAI' : 'Google Gemini';
+    const providerColor = isGroq ? 'text-violet-400' : isOp ? 'text-emerald-400' : 'text-amber-400';
+    const providerIconClass = isGroq ? 'fa-solid fa-microchip' : isOp ? 'fa-solid fa-bolt' : 'fa-brands fa-google';
 
     const input = document.getElementById('aiPromptInput');
     const btn = document.getElementById('aiTestButton');
@@ -4252,13 +4255,13 @@ async function executarTesteIA(targetProvider = null) {
 
     if (responseContainer) responseContainer.classList.remove('hidden');
     if (responseIcon) {
-        responseIcon.className = isOp ? 'fa-solid fa-bolt text-emerald-400' : 'fa-brands fa-google text-amber-400';
+        responseIcon.className = `${providerIconClass} ${providerColor}`;
     }
     if (responseProviderName) {
         responseProviderName.textContent = `Resposta do ${providerName}`;
     }
     if (responseBody) {
-        responseBody.innerHTML = `<span class="text-slate-400 italic flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin ${isOp ? 'text-emerald-400' : 'text-amber-400'}"></i> Enviando solicitação autenticada à Edge Function (${providerName})...</span>`;
+        responseBody.innerHTML = `<span class="text-slate-400 italic flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin ${providerColor}"></i> Enviando solicitação autenticada à Edge Function (${providerName})...</span>`;
     }
     if (responseMeta) responseMeta.textContent = 'Processando...';
 
@@ -4304,7 +4307,7 @@ async function executarTesteIA(targetProvider = null) {
     } finally {
         if (btn) btn.disabled = false;
         if (btnIcon) btnIcon.className = 'fa-solid fa-paper-plane';
-        if (btnText) btnText.textContent = `Enviar para ${currentAiProvider === 'openai' ? 'OpenAI' : 'Gemini'}`;
+        if (btnText) btnText.textContent = `Enviar para ${currentAiProvider === 'openai' ? 'OpenAI' : currentAiProvider === 'groq' ? 'Groq' : 'Gemini'}`;
     }
 }
 
