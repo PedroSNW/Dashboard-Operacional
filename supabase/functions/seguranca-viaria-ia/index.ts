@@ -348,18 +348,20 @@ serve(async (req: Request) => {
       },
     };
 
-    // 6. Chama a Gemini API com timeout e retry on 503 (up to 2 retries)
-    const maxAttempts = 3; // original request + 2 retries
+    // 6. Chama a Gemini API com timeout e retry em caso de HTTP 503 ou AbortError (até 2 retries)
+    const maxAttempts = 3; // 1 inicial + 2 retries
     let attempt = 0;
     let geminiResponse: Response | null = null;
 
-    // helper to pause between retries
+    // Helper para intervalo entre tentativas
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     while (attempt < maxAttempts) {
       attempt++;
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => abortController.abort(), GEMINI_TIMEOUT_MS);
+      let isTimeout = false;
+
       try {
         geminiResponse = await fetch(geminiEndpoint, {
           method: "POST",
@@ -371,45 +373,67 @@ serve(async (req: Request) => {
           signal: abortController.signal,
         });
       } catch (error) {
-        // Log minimal diagnostic info – only the error name (no message, no credentials)
-        console.error("Gemini fetch error", { attempt, name: (error as any)?.name });
         if (error instanceof DOMException && error.name === "AbortError") {
-          // Timeout – do NOT retry, propagate as 504
+          isTimeout = true;
+          console.error("Gemini fetch error", {
+            attempt,
+            name: "AbortError",
+            reason: "Timeout individual atingido",
+          });
+
+          if (attempt >= maxAttempts) {
+            throw new HttpError(
+              "A inteligência artificial está demorando mais que o esperado para responder. Tente novamente em alguns instantes.",
+              504,
+            );
+          }
+        } else {
+          // Falha genérica de rede, DNS ou conexão – não repete, encerra com 502
+          console.error("Gemini fetch error", { attempt, name: (error as any)?.name });
           throw new HttpError(
-            "Tempo limite esgotado ao aguardar resposta da Gemini API.",
-            504,
+            "Falha de conexão com a Gemini API. Tente novamente mais tarde.",
+            502,
           );
         }
-        // Other network failures – treat as generic 502 (no retry)
-        throw new HttpError(
-          "Falha de conexão com a Gemini API. Tente novamente mais tarde.",
-          502,
-        );
       } finally {
         clearTimeout(timeoutId);
       }
 
-      // If response is OK, break the loop and continue processing
-      if (geminiResponse.ok) {
-        break;
-      }
-
-      // Log the HTTP status for this attempt
-      console.error("Gemini API response status", { attempt, status: geminiResponse.status });
-
-      // Retry only on 503 (UNAVAILABLE) and if we have attempts left
-      if (geminiResponse.status === 503 && attempt < maxAttempts) {
-        const backoff = attempt === 1 ? 2000 : 4000; // 2s after first, 4s after second
+      // Se sofreu timeout e ainda tem tentativas, aguarda back-off e repete
+      if (isTimeout) {
+        const backoff = attempt === 1 ? 2000 : 4000;
         await sleep(backoff);
-        // continue to next iteration
         continue;
       }
 
-      // For any other non‑OK status, stop retrying
+      // Se a resposta foi bem-sucedida (HTTP 2xx), prossegue com o processamento
+      if (geminiResponse && geminiResponse.ok) {
+        break;
+      }
+
+      if (geminiResponse) {
+        // Registra o status HTTP desta tentativa
+        console.error("Gemini API response status", { attempt, status: geminiResponse.status });
+
+        // Retry somente para HTTP 503 (UNAVAILABLE)
+        if (geminiResponse.status === 503 && attempt < maxAttempts) {
+          // Libera o stream da resposta anterior antes do back-off
+          try {
+            await geminiResponse.body?.cancel();
+          } catch {
+            // Falha de cancelamento não deve interromper o fluxo de retry
+          }
+          const backoff = attempt === 1 ? 2000 : 4000;
+          await sleep(backoff);
+          continue;
+        }
+      }
+
+      // Qualquer outro status HTTP não-200 (400, 401, 403, 429 etc.) encerra sem retry
       break;
     }
 
-    // Guard against unexpected null response (should not happen)
+    // Proteção caso não haja resposta (não esperado nesta altura)
     if (!geminiResponse) {
       throw new HttpError("Falha inesperada ao chamar a Gemini API.", 502);
     }
@@ -461,6 +485,13 @@ serve(async (req: Request) => {
         throw new HttpError(
           "A Gemini API recusou as credenciais configuradas no servidor.",
           502,
+        );
+      }
+
+      if (status === 503) {
+        throw new HttpError(
+          "A inteligência artificial está temporariamente sobrecarregada. Aguarde alguns instantes e tente novamente.",
+          503,
         );
       }
 

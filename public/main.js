@@ -1489,6 +1489,7 @@ function switchTab(tabName) {
         renderDynamicCharts();
     } else if (tabName === 'intelligence') {
         renderIntelligenceDashboard();
+        renderAlertsList();
     } else if (tabName === 'governance') {
         renderGovernanceDashboard();
         loadCompetencyAuditHistory();
@@ -2304,6 +2305,361 @@ async function renderIntelligenceDashboard() {
         status.textContent = 'Não foi possível processar as análises. Confira os dados dos indicadores e tente atualizar novamente.';
         appendIntelligenceText(list, 'div', 'Erro ao processar os indicadores.', 'rounded-xl border border-rose-500/20 p-5 text-sm text-rose-300');
     }
+}
+
+// ============================================================================
+// CENTRAL DE NOTIFICAÇÕES & ALERTAS OPERACIONAIS (MOTOR DETERMINÍSTICO)
+// ============================================================================
+
+let currentIntelligenceSubtab = 'alerts';
+const ALERT_READ_STORAGE_KEY = 'dgranel_alerts_read_v1';
+
+function getReadAlertIds() {
+    try {
+        const stored = localStorage.getItem(ALERT_READ_STORAGE_KEY);
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+        return new Set();
+    }
+}
+
+function saveReadAlertIds(readSet) {
+    try {
+        localStorage.setItem(ALERT_READ_STORAGE_KEY, JSON.stringify([...readSet]));
+    } catch (err) {
+        console.warn('Falha ao persistir estado de leitura no localStorage:', err);
+    }
+}
+
+function computeAlertFingerprint(indicatorKey, category, competency) {
+    const raw = `${indicatorKey}||${category}||${competency}`.toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+        const char = raw.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0;
+    }
+    return `alert_${Math.abs(hash).toString(36)}`;
+}
+
+/**
+ * Constrói a mensagem padronizada, profissional e objetiva para o alerta.
+ */
+function buildStandardAlertMessage(category, severity, indicatorName, competency, details = {}) {
+    const name = indicatorName || 'Indicador';
+    const comp = competency || 'competência recente';
+
+    if (category === 'target') {
+        if (severity === 'CRITICO') {
+            return `ALERTA CRÍTICO: O indicador ${name} apresentou resultado desfavorável em ${comp}, ultrapassando significativamente a meta estabelecida. A situação exige atenção imediata da equipe de Segurança Viária e avaliação de medidas corretivas.`;
+        }
+        if (severity === 'ATENCAO') {
+            return `ATENÇÃO: O indicador ${name} não atingiu a meta planejada na competência ${comp}. Recomenda-se acompanhamento e alinhamento com a operação.`;
+        }
+        return `RESULTADO POSITIVO: O indicador ${name} atingiu a meta estabelecida para a competência ${comp}. Recomenda-se manter o acompanhamento operacional.`;
+    }
+
+    if (category === 'trend') {
+        if (severity === 'CRITICO' || severity === 'ATENCAO') {
+            return `ATENÇÃO: O indicador ${name} apresenta uma tendência contínua de piora nas últimas competências avaliadas (${comp}). Recomenda-se investigar os fatores operacionais e adotar medidas preventivas.`;
+        }
+        return `ACOMPANHAMENTO: O indicador ${name} apresenta estabilidade ou comportamento consistente nas últimas competências (${comp}).`;
+    }
+
+    if (category === 'variation') {
+        if (severity === 'CRITICO') {
+            return `ALERTA CRÍTICO: O indicador ${name} registrou uma variação desfavorável acentuada na passagem para ${comp}. Necessário averiguar as ocorrências do período.`;
+        }
+        if (severity === 'ATENCAO') {
+            return `ATENÇÃO: O indicador ${name} apresentou piora em relação à competência anterior (${comp}). Recomenda-se monitorar os próximos fechamentos.`;
+        }
+        return `RESULTADO POSITIVO: O indicador ${name} apresentou evolução favorável em relação à competência anterior (${comp}). Recomenda-se manter as boas práticas.`;
+    }
+
+    if (category === 'anomaly') {
+        return `ATENÇÃO: Foi identificada uma variação atípica estatística no indicador ${name} na competência ${comp}, distanciando-se do padrão histórico mediano. Recomenda-se conferência dos dados registrados.`;
+    }
+
+    if (category === 'freshness') {
+        return `ATENÇÃO: O indicador ${name} está sem registros de atualização recentes há mais de 45 dias. Recomenda-se verificar se há novas informações da frota para lançamento.`;
+    }
+
+    return `INFORMATIVO: O indicador ${name} possui registros a serem acompanhados na competência ${comp}.`;
+}
+
+/**
+ * Gera a lista de notificações operacionais unificando regras analíticas determinísticas.
+ */
+function generateDeterministicAlerts() {
+    const rawAnalyses = generateAutomaticAnalyses({ periodMode: 'all', sector: 'TODOS', indicatorIndex: 'TODOS' });
+    const readSet = getReadAlertIds();
+    const alertsMap = new Map();
+
+    rawAnalyses.forEach(analysis => {
+        // Ignora análises informativas que não representem eventos de interesse
+        if (analysis.category === 'insufficient') return;
+
+        const indicator = analysis.indicator || 'Indicador';
+        const sector = analysis.sector || 'Geral';
+        const competency = analysis.period || 'Geral';
+        const category = analysis.category || 'variation';
+        const severity = analysis.severity || 'INFORMATIVO';
+        const indicatorKey = `${sector}::${indicator}`;
+
+        const fingerprint = computeAlertFingerprint(indicatorKey, category, competency);
+        const isRead = readSet.has(fingerprint);
+
+        const standardMessage = buildStandardAlertMessage(category, severity, indicator, competency);
+
+        // Se já existe alerta para o mesmo indicador, categoria e período, prioriza a maior severidade (sem duplicar)
+        if (alertsMap.has(fingerprint)) {
+            const existing = alertsMap.get(fingerprint);
+            const severityRank = { CRITICO: 3, ATENCAO: 2, INFORMATIVO: 1 };
+            if ((severityRank[severity] || 0) > (severityRank[existing.severity] || 0)) {
+                existing.severity = severity;
+                existing.title = analysis.title;
+                existing.message = standardMessage;
+                existing.technicalExplanation = analysis.explanation;
+                existing.calculation = analysis.calculation;
+                existing.recommendation = analysis.recommendation;
+            }
+            return;
+        }
+
+        alertsMap.set(fingerprint, {
+            id: fingerprint,
+            indicator,
+            sector,
+            competency,
+            category,
+            severity, // 'CRITICO' | 'ATENCAO' | 'INFORMATIVO'
+            title: analysis.title,
+            message: standardMessage,
+            technicalExplanation: analysis.explanation,
+            calculation: analysis.calculation,
+            recommendation: analysis.recommendation,
+            indicatorIndex: analysis.indicatorIndex,
+            isRead,
+            detectedAt: analysis.detectedAt || new Date().toLocaleDateString('pt-BR')
+        });
+    });
+
+    return Array.from(alertsMap.values());
+}
+
+function switchIntelligenceSubtab(subtabName) {
+    currentIntelligenceSubtab = subtabName;
+
+    // Atualiza botões
+    ['alerts', 'analyses', 'pilot'].forEach(tab => {
+        const btn = document.getElementById(`subtab-btn-${tab}`);
+        const content = document.getElementById(`subtab-content-${tab}`);
+        const isActive = tab === subtabName;
+
+        if (btn) {
+            btn.classList.toggle('active', isActive);
+            btn.classList.toggle('border-amber-500/30', isActive);
+            btn.classList.toggle('bg-amber-500/15', isActive);
+            btn.classList.toggle('text-white', isActive);
+            btn.classList.toggle('border-slate-700', !isActive);
+            btn.classList.toggle('bg-slate-800/60', !isActive);
+            btn.classList.toggle('text-slate-300', !isActive);
+        }
+        if (content) {
+            content.classList.toggle('hidden', !isActive);
+        }
+    });
+
+    if (subtabName === 'alerts') {
+        renderAlertsList();
+    } else if (subtabName === 'analyses') {
+        renderIntelligenceDashboard();
+    }
+}
+
+function toggleAlertReadState(alertId) {
+    const readSet = getReadAlertIds();
+    if (readSet.has(alertId)) {
+        readSet.delete(alertId);
+    } else {
+        readSet.add(alertId);
+    }
+    saveReadAlertIds(readSet);
+    renderAlertsList();
+}
+
+function markAllAlertsAsRead() {
+    const alerts = generateDeterministicAlerts();
+    const readSet = getReadAlertIds();
+    alerts.forEach(a => readSet.add(a.id));
+    saveReadAlertIds(readSet);
+    renderAlertsList();
+    showAlert('Notificações atualizadas', 'Todos os alertas vigentes foram marcados como lidos.', 'success');
+}
+
+function resetAlertsReadState() {
+    try {
+        localStorage.removeItem(ALERT_READ_STORAGE_KEY);
+        renderAlertsList();
+        showAlert('Histórico restaurado', 'O status de leitura de todas as notificações foi redefinido.', 'info');
+    } catch (err) {
+        console.error('Falha ao limpar leituras:', err);
+    }
+}
+
+function filterAlertsBySeverityQuick(severity) {
+    const select = document.getElementById('alertFilterSeverity');
+    if (select) {
+        select.value = severity;
+        renderAlertsList();
+    }
+}
+
+function populateAlertSectorsFilter() {
+    const sectorFilter = document.getElementById('alertFilterSector');
+    if (!sectorFilter) return;
+
+    const currentVal = sectorFilter.value || 'TODOS';
+    sectorFilter.replaceChildren(new Option('Todos os Setores', 'TODOS'));
+    [...new Set(currentData.map(item => item.setor).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+        .forEach(sec => sectorFilter.add(new Option(sec, sec)));
+
+    if ([...sectorFilter.options].some(opt => opt.value === currentVal)) {
+        sectorFilter.value = currentVal;
+    }
+}
+
+function renderAlertsList() {
+    const container = document.getElementById('alertsContainer');
+    if (!container) return;
+
+    populateAlertSectorsFilter();
+    const allAlerts = generateDeterministicAlerts();
+
+    // Contadores gerais (baseados no estado real da base)
+    const counts = allAlerts.reduce((acc, a) => {
+        acc[a.severity] = (acc[a.severity] || 0) + 1;
+        if (!a.isRead) acc.unreadTotal += 1;
+        return acc;
+    }, { CRITICO: 0, ATENCAO: 0, INFORMATIVO: 0, unreadTotal: 0 });
+
+    const elCrit = document.getElementById('alertsCountCritical');
+    const elAtt = document.getElementById('alertsCountAttention');
+    const elInfo = document.getElementById('alertsCountInfo');
+    const badgeUnread = document.getElementById('subtabAlertsBadge');
+
+    if (elCrit) elCrit.textContent = counts.CRITICO;
+    if (elAtt) elAtt.textContent = counts.ATENCAO;
+    if (elInfo) elInfo.textContent = counts.INFORMATIVO;
+    if (badgeUnread) {
+        badgeUnread.textContent = counts.unreadTotal;
+        badgeUnread.className = counts.unreadTotal > 0
+            ? 'ml-1 rounded-full bg-rose-500/20 border border-rose-500/30 px-2 py-0.5 text-[10px] font-extrabold text-rose-300 animate-pulse'
+            : 'ml-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400';
+    }
+
+    // Aplicação dos filtros do usuário
+    const viewMode = document.getElementById('alertFilterView')?.value || 'unread';
+    const severityFilter = document.getElementById('alertFilterSeverity')?.value || 'TODOS';
+    const sectorFilter = document.getElementById('alertFilterSector')?.value || 'TODOS';
+
+    const filtered = allAlerts.filter(alert => {
+        if (viewMode === 'unread' && alert.isRead) return false;
+        if (viewMode === 'read' && !alert.isRead) return false;
+        if (severityFilter !== 'TODOS' && alert.severity !== severityFilter) return false;
+        if (sectorFilter !== 'TODOS' && alert.sector !== sectorFilter) return false;
+        return true;
+    });
+
+    // Ordenação: CRITICO primeiro, depois ATENCAO, depois INFORMATIVO
+    const severityOrder = { CRITICO: 0, ATENCAO: 1, INFORMATIVO: 2 };
+    filtered.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+    const counterSpan = document.getElementById('alertFilteredCount');
+    if (counterSpan) counterSpan.textContent = filtered.length;
+
+    container.replaceChildren();
+
+    if (filtered.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.className = 'glass-card rounded-2xl p-8 text-center border border-dashed border-slate-700 text-slate-400 space-y-2';
+        emptyMsg.innerHTML = `
+            <div class="text-2xl text-emerald-400 mb-1"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="text-sm font-bold text-white">Nenhuma notificação correspondente encontrada</div>
+            <p class="text-xs text-slate-400 max-w-md mx-auto">
+                ${viewMode === 'unread' ? 'Parabéns! Todos os alertas deste recorte foram lidos ou não há condições ativas de risco.' : 'Nenhum alerta localizado com os filtros selecionados.'}
+            </p>
+        `;
+        container.appendChild(emptyMsg);
+        return;
+    }
+
+    const badgeConfig = {
+        CRITICO: { label: 'CRÍTICO', icon: 'fa-triangle-exclamation', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/30', cardBorder: 'alert-card-critical' },
+        ATENCAO: { label: 'ATENÇÃO', icon: 'fa-circle-exclamation', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/30', cardBorder: 'alert-card-attention' },
+        INFORMATIVO: { label: 'INFORMATIVO', icon: 'fa-circle-info', bg: 'bg-sky-500/10 text-sky-400 border-sky-500/30', cardBorder: 'alert-card-info' }
+    };
+
+    filtered.forEach(alert => {
+        const conf = badgeConfig[alert.severity] || badgeConfig.INFORMATIVO;
+        const card = document.createElement('article');
+        card.className = `alert-card ${conf.cardBorder} ${alert.isRead ? 'is-read' : ''} space-y-3`;
+
+        card.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${conf.bg}">
+                        <i class="fa-solid ${conf.icon}"></i> ${conf.label}
+                    </span>
+                    <span class="text-[11px] font-bold text-slate-300">
+                        ${escapeHtml(alert.sector)}
+                    </span>
+                    <span class="text-slate-600">·</span>
+                    <span class="text-[11px] text-amber-400 font-semibold">
+                        Competência: ${escapeHtml(alert.competency)}
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="text-[11px] text-slate-400"><i class="fa-regular fa-clock"></i> ${escapeHtml(alert.detectedAt)}</span>
+                    <button type="button" onclick="toggleAlertReadState('${escapeHtml(alert.id)}')" title="${alert.isRead ? 'Marcar como não lido' : 'Marcar como lido e arquivar'}" class="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800 text-[11px] font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white">
+                        <i class="fa-solid ${alert.isRead ? 'fa-envelope-open text-slate-400' : 'fa-check text-emerald-400'}"></i>
+                        <span>${alert.isRead ? 'Lido' : 'Marcar lido'}</span>
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-sm font-bold text-white mb-1.5 flex items-center justify-between">
+                    <span>${escapeHtml(alert.indicator)}</span>
+                    <span class="text-[11px] font-normal text-slate-400">${escapeHtml(alert.title)}</span>
+                </h4>
+                <p class="text-xs leading-relaxed text-slate-200 font-medium bg-[#0A1329]/50 border border-slate-800 p-3 rounded-xl">
+                    ${escapeHtml(alert.message)}
+                </p>
+            </div>
+
+            <details class="text-xs text-slate-400 border-t border-slate-800/60 pt-2">
+                <summary class="cursor-pointer font-semibold text-amber-400 hover:text-amber-300 inline-flex items-center gap-1.5">
+                    <i class="fa-solid fa-circle-nodes text-[11px]"></i> Ver diagnóstico técnico e recomendação
+                </summary>
+                <div class="mt-2.5 space-y-2 p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11px] leading-relaxed">
+                    <p><strong class="text-slate-300">Explicação:</strong> ${escapeHtml(alert.technicalExplanation)}</p>
+                    <p><strong class="text-slate-300">Cálculo Base:</strong> ${escapeHtml(alert.calculation)}</p>
+                    <p><strong class="text-amber-400">Ação Sugerida:</strong> ${escapeHtml(alert.recommendation)}</p>
+                    ${Number.isInteger(alert.indicatorIndex) && currentData[alert.indicatorIndex] ? `
+                        <div class="pt-1">
+                            <button type="button" onclick="openDetailModal(${alert.indicatorIndex})" class="text-xs font-bold text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Inspecionar histórico do indicador no painel
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            </details>
+        `;
+
+        container.appendChild(card);
+    });
 }
 
 // CÁLCULOS ANALÍTICOS DINÂMICOS

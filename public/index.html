@@ -175,71 +175,158 @@
 
             <p class="rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-xs leading-relaxed text-slate-400"><i class="fa-solid fa-circle-info mr-1 text-sky-400"></i> As análises usam todo o histórico disponível. A competência mais recente pode receber atualizações posteriores, e uma alteração retroativa não identifica por si só a data do evento de origem.</p>
 
-            <section class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div class="intelligence-summary intelligence-summary-critical"><span>Crítico</span><strong id="intelligenceCriticalCount">0</strong></div>
-                <div class="intelligence-summary intelligence-summary-attention"><span>Atenção</span><strong id="intelligenceAttentionCount">0</strong></div>
-                <div class="intelligence-summary intelligence-summary-info"><span>Informativo</span><strong id="intelligenceInfoCount">0</strong></div>
-            </section>
+            <!-- Subabas da Central de Inteligência -->
+            <nav aria-label="Navegação interna de Inteligência" class="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-2">
+                <button type="button" onclick="switchIntelligenceSubtab('alerts')" id="subtab-btn-alerts" class="intelligence-subtab-btn active flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Central de Notificações &amp; Alertas
+                    <span id="subtabAlertsBadge" class="ml-1 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-extrabold text-rose-300">0</span>
+                </button>
+                <button type="button" onclick="switchIntelligenceSubtab('analyses')" id="subtab-btn-analyses" class="intelligence-subtab-btn flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:text-white">
+                    <i class="fa-solid fa-chart-pie text-amber-400"></i> Diagnóstico por Indicador
+                </button>
+                <button type="button" onclick="switchIntelligenceSubtab('pilot')" id="subtab-btn-pilot" class="intelligence-subtab-btn flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:text-white">
+                    <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Piloto Central de IA
+                </button>
+            </nav>
 
-            <!-- Painel Piloto Central de IA (Etapa 1 - Validação Técnica) -->
-            <section id="aiIntegrationTestCard" class="glass-card space-y-4 rounded-2xl border border-amber-500/30 p-5">
-                <div class="flex flex-col justify-between gap-3 border-b border-slate-800 pb-3 sm:flex-row sm:items-center">
-                    <div class="flex items-center gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
-                            <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+            <!-- CONTEÚDO SUBABA 1: CENTRAL DE ALERTAS E NOTIFICAÇÕES -->
+            <div id="subtab-content-alerts" class="space-y-6">
+                <!-- Sumário de Alertas -->
+                <section class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div class="intelligence-summary intelligence-summary-critical cursor-pointer transition hover:opacity-90" onclick="filterAlertsBySeverityQuick('CRITICO')">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation text-base"></i>
+                            <span>Crítico</span>
                         </div>
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <h3 class="text-sm font-bold text-white">Central de IA — Piloto de Integração</h3>
-                                <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Etapa 1</span>
-                            </div>
-                            <p class="text-xs text-slate-400">Validação técnica: Dashboard → Supabase Edge Function → Gemini API.</p>
+                        <strong id="alertsCountCritical">0</strong>
+                    </div>
+                    <div class="intelligence-summary intelligence-summary-attention cursor-pointer transition hover:opacity-90" onclick="filterAlertsBySeverityQuick('ATENCAO')">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-circle-exclamation text-base"></i>
+                            <span>Atenção</span>
                         </div>
+                        <strong id="alertsCountAttention">0</strong>
                     </div>
-                    <div class="flex items-center gap-2 text-xs text-slate-400">
-                        <span id="aiStatusDot" class="h-2 w-2 rounded-full bg-slate-500"></span>
-                        <span id="aiStatusText" class="font-mono text-[11px]">Pronto para envio</span>
+                    <div class="intelligence-summary intelligence-summary-info cursor-pointer transition hover:opacity-90" onclick="filterAlertsBySeverityQuick('INFORMATIVO')">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-circle-info text-base"></i>
+                            <span>Informativo</span>
+                        </div>
+                        <strong id="alertsCountInfo">0</strong>
                     </div>
-                </div>
+                </section>
 
-                <div class="space-y-3">
-                    <div>
-                        <label for="aiPromptInput" class="mb-1.5 block text-xs font-semibold text-slate-300">Mensagem para o Gemini:</label>
-                        <div class="flex flex-col gap-2 sm:flex-row">
-                            <input id="aiPromptInput" type="text" value="Explique brevemente o que é Segurança Viária." class="flex-1 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Digite uma pergunta para a IA...">
-                            <button id="aiTestButton" type="button" onclick="executarTesteGeminiIA()" class="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed">
-                                <i id="aiTestButtonIcon" class="fa-solid fa-paper-plane"></i>
-                                <span id="aiTestButtonText">Testar Conexão</span>
+                <!-- Barra de Filtros e Visualização de Alertas -->
+                <section class="glass-card space-y-4 rounded-2xl p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 text-xs font-bold text-slate-200">
+                            <i class="fa-solid fa-bell text-amber-400"></i> Painel de Notificações Operacionais
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="markAllAlertsAsRead()" class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white">
+                                <i class="fa-solid fa-check-double text-amber-400"></i> Marcar todos como lidos
+                            </button>
+                            <button type="button" onclick="resetAlertsReadState()" title="Restaurar visualização dos alertas já lidos" class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-400 transition hover:bg-slate-700 hover:text-slate-200">
+                                <i class="fa-solid fa-rotate-left"></i> Redefinir lidos
                             </button>
                         </div>
                     </div>
-
-                    <div id="aiResponseContainer" class="hidden space-y-2 rounded-xl border border-slate-800 bg-[#070D1E]/80 p-4">
-                        <div class="flex items-center justify-between border-b border-slate-800/80 pb-2 text-xs text-slate-400">
-                            <span class="flex items-center gap-1.5 font-semibold text-amber-400">
-                                <i class="fa-solid fa-robot"></i> Resposta do Gemini
-                            </span>
-                            <span id="aiResponseMeta" class="font-mono text-[11px] text-slate-400"></span>
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <select id="alertFilterView" onchange="renderAlertsList()" aria-label="Visualização de leitura" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200">
+                            <option value="unread">Não Lidos (Caixa Principal)</option>
+                            <option value="read">Lidos (Arquivo / Histórico)</option>
+                            <option value="all">Todos os Alertas</option>
+                        </select>
+                        <select id="alertFilterSeverity" onchange="renderAlertsList()" aria-label="Filtrar por gravidade" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200">
+                            <option value="TODOS">Todas as Gravidades</option>
+                            <option value="CRITICO">Apenas Críticos</option>
+                            <option value="ATENCAO">Apenas Atenção</option>
+                            <option value="INFORMATIVO">Apenas Informativos</option>
+                        </select>
+                        <select id="alertFilterSector" onchange="renderAlertsList()" aria-label="Filtrar por setor" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200">
+                            <option value="TODOS">Todos os Setores</option>
+                        </select>
+                        <div class="flex items-center justify-end text-xs text-slate-400">
+                            <span>Exibindo <strong id="alertFilteredCount" class="text-amber-400">0</strong> notificação(ões)</span>
                         </div>
-                        <div id="aiResponseBody" class="whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-200"></div>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <section class="glass-card space-y-4 rounded-2xl p-4">
-                <div class="flex items-center gap-2 text-xs font-bold text-slate-200"><i class="fa-solid fa-filter text-amber-400"></i> Filtros das análises</div>
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                    <select id="intelligenceSectorFilter" aria-label="Filtrar por setor" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todos os setores</option></select>
-                    <select id="intelligenceIndicatorFilter" aria-label="Filtrar por indicador" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todos os indicadores</option></select>
-                    <select id="intelligencePeriodFilter" aria-label="Filtrar período" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="dashboard">Meses do filtro do Dashboard</option><option value="last3">Últimos 3 registros válidos</option><option value="last6">Últimos 6 registros válidos</option><option value="all">Todo o histórico disponível</option></select>
-                    <select id="intelligenceSeverityFilter" aria-label="Filtrar criticidade" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todas as criticidades</option><option value="CRITICO">Crítico</option><option value="ATENCAO">Atenção</option><option value="INFORMATIVO">Informativo</option></select>
-                    <select id="intelligenceCategoryFilter" aria-label="Filtrar categoria" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todas as categorias</option><option value="variation">Variação mensal</option><option value="target">Meta</option><option value="trend">Tendência</option><option value="anomaly">Anomalia</option><option value="freshness">Atualização</option><option value="insufficient">Dados insuficientes</option></select>
-                </div>
-            </section>
+                <!-- Lista de Notificações de Alertas -->
+                <div id="alertsContainer" class="space-y-3" aria-live="polite"></div>
+            </div>
 
-            <section id="intelligenceStatus" class="hidden rounded-xl border border-slate-700 bg-slate-800/40 p-5 text-sm text-slate-300" role="status" aria-live="polite"></section>
-            <section id="intelligenceAnalysisList" class="grid grid-cols-1 gap-4 xl:grid-cols-2" aria-live="polite"></section>
-            <div class="flex justify-center"><button id="intelligenceLoadMore" type="button" class="hidden rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">Carregar mais análises</button></div>
+            <!-- CONTEÚDO SUBABA 2: DIAGNÓSTICO POR INDICADOR (ANÁLISES EXISTENTES) -->
+            <div id="subtab-content-analyses" class="hidden space-y-6">
+                <section class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div class="intelligence-summary intelligence-summary-critical"><span>Crítico</span><strong id="intelligenceCriticalCount">0</strong></div>
+                    <div class="intelligence-summary intelligence-summary-attention"><span>Atenção</span><strong id="intelligenceAttentionCount">0</strong></div>
+                    <div class="intelligence-summary intelligence-summary-info"><span>Informativo</span><strong id="intelligenceInfoCount">0</strong></div>
+                </section>
+
+                <section class="glass-card space-y-4 rounded-2xl p-4">
+                    <div class="flex items-center gap-2 text-xs font-bold text-slate-200"><i class="fa-solid fa-filter text-amber-400"></i> Filtros das análises</div>
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        <select id="intelligenceSectorFilter" aria-label="Filtrar por setor" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todos os setores</option></select>
+                        <select id="intelligenceIndicatorFilter" aria-label="Filtrar por indicador" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todos os indicadores</option></select>
+                        <select id="intelligencePeriodFilter" aria-label="Filtrar período" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="dashboard">Meses do filtro do Dashboard</option><option value="last3">Últimos 3 registros válidos</option><option value="last6">Últimos 6 registros válidos</option><option value="all">Todo o histórico disponível</option></select>
+                        <select id="intelligenceSeverityFilter" aria-label="Filtrar criticidade" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todas as criticidades</option><option value="CRITICO">Crítico</option><option value="ATENCAO">Atenção</option><option value="INFORMATIVO">Informativo</option></select>
+                        <select id="intelligenceCategoryFilter" aria-label="Filtrar categoria" class="rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todas as categorias</option><option value="variation">Variação mensal</option><option value="target">Meta</option><option value="trend">Tendência</option><option value="anomaly">Anomalia</option><option value="freshness">Atualização</option><option value="insufficient">Dados insuficientes</option></select>
+                    </div>
+                </section>
+
+                <section id="intelligenceStatus" class="hidden rounded-xl border border-slate-700 bg-slate-800/40 p-5 text-sm text-slate-300" role="status" aria-live="polite"></section>
+                <section id="intelligenceAnalysisList" class="grid grid-cols-1 gap-4 xl:grid-cols-2" aria-live="polite"></section>
+                <div class="flex justify-center"><button id="intelligenceLoadMore" type="button" class="hidden rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">Carregar mais análises</button></div>
+            </div>
+
+            <!-- CONTEÚDO SUBABA 3: PILOTO CENTRAL DE IA (EXISTENTE PRESERVADO) -->
+            <div id="subtab-content-pilot" class="hidden space-y-6">
+                <!-- Painel Piloto Central de IA (Etapa 1 - Validação Técnica) -->
+                <section id="aiIntegrationTestCard" class="glass-card space-y-4 rounded-2xl border border-amber-500/30 p-5">
+                    <div class="flex flex-col justify-between gap-3 border-b border-slate-800 pb-3 sm:flex-row sm:items-center">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                                <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-sm font-bold text-white">Central de IA — Piloto de Integração</h3>
+                                    <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Etapa 1</span>
+                                </div>
+                                <p class="text-xs text-slate-400">Validação técnica: Dashboard → Supabase Edge Function → Gemini API.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-slate-400">
+                            <span id="aiStatusDot" class="h-2 w-2 rounded-full bg-slate-500"></span>
+                            <span id="aiStatusText" class="font-mono text-[11px]">Pronto para envio</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div>
+                            <label for="aiPromptInput" class="mb-1.5 block text-xs font-semibold text-slate-300">Mensagem para o Gemini:</label>
+                            <div class="flex flex-col gap-2 sm:flex-row">
+                                <input id="aiPromptInput" type="text" value="Explique brevemente o que é Segurança Viária." class="flex-1 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Digite uma pergunta para a IA...">
+                                <button id="aiTestButton" type="button" onclick="executarTesteGeminiIA()" class="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i id="aiTestButtonIcon" class="fa-solid fa-paper-plane"></i>
+                                    <span id="aiTestButtonText">Testar Conexão</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="aiResponseContainer" class="hidden space-y-2 rounded-xl border border-slate-800 bg-[#070D1E]/80 p-4">
+                            <div class="flex items-center justify-between border-b border-slate-800/80 pb-2 text-xs text-slate-400">
+                                <span class="flex items-center gap-1.5 font-semibold text-amber-400">
+                                    <i class="fa-solid fa-robot"></i> Resposta do Gemini
+                                </span>
+                                <span id="aiResponseMeta" class="font-mono text-[11px] text-slate-400"></span>
+                            </div>
+                            <div id="aiResponseBody" class="whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-200"></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </div>
 
         <div id="view-governance" class="page-view hidden space-y-6">

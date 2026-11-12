@@ -477,6 +477,54 @@ body.light-theme .intelligence-analysis-critical > div:first-child { color: #be1
 body.light-theme .intelligence-analysis-attention > div:first-child { color: #b45309; }
 body.light-theme .intelligence-analysis-info > div:first-child { color: #0369a1; }
 body.light-theme .governance-stat,
+.intelligence-subtab-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+.intelligence-subtab-btn.active {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #ffffff;
+    border-color: rgba(245, 158, 11, 0.3) !important;
+    box-shadow: 0 4px 12px rgba(202, 138, 4, 0.12);
+}
+.alert-card {
+    min-width: 0;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(7, 13, 30, 0.45);
+    transition: all 180ms ease;
+}
+.alert-card:hover {
+    transform: translateY(-2px);
+    background: rgba(7, 13, 30, 0.65);
+}
+.alert-card-critical {
+    border-left: 4px solid #f43f5e;
+}
+.alert-card-attention {
+    border-left: 4px solid #f59e0b;
+}
+.alert-card-info {
+    border-left: 4px solid #38bdf8;
+}
+.alert-card.is-read {
+    opacity: 0.75;
+    background: rgba(15, 23, 42, 0.25);
+}
+body.light-theme .alert-card {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: #e2e8f0;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+body.light-theme .alert-card:hover {
+    background: #ffffff;
+}
+body.light-theme .alert-card-critical { border-left-color: #e11d48; }
+body.light-theme .alert-card-attention { border-left-color: #d97706; }
+body.light-theme .alert-card-info { border-left-color: #0284c7; }
+
 body.light-theme #view-governance .glass-card {
     background: rgba(255, 255, 255, 0.84);
     border-color: #e2e8f0;
