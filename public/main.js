@@ -4186,10 +4186,14 @@ function prepararContextoIndicadoresIA(prompt) {
         'para', 'sobre', 'quais', 'qual', 'todos', 'todas', 'liste', 'listar',
         'relatorio', 'analise', 'analisar', 'indicadores', 'indicador', 'dados',
         'mensais', 'mensal', 'disponiveis', 'recebidos', 'contexto', 'minha',
-        'meus', 'com', 'sem', 'uma', 'dos', 'das', 'por', 'que', 'como'
+        'meus', 'com', 'sem', 'uma', 'dos', 'das', 'por', 'que', 'como', 'entre',
+        'principais', 'evolucao', 'resultados', 'historico', 'pontos', 'atencao'
     ]);
+    const termos = [...new Set((pergunta.match(/[a-z0-9]{4,}/g) || [])
+        .filter(termo => !termosIgnorados.has(termo)))];
 
-    let indicadoresSelecionados = currentData;
+    // Seleção por assunto. Dê preferência ao nome do indicador em vez do setor,
+    // pois um setor inteiro pode conter dezenas de indicadores não solicitados.
     const temas = [
         { termos: ['acidente', 'acidentes', 'sinistro', 'sinistros'], regex: /acident|sinistr/ },
         { termos: ['multa', 'multas', 'autuacao', 'autuacoes'], regex: /multa|autuac/ },
@@ -4197,49 +4201,63 @@ function prepararContextoIndicadoresIA(prompt) {
         { termos: ['score'], regex: /score/ },
         { termos: ['veiculo', 'veiculos', 'frota', 'crlv', 'cronotacografo'], regex: /veicul|frota|crlv|cronotac/ }
     ];
-    const temaSolicitado = temas.find(tema => tema.termos.some(termo => pergunta.includes(termo)));
+    const temasSolicitados = temas.filter(tema => tema.termos.some(termo => pergunta.includes(termo)));
+    const selecionados = currentData.map((item, index) => {
+        const nome = normalizar(item.indicador);
+        const setor = normalizar(item.setor);
+        let pontos = termos.reduce((soma, termo) => soma + (nome.includes(termo) ? 5 : setor.includes(termo) ? 1 : 0), 0);
+        if (temasSolicitados.some(tema => tema.regex.test(nome))) pontos += 9;
+        else if (temasSolicitados.some(tema => tema.regex.test(setor))) pontos += 2;
+        if (pergunta.includes('culpa') && nome.includes('culpa')) pontos += 15;
+        if (pergunta.includes('total') && nome.includes('total')) pontos += 6;
+        return { item, index, pontos };
+    });
 
-    if (temaSolicitado) {
-        indicadoresSelecionados = currentData.filter(item =>
-            temaSolicitado.regex.test(normalizar(`${item.indicador} ${item.setor}`))
-        );
-    } else {
-        const termos = pergunta.match(/[a-z0-9]{4,}/g) || [];
-        const termosRelevantes = [...new Set(termos.filter(termo => !termosIgnorados.has(termo)))];
-        const correspondentes = currentData.filter(item => {
-            const texto = normalizar(`${item.indicador} ${item.setor}`);
-            return termosRelevantes.some(termo => texto.includes(termo));
-        });
-        if (correspondentes.length) indicadoresSelecionados = correspondentes;
-    }
+    // Sem associação explícita: permite perguntas gerais, mas usa apenas o que
+    // couber no limite, deixando claro que a resposta é um recorte parcial.
+    const haCorrespondencias = selecionados.some(registro => registro.pontos > 0);
+    const candidatos = haCorrespondencias
+        ? selecionados.filter(registro => registro.pontos > 0)
+        : selecionados;
+    candidatos.sort((a, b) => b.pontos - a.pontos || a.index - b.index);
 
-    const indicadores = indicadoresSelecionados.map(item => ({
-        indicador: item.indicador ?? null,
-        setor: item.setor ?? null,
-        meta: item.meta ?? null,
-        unidade: item.und ?? null,
-        direcaoDesempenho: item.direcaoDesempenho ?? null,
-        ultimaAtualizacao: item.ultimaAtualizacao ?? null,
-        valoresMensais: (Array.isArray(item.valores) ? item.valores : []).map((valor, index) => ({
-            competencia: mesesLabels[index] ?? null,
-            valor: valor === undefined ? null : valor
-        }))
-    }));
-
+    // As competências são enviadas uma única vez, evitando repetir a string do
+    // mês para cada valor e reduzindo drasticamente o tamanho da requisição.
     const contexto = {
         totalIndicadoresNoDashboard: currentData.length,
-        totalIndicadoresEnviados: indicadores.length,
-        observacao: 'Dados agregados do Dashboard. Valores null representam ausência de dado, nunca zero.',
-        indicadores
+        totalIndicadoresSelecionados: candidatos.length,
+        totalIndicadoresEnviados: 0,
+        contextoParcial: false,
+        observacao: 'Dados agregados. Cada valor em valores corresponde à competência na mesma posição de competencias. null significa ausência, nunca zero. Um contexto parcial não representa todos os indicadores do dashboard.',
+        competencias: [...mesesLabels],
+        indicadores: []
     };
-
-    const tamanhoBytes = new TextEncoder().encode(JSON.stringify(contexto)).length;
-    if (tamanhoBytes > 18 * 1024) {
-        throw new Error(
-            'O contexto selecionado é muito grande para enviar com segurança. Faça uma pergunta mais específica, indicando o setor ou o tema.'
-        );
+    const encoder = new TextEncoder();
+    const LIMITE_CONTEXTO_BYTES = 17 * 1024; // margem segura abaixo do limite da Edge Function
+    for (const { item } of candidatos) {
+        const indicador = {
+            indicador: item.indicador ?? null,
+            setor: item.setor ?? null,
+            meta: item.meta ?? null,
+            unidade: item.und ?? null,
+            direcaoDesempenho: item.direcaoDesempenho ?? null,
+            ultimaAtualizacao: item.ultimaAtualizacao ?? null,
+            valores: Array.isArray(item.valores) ? item.valores.map(valor => valor === undefined ? null : valor) : []
+        };
+        contexto.indicadores.push(indicador);
+        contexto.totalIndicadoresEnviados = contexto.indicadores.length;
+        if (encoder.encode(JSON.stringify(contexto)).length > LIMITE_CONTEXTO_BYTES) {
+            contexto.indicadores.pop();
+            contexto.totalIndicadoresEnviados--;
+        }
     }
-
+    contexto.contextoParcial = contexto.totalIndicadoresEnviados < candidatos.length;
+    if (contexto.contextoParcial) {
+        contexto.observacao += ' Foram omitidos indicadores que não couberam no limite. Não conclua que eles não existem; informe que a análise é parcial.';
+    }
+    if (!contexto.indicadores.length && candidatos.length) {
+        throw new Error('Não foi possível compactar os indicadores para a consulta. Verifique se há campos excessivamente longos nos registros.');
+    }
     return contexto;
 }
 
