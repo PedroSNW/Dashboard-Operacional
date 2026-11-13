@@ -78,6 +78,30 @@
         ['openChartModal()','openNewIndicatorModal()'].forEach(command=>{const button=actions.querySelector(`[onclick="${command}"]`);if(button)contextual.append(button);});main.prepend(contextual);contextual.hidden=true;
         const theme=$('themeToggleBtn');actions.insertBefore(theme,$('headerToolsMenu'));
         const account=element('p','','v3-user-email');account.id='v3UserEmail';$('headerToolsMenu').querySelector('summary').setAttribute('aria-label','Menu da conta e ferramentas');$('headerToolsMenu').querySelector('div').prepend(account);
+        // Move o mesmo details e seus controles; preserva IDs, listeners e onclicks.
+        const settings=$('headerToolsMenu'),settingsSummary=settings.querySelector('summary'),settingsPanel=settings.querySelector('div');
+        settingsSummary.title='Configurações';settingsSummary.setAttribute('aria-label','Configurações');
+        settingsSummary.querySelector('span').textContent='Configurações';
+        const gear=settingsSummary.querySelector('i');gear.className='fa-solid fa-gear';
+        gear.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m9 3-.5 2-2 1.2-2-.5-2 3.5L4 10.7v2.6l-1.5 1.5 2 3.5 2-.5 2 1.2.5 2h4l.5-2 2-1.2 2 .5 2-3.5-1.5-1.5v-2.6L20 9.2l-2-3.5-2 .5L14 5l-.5-2Z"/><circle cx="11.5" cy="12" r="3"/></svg>';
+        settingsPanel.classList.add('v3-settings-panel');settingsPanel.id='v3SettingsPanel';settingsSummary.setAttribute('aria-controls',settingsPanel.id);
+        const footer=element('footer','','v3-sidebar-footer');footer.append(settings);sidebar.append(footer);
+        // O recorte da sidebar recolhida cortaria o submenu. Move só o painel
+        // aberto para fora do recorte e o devolve ao mesmo details ao fechar.
+        const restoreSettingsPanel=()=>{settings.append(settingsPanel);settingsPanel.classList.remove('v3-settings-floating');settingsPanel.style.removeProperty('left');settingsPanel.style.removeProperty('bottom');settingsPanel.style.removeProperty('max-height');};
+        settings.addEventListener('toggle',()=>{
+            settingsSummary.setAttribute('aria-expanded',String(settings.open));
+            if(settings.open&&!mobile()&&document.body.classList.contains('v3-sidebar-collapsed')){
+                const rect=settingsSummary.getBoundingClientRect();document.body.append(settingsPanel);settingsPanel.classList.add('v3-settings-floating');
+                settingsPanel.style.left=`${Math.max(rect.right+12,parseFloat(getComputedStyle(document.body).getPropertyValue('--ds-sidebar'))+12)}px`;settingsPanel.style.bottom=`${Math.max(12,innerHeight-rect.bottom)}px`;settingsPanel.style.maxHeight=`${Math.max(120,innerHeight-32)}px`;
+                settingsPanel.querySelector('button')?.focus();
+            }else restoreSettingsPanel();
+        });
+        const settingsEscape=e=>{if(e.key==='Escape'&&settings.open){e.preventDefault();e.stopPropagation();settings.open=false;settingsSummary.focus();}};
+        settings.addEventListener('keydown',settingsEscape);settingsPanel.addEventListener('keydown',settingsEscape);
+        const closeSettings=()=>{if(settings.open){settings.open=false;restoreSettingsPanel();}};
+        window.addEventListener('resize',closeSettings);
+        new MutationObserver(()=>{if(!document.body.classList.contains('authenticated')||(mobile()&&!drawer)||settingsPanel.classList.contains('v3-settings-floating')&&!document.body.classList.contains('v3-sidebar-collapsed'))closeSettings();}).observe(document.body,{attributes:true,attributeFilter:['class']});
         toggle=element('button','☰','v3-menu-toggle');toggle.id='v3MenuToggle';toggle.setAttribute('aria-label','Expandir ou recolher navegação');toggle.setAttribute('aria-controls','v3Sidebar');toggle.setAttribute('aria-expanded','true');toggle.onclick=menu;
         const titles=element('div','','v3-page-title');const breadcrumb=element('small','Operação / Visão geral');breadcrumb.id='v3Breadcrumb';const title=element('h1','Visão geral');title.id='v3Title';titles.append(breadcrumb,title);
         const sync=element('span','Aguardando dados','v3-sync');sync.id='v3Sync';sync.setAttribute('role','status');

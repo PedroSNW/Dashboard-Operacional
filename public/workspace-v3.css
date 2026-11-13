@@ -26,6 +26,16 @@ body.workspace-v3 .reveal-pending,body.workspace-v3 .page-load-item{opacity:1;tr
 .v3-context-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:18px}.v3-context-actions[hidden]{display:none}
 .v3-sidebar-collapsed{--ds-sidebar:80px}.v3-sidebar-collapsed .v3-brand>div:last-child,.v3-sidebar-collapsed .v3-nav span,.v3-sidebar-collapsed .v3-nav-group{display:none}.v3-sidebar-collapsed .v3-brand{padding:0 0 20px}.v3-sidebar-collapsed .v3-nav .tab-btn{justify-content:center;padding:12px 4px}
 .v3-drawer-close,.v3-drawer-backdrop{display:none}
+.v3-sidebar{display:flex;flex-direction:column;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.v3-sidebar>.v3-brand,.v3-sidebar>.v3-nav,.v3-sidebar>.v3-drawer-close{flex-shrink:0}
+.v3-sidebar-footer{flex-shrink:0;margin-top:auto;padding-top:20px;border-top:1px solid var(--ds-border)}
+.v3-sidebar-footer #headerToolsMenu{position:relative;width:100%}
+.v3-sidebar-footer summary{display:flex;align-items:center;gap:12px;min-height:46px;padding:12px;border:0;border-radius:10px;background:transparent;color:var(--ds-muted);font-size:.8rem;white-space:nowrap}
+.v3-sidebar-footer summary:hover,.v3-sidebar-footer details[open]>summary{background:var(--ds-raised);color:var(--ds-brand)}
+.v3-sidebar-footer summary>i:first-child{display:flex;flex:0 0 20px;color:inherit}.v3-sidebar-footer summary>i:first-child::before{content:none}.v3-sidebar-footer summary>.fa-chevron-down{display:none}
+body.workspace-v3 .v3-settings-panel{position:absolute;inset:auto 0 calc(100% + 8px);width:100%;max-height:min(420px,calc(100dvh - 100px));overflow:auto;margin:0;background:var(--ds-surface);color:var(--ds-text);border:1px solid var(--ds-border);border-radius:12px;box-shadow:var(--ds-shadow);z-index:70}
+body.workspace-v3 .v3-settings-floating{position:fixed;inset:auto;width:224px;max-width:calc(100vw - 100px)}
+@media(min-width:1024px){.v3-sidebar-collapsed .v3-sidebar-footer{width:52px}.v3-sidebar-collapsed .v3-sidebar-footer summary{width:52px}.v3-sidebar-collapsed .v3-sidebar-footer summary>span{display:none}}
 body:not(.authenticated) .v3-sidebar,body:not(.authenticated) .v3-topbar,body:not(.authenticated) .v3-drawer-backdrop{display:none}
 .workspace-v3 #authScreen{background:radial-gradient(ellipse at top,#22384f,transparent 65%);min-height:100vh}.workspace-v3 #authScreen>.glass-card{padding:36px}
 .v3-section-heading{display:flex;justify-content:space-between;margin-bottom:22px}.v3-eyebrow{color:var(--ds-brand);font-size:.65rem;font-weight:700;letter-spacing:.15em}.v3-overview h2{font-size:1.35rem;font-weight:750}.v3-overview #v3OverviewStatus{color:var(--ds-muted);font-size:.8rem;margin-top:8px}
