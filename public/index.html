@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="google-site-verification" content="ircvyqk4rwH7m8yiF1NCZsCASmjMhBAjjF308aFIvgc">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="theme-preference.js?v=3.1"></script>
     <title>Dashboard DGranel - Sistema Operacional de Segurança Viária</title>
     <meta name="description" content="Painel de controle e monitoramento operacional de segurança viária do sistema DGranel.">
     <link rel="icon" type="image/png" href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&amp;s=10.png">
@@ -22,8 +23,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
         <link rel="stylesheet" href="style.css?v=executive-v2">
     <link rel="stylesheet" href="workspace-v3.css?v=3">
+    <link rel="stylesheet" href="motion-v3-1.css?v=3.1">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
+    <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
     <section id="authScreen" class="flex items-center justify-center p-4">
         <div class="glass-card w-full max-w-md rounded-2xl p-7">
             <div class="mb-6">
@@ -702,10 +705,11 @@
 
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
-        <script src="main.js?v=workspace-v3"></script>
+        <script src="main.js?v=motion-v3-1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="reports.js?v=3"></script>
-    <script src="workspace-v3.js?v=3"></script>
+    <script src="workspace-v3.js?v=3.1"></script>
+    <script src="motion-v3-1.js?v=3.1"></script>
 </body>
 </html>
 

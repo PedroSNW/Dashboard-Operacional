@@ -24,6 +24,11 @@ let dynamicChartInstances = {};
 let showDataLabels = false;
 let selectedDashboardMonths = null;
 let currentTheme = 'dark';
+let sharedTheme = 'dark'; // Compatibilidade do snapshot: preferência pessoal não altera este campo.
+function preferredTheme(fallback='dark') {
+    try { const value=localStorage.getItem('dgranel.theme');if(value==='light'||value==='dark')return value; } catch {}
+    return fallback==='light'?'light':'dark';
+}
 let customLogoSrc = null;
 let lastSupabaseSavedAt = null;
 let supabaseReady = false;
@@ -158,7 +163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setAiProvider(currentAiProvider);
     setupRevealObserver();
     // V3: topbar estável; ações críticas não desaparecem na rolagem.
-    applyTheme('dark');
+    applyTheme(preferredTheme());
     updateLastSaveStatus();
     setInterval(updateLastSaveStatus, 60 * 1000);
     updateDeveloperModeLockIcon();
@@ -174,6 +179,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderCharts();
         renderDynamicCharts();
         renderIntelligenceDashboard();
+        window.DGranelMotion?.chartsChanged();
     });
     document.getElementById('selectAllDashboardMonths')?.addEventListener('click', () => {
         selectedDashboardMonths = null;
@@ -181,6 +187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderCharts();
         renderDynamicCharts();
         renderIntelligenceDashboard();
+        window.DGranelMotion?.chartsChanged();
     });
     document.getElementById('clearDashboardMonths')?.addEventListener('click', () => {
         selectedDashboardMonths = [];
@@ -188,6 +195,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderCharts();
         renderDynamicCharts();
         renderIntelligenceDashboard();
+        window.DGranelMotion?.chartsChanged();
     });
     ['intelligenceSectorFilter', 'intelligenceIndicatorFilter', 'intelligencePeriodFilter', 'intelligenceSeverityFilter', 'intelligenceCategoryFilter']
         .forEach(id => document.getElementById(id)?.addEventListener('change', () => {
@@ -480,7 +488,7 @@ async function handleAuthSession(session) {
     dashboards = [{ id: 'dashboard_main', name: 'Geral', widgets: getDefaultDashboardWidgets() }];
     activeDashboardId = dashboards[0].id;
     showDataLabels = false;
-    currentTheme = 'dark';
+    currentTheme = preferredTheme();
     customLogoSrc = null;
     applyTheme(currentTheme);
     setupDragAndDrop();
@@ -617,7 +625,7 @@ function downloadChart(chartCanvasId, fileName) {
 
 document.addEventListener('click', event => {
     const button = event.target.closest('button');
-    if (!button || button.disabled) return;
+    if (!button || button.disabled || document.body.classList.contains('workspace-v3')) return;
 
     button.classList.remove('icon-click-feedback');
     void button.offsetWidth;
@@ -628,20 +636,24 @@ document.addEventListener('click', event => {
 });
 
 function applyTheme(theme) {
+    const previous=currentTheme;
     const isLight = theme === 'light';
     currentTheme = isLight ? 'light' : 'dark';
     document.body.classList.toggle('light-theme', isLight);
+    document.documentElement.dataset.theme=currentTheme;
+    document.documentElement.style.colorScheme=currentTheme;
     const button = document.getElementById('themeToggleBtn');
     if (!button) return;
 
-    button.title = isLight ? 'Ativar tema escuro' : 'Ativar tema claro';
+    button.title = isLight ? 'Tema claro — ativar escuro' : 'Tema escuro — ativar claro';
     button.setAttribute('aria-label', button.title);
+    button.dataset.theme=currentTheme;
     const icon = document.getElementById('themeToggleIcon');
     if (icon) {
-        icon.className = isLight
-            ? 'fa-solid fa-moon w-4 text-sky-400'
-            : 'fa-solid fa-sun w-4 text-amber-400';
+        icon.className = 'theme-current-icon';
+        icon.innerHTML = `<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="${isLight?'M12 3V1m0 22v-2M3 12H1m22 0h-2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0':'M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z'}"/></svg>`;
     }
+    if(previous!==currentTheme)window.DGranelMotion?.themeChanged(icon);
 }
 
 function getDefaultDashboardWidgets() {
@@ -836,10 +848,8 @@ function addWidgetToDashboard() {
 function toggleTheme() {
     const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
     applyTheme(nextTheme);
-    markStateDirty();
-    [chart1Inst, chart2Inst, chart3Inst, chart4Inst, modalChartInst, ...Object.values(dynamicChartInstances)]
-        .filter(Boolean)
-        .forEach(chart => chart.update());
+    try { localStorage.setItem('dgranel.theme',nextTheme); } catch {}
+    Object.values(Chart.instances||{}).forEach(chart=>chart.update('none'));
 }
 
 function handleDeveloperModeClick() {
@@ -1284,7 +1294,7 @@ async function persistirEstadoSupabase() {
         mesesLabels,
         showDataLabels,
         zoomGraficos: chartZoomState,
-        theme: currentTheme,
+        theme: sharedTheme,
         logo: customLogoSrc
     };
 
@@ -1384,7 +1394,8 @@ async function carregarDadosCompartilhados(silencioso = false) {
                     }
                 });
             }
-            currentTheme = dataObj.theme === 'light' ? 'light' : 'dark';
+            sharedTheme = dataObj.theme === 'light' ? 'light' : 'dark';
+            currentTheme = preferredTheme(sharedTheme);
             customLogoSrc = typeof dataObj.logo === 'string' && dataObj.logo ? dataObj.logo : null;
             applyTheme(currentTheme);
             if (customLogoSrc) {
@@ -1518,6 +1529,7 @@ function switchTab(tabName) {
         carregarLogsAuditoria();
     }
     window.onWorkspaceNavigation?.(tabName);
+    window.DGranelMotion?.navigate(tabName);
 }
 
 // RETORNA ÚLTIMO VALOR VÁLIDO E SEU ÍNDICE
@@ -2499,6 +2511,7 @@ function switchIntelligenceSubtab(subtabName) {
 }
 
 function toggleAlertReadState(alertId) {
+    const restoreFocus=document.activeElement?.closest('[data-alert-id]')?.dataset.alertId===alertId;
     const readSet = getReadAlertIds();
     if (readSet.has(alertId)) {
         readSet.delete(alertId);
@@ -2506,7 +2519,9 @@ function toggleAlertReadState(alertId) {
         readSet.add(alertId);
     }
     saveReadAlertIds(readSet);
+    window.DGranelMotion?.retireAlert(alertId);
     renderAlertsList();
+    if(restoreFocus)document.querySelector('#alertsContainer button')?.focus();
 }
 
 function markAllAlertsAsRead() {
@@ -2655,6 +2670,7 @@ function renderAlertsList() {
         const conf = badgeConfig[alert.severity] || badgeConfig.INFORMATIVO;
         const card = document.createElement('article');
         card.className = `alert-card ${conf.cardBorder} ${alert.isRead ? 'is-read' : ''} space-y-3`;
+        card.dataset.alertId=alert.id;
 
         card.innerHTML = `
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
@@ -3653,6 +3669,7 @@ async function deleteIndicator(index) {
 }
 
 function closeModal(id) {
+    window.DGranelMotion?.retireModal(document.getElementById(id));
     document.getElementById(id).classList.add('hidden');
     if (id === 'modalDetail') {
         detailModalIndex = null;
@@ -4046,7 +4063,7 @@ function resetData() {
         loadStoredDashboards();
         activeDashboardId = dashboards[0].id;
         showDataLabels = false;
-        applyTheme('dark');
+        applyTheme(preferredTheme());
         initSystem();
         markStateDirty();
         registrarLog('RESTAURAÇÃO DE DADOS', 'Dados padrões restaurados.');
@@ -4369,6 +4386,8 @@ async function executarTesteIA(targetProvider = null) {
         responseBody.innerHTML = `<span class="text-slate-400 italic flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin ${providerColor}"></i> Enviando solicitação autenticada à Edge Function (${providerName})...</span>`;
     }
     if (responseMeta) responseMeta.textContent = 'Processando...';
+    responseContainer?.setAttribute('aria-busy','true');
+    window.DGranelMotion?.aiState('loading');
 
     const startTime = performance.now();
 
@@ -4426,6 +4445,8 @@ async function executarTesteIA(targetProvider = null) {
             responseMeta.textContent = `Erro (${durationSec}s)`;
         }
     } finally {
+        responseContainer?.setAttribute('aria-busy','false');
+        window.DGranelMotion?.aiState('complete');
         if (btn) btn.disabled = false;
         if (btnIcon) btnIcon.className = 'fa-solid fa-paper-plane';
         if (btnText) btnText.textContent = `Enviar para ${currentAiProvider === 'openai' ? 'OpenAI' : currentAiProvider === 'groq' ? 'Groq' : 'Gemini'}`;
