@@ -1,0 +1,15 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+import {buildReport} from '../supabase/functions/seguranca-viaria-ia/reports.js';
+const m={exports:{}};new Function('module','exports',readFileSync('public/vendor/jspdf-4.2.1.umd.min.js','utf8'))(m,m.exports);
+const table={exports:{}};new Function('module','exports','require',readFileSync('public/vendor/jspdf-autotable-5.0.8.min.js','utf8'))(table,table.exports,()=>m.exports);table.exports.applyPlugin(m.exports.jsPDF);
+const source=readFileSync('public/reports.js','utf8');
+const code=source.slice(source.indexOf('window.buildManagementPdf ='),source.indexOf('\nasync function exportManagementReport'));
+const win={jspdf:m.exports};
+new Function('window','reportValue',code)(win,v=>v===null||v===undefined?'Ausente':new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(v));
+const stored={mesesLabels:Array.from({length:60},(_,n)=>`${n%12+1}/${2020+Math.floor(n/12)}`),indicadores:Array.from({length:4},(_,n)=>({indicador:`Indicador gerencial ${n}`,setor:'Sinistros',und:'Qtd',meta:0,direcaoDesempenho:'menor_melhor',valores:Array.from({length:60},(_,i)=>i%6===0?null:i)}))};
+const report=buildReport(stored,{type:'comparativo',sector:'TODOS',ids:['indice:0','indice:1','indice:2','indice:3'],start:'1/2020',end:'12/2024'});
+const doc=win.buildManagementPdf(report);
+if(doc.getNumberOfPages()<10)throw Error('Paginação multipágina não exercitada');
+const buffer=new Uint8Array(doc.output('arraybuffer'));writeFileSync('.validation-tools/report-test.pdf',buffer);
+writeFileSync('.validation-tools/report-fixture.json',JSON.stringify(report));
+console.log(`PASS PDF A4 com ${doc.getNumberOfPages()} páginas e ${buffer.length} bytes; tabelas paginadas. Artefato: .validation-tools/report-test.pdf`);

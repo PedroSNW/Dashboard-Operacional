@@ -43,7 +43,8 @@ const generated = new URL('.validation-tools/edge-handler.fixture.ts',root);
 const source = original.replace(/^import \{ serve \}.*;$/m,'const serve = (globalThis as any).__edgeServe;')
     .replace(/^import \{ createClient \}.*;$/m,'const createClient = (globalThis as any).__edgeClient;')
     .replace('"./analytics.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/analytics.js',root).href))
-    .replace('"./groq-context.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/groq-context.js',root).href));
+    .replace('"./groq-context.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/groq-context.js',root).href))
+    .replace('"./reports.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/reports.js',root).href));
 await Deno.writeTextFile(generated,source);
 await import(generated.href);
 const request = (body: unknown, headers: Record<string,string> = {}) => new Request('https://edge.test', {method:'POST',headers:{Origin:'https://dashboard.test',Authorization:'Bearer mock-jwt','Content-Type':'application/json',...headers},body:JSON.stringify(body)});
@@ -92,6 +93,16 @@ try {
             const input=captured.messages[1].content;const sent=JSON.parse(input.slice(input.indexOf('{')));
             assert(sent.competencias.length===9&&sent.indicadores[0].valores.length===9,'Provedor recebeu outubro');
         } finally {months.pop();indicator.valores.pop();}
+    });
+    await test('Relatório mensal autorizado sem IA e leitura negada',async()=>{
+        const before=calls;
+        const selection={type:'mensal',sector:'TODOS',ids:['indice:0'],start:'Jan',end:'Jan'};
+        let res=await handler(request({action:'report',selection}));let body=await res.json();
+        assert(res.status===200 && body.report.indicators[0].estatisticas.soma===26 && calls===before && !body.report.context,'Relatório sem IA');
+        res=await handler(request({action:'report',selection,interpret:true,provider:'groq'}));body=await res.json();
+        assert(res.status===200 && body.response.includes('26') && !body.technicalDetails.includes('Fev:'),'IA fora do período do relatório');
+        res=await handler(request({action:'report',selection,interpret:true,provider:'groq',expectedUpdatedAt:'versao-obsoleta'}));assert(res.status===409,'Snapshot alterado não detectado');
+        readDenied=true;res=await handler(request({action:'report',selection}));assert(res.status===403,'RLS relatório');readDenied=false;
     });
     await test('Pergunta simples sem chamada; limite de saída retorna síntese segura',async()=>{
         let before=calls;

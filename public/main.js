@@ -459,6 +459,7 @@ async function handleAuthSession(session) {
     document.body.classList.toggle('authenticated', Boolean(session));
 
     if (!session) {
+        window.resetManagementReport?.();
         appInitialized = false;
         supabaseStateLoaded = false;
         supabaseReady = false;
@@ -1489,14 +1490,16 @@ function switchTab(tabName) {
     if (currentView) currentView.classList.add('hidden');
     nextView.classList.remove('hidden');
 
-    ['home', 'dashboard', 'datagrid', 'intelligence', 'governance', 'audit'].forEach(t => {
+    ['home', 'dashboard', 'datagrid', 'intelligence', 'governance', 'reports', 'audit'].forEach(t => {
         const button = document.getElementById(`tab-${t}`);
         if (button) button.classList.toggle('active', t === tabName);
     });
 
     document.getElementById('dashboardWorkspaceSection')?.classList.toggle('hidden', tabName !== 'dashboard');
 
-    if (tabName === 'dashboard') {
+    if (tabName === 'reports') {
+        window.refreshReportFilters?.();
+    } else if (tabName === 'dashboard') {
         renderCharts();
         renderDynamicCharts();
     } else if (tabName === 'intelligence') {

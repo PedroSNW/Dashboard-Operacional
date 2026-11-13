@@ -77,8 +77,8 @@ async function runAuditTests(front, back, Encoder) {
     class HttpError extends Error { constructor(message, status) { super(message); this.status = status; } }
     async function validate(context, denied = false) {
         const query = { select: () => query, eq: () => query, single: async () => ({data: denied ? null : {data: {indicadores: sample, mesesLabels: months}}, error: denied ? {} : null}) };
-        return new AsyncFunction('body','supabaseClient','TextEncoder','HttpError', validation + '\nreturn contextText;')(
-            {context}, {from: () => query}, Encoder, HttpError);
+        return new AsyncFunction('body','supabaseClient','TextEncoder','HttpError','requestedReport', validation + '\nreturn contextText;')(
+            {context}, {from: () => query}, Encoder, HttpError, null);
     }
     let verified;
     await test('4. Edge verifica contexto contra snapshot autorizado', async () => {

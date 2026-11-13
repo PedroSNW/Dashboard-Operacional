@@ -20,7 +20,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=retro-audit-20261110-4">
+        <link rel="stylesheet" href="style.css?v=reports-20261113">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <section id="authScreen" class="flex items-center justify-center p-4">
@@ -70,6 +70,7 @@
                 <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-chart-pie text-amber-400"></i> Executive Dashboard</button>
                 <button onclick="switchTab('datagrid')" id="tab-datagrid" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-table"></i> Consulta &amp; Repositório</button>
                 <button onclick="switchTab('intelligence')" id="tab-intelligence" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-chart-line text-amber-400"></i> Inteligência de Indicadores</button>
+                <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-file-pdf text-amber-400"></i> Relatórios Gerenciais</button>
                 <button onclick="switchTab('governance')" id="tab-governance" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-sliders text-amber-400"></i> Governança</button>
                 <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i id="developerModeLockIcon" class="fa-solid fa-lock text-rose-400" aria-hidden="true"></i><span>Auditoria &amp; JSON Raw</span></button>
                 </nav>
@@ -379,6 +380,26 @@
             </div>
         </div>
 
+        <div id="view-reports" class="page-view hidden space-y-6">
+            <section class="glass-card rounded-2xl border border-slate-700 p-5 sm:p-7 space-y-5">
+                <div><p class="text-xs font-bold uppercase text-amber-400">Segurança Viária • D'Granel</p><h2 class="text-2xl font-bold">Relatórios Gerenciais</h2><p class="text-sm text-slate-400 mt-2">Selecione o escopo, revise a prévia e exporte. A geração relê o Supabase e não altera indicadores.</p></div>
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 report-filters">
+                    <label>Tipo de relatório<select id="reportType"><option value="executivo">Executivo</option><option value="mensal">Mensal — uma competência</option><option value="trimestral">Trimestral — três competências</option><option value="anual">Anual — doze competências</option><option value="comparativo">Comparativo</option><option value="critico">Crítico</option></select></label>
+                    <label>Setor<select id="reportSector"><option value="TODOS">Todos os setores</option></select></label>
+                    <label>Competência inicial<select id="reportStart"></select></label>
+                    <label>Competência final<select id="reportEnd"></select></label>
+                </div>
+                <div class="report-filters"><label for="reportIndicators">Indicadores — use Ctrl/Cmd para seleção múltipla</label><select id="reportIndicators" multiple size="7" class="w-full"></select><button id="reportAll" class="mt-2 text-sm text-amber-400 underline">Selecionar todos do setor</button></div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <button id="reportGenerate" class="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950">Gerar / atualizar prévia</button>
+                    <button id="reportRefresh" class="rounded-xl border border-slate-600 px-4 py-3 text-sm">Atualizar filtros</button>
+                    <button id="reportExport" disabled class="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white">Exportar PDF</button>
+                </div>
+                <div class="report-filters flex flex-wrap items-end gap-3 border-t border-slate-700 pt-4"><label>Interpretação opcional<select id="reportProvider"><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label><button id="reportAI" disabled class="rounded-xl border border-amber-500/50 px-4 py-3 text-sm text-amber-400">Solicitar interpretação</button><span class="text-xs text-slate-400">O relatório funciona sem IA. Consultas podem consumir a cota do provedor.</span></div>
+                <p id="reportStatus" role="status" aria-live="polite" class="text-sm text-slate-400">Escolha os filtros e gere uma prévia.</p>
+            </section>
+            <section id="reportPreview" aria-label="Prévia do relatório" class="glass-card rounded-2xl p-5 sm:p-7 space-y-5"></section>
+        </div>
         <div id="view-governance" class="page-view hidden space-y-6">
             <section class="glass-card flex flex-col justify-between gap-4 rounded-2xl p-5 lg:flex-row lg:items-center">
                 <div>
@@ -707,7 +728,8 @@
 
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
-        <script src="main.js?v=ai-structured-v3"></script>
+        <script src="main.js?v=reports-v1"></script>
+        <script src="reports.js?v=1"></script>
 </body>
 </html>
 

@@ -6,6 +6,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentation, INTERPRETATION_CONTRACT } from "./analytics.js";
 import { compactGroqContext, groqFailure, GROQ_OUTPUT_BUDGET, GROQ_MAX_BODY_BYTES } from "./groq-context.js";
+import { buildReport } from "./reports.js";
 
 const MAX_BODY_BYTES = 25 * 1024;
 const MAX_PROMPT_CHARS = 1000;
@@ -334,6 +335,21 @@ serve(async (req: Request) => {
 
     // 4. Valida o payload sem truncar nem substituir entradas inválidas.
     const body = await readJsonBodyLimited(req);
+    let requestedReport: ReturnType<typeof buildReport> | null = null;
+    if (body.action === "report") {
+      const { data: remote, error: reportError } = await supabaseClient.from("dashboard_state").select("data,updated_at").eq("id", 1).single();
+      if (reportError || !remote?.data) throw new HttpError("Leitura autorizada do relatório indisponível. Tente atualizar os dados.", 403);
+      const report = buildReport(remote.data, body.selection, remote.updated_at);
+      requestedReport = report;
+      if (body.expectedUpdatedAt && body.expectedUpdatedAt !== remote.updated_at) throw new HttpError("O snapshot mudou. Atualize a prévia antes de solicitar interpretação.", 409);
+      if (body.interpret !== true) {
+        const { context: _context, ...result } = report;
+        return jsonResponse(req, { success: true, report: result });
+      }
+      // Usa o mesmo snapshot e as mesmas proteções do chat, sem escrita.
+      body.context = report.context;
+      body.prompt = `Analise todos os indicadores de ${report.competencias[0]} a ${report.competencias.at(-1)}. Use a interpretação estruturada.`;
+    }
     const rawPrompt = typeof body.prompt === "string"
       ? body.prompt
       : typeof body.message === "string"
@@ -361,7 +377,7 @@ serve(async (req: Request) => {
         throw new HttpError("O contexto dos indicadores possui formato inválido.", 400);
       }
       contextText = JSON.stringify(rawContext);
-      if (new TextEncoder().encode(contextText).length > 18 * 1024) {
+      if (!requestedReport && new TextEncoder().encode(contextText).length > 18 * 1024) {
         throw new HttpError("O contexto dos indicadores excede o limite de 18 KB.", 413);
       }
       const context = rawContext as Record<string, unknown>;
@@ -434,7 +450,7 @@ serve(async (req: Request) => {
       throw new HttpError("Provedor de IA inválido. Escolha 'gemini', 'openai' ou 'groq'.", 400);
     }
     const provider = rawProvider;
-    const analyticalContext = contextText ? scopeAnalysis(JSON.parse(contextText), prompt) : null;
+    const analyticalContext = contextText ? (requestedReport ? { ...JSON.parse(contextText), totalIndicadoresSelecionados: requestedReport.indicators.length, totalIndicadoresEnviados: requestedReport.indicators.length, competencias: requestedReport.competencias, indicadores: requestedReport.indicators } : scopeAnalysis(JSON.parse(contextText), prompt)) : null;
     if (analyticalContext) {
       for (const item of analyticalContext.indicadores) {
         item.estatisticas = analyzeIndicator(item, analyticalContext.competencias);
@@ -987,6 +1003,7 @@ serve(async (req: Request) => {
     if (error instanceof Error && error.message === "INTERVALO_AMBIGUO") {
       return jsonResponse(req, { success: false, error: "Intervalo de competências indisponível ou ambíguo. Informe o ano e um intervalo dentro dele." }, 400);
     }
+    if (error instanceof Error && error.message.startsWith("REPORT:")) return jsonResponse(req, { success: false, error: error.message.slice(7).trim() }, 400);
 
     // Registra diagnóstico sanitizado no servidor sem expor tokens, chaves, cabeçalhos ou payloads
     const errorType = error instanceof Error ? error.name : "UnknownError";

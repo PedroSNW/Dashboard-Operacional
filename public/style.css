@@ -639,3 +639,10 @@ body.light-theme #provider-btn-groq.border-violet-500\/50 {
     color: #5b21b6;
 }
 
+.report-filters label { display: block; font-size: .8rem; color: #94a3b8; }
+.report-filters select { display: block; width: 100%; margin-top: .4rem; border: 1px solid #334155; border-radius: .75rem; padding: .65rem; background: #070d1e; color: #f1f5f9; }
+#view-reports button:disabled { opacity: .45; cursor: not-allowed; }
+body.light-theme .report-filters select { background: #fff; color: #172033; border-color: #cbd5e1; }
+body.light-theme .report-filters label { color: #475569; }
+#reportPreview article { break-inside: avoid; }
+
