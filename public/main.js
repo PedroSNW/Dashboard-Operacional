@@ -155,6 +155,7 @@ Chart.register({
 
 // CARREGAMENTO INICIAL
 document.addEventListener('DOMContentLoaded', async () => {
+    setAiProvider(currentAiProvider);
     setupRevealObserver();
     initSmartNavbar();
     applyTheme('dark');
@@ -4045,17 +4046,18 @@ function resetData() {
 }
 
 // ==========================================
-// CENTRAL DE IA — PILOTO MULTIPROVEDOR (GEMINI & OPENAI)
+// CENTRAL DE IA — GROQ PRINCIPAL, GEMINI E OPENAI ALTERNATIVOS
 // ==========================================
 
-let currentAiProvider = 'gemini';
+let currentAiProvider = 'groq';
 
 /**
- * Altera o provedor de IA selecionado na interface (Google Gemini ou OpenAI).
+ * Altera o provedor sem remover as alternativas; o padrão inicial é Groq.
  */
 function setAiProvider(provider) {
-    const prov = provider === 'openai' ? 'openai' : provider === 'groq' ? 'groq' : 'gemini';
+    const prov = ['openai','gemini','groq'].includes(provider) ? provider : 'groq';
     currentAiProvider = prov;
+    if (prov !== 'groq') document.getElementById('aiAlternativeProviders')?.setAttribute('open','');
 
     const btnGemini = document.getElementById('provider-btn-gemini');
     const btnOpenai = document.getElementById('provider-btn-openai');
@@ -4076,6 +4078,12 @@ function setAiProvider(provider) {
     if (badgeGemini) badgeGemini.classList.add('hidden');
     if (badgeOpenai) badgeOpenai.classList.add('hidden');
     if (badgeGroq)   badgeGroq.classList.add('hidden');
+    [btnGroq,btnGemini,btnOpenai].forEach(button=>{
+        if (!button) return;
+        button.classList.add('ai-provider');
+        if (button === btnGroq) button.classList.add('ai-provider-primary');
+        button.setAttribute('aria-pressed',String(button.id===`provider-btn-${prov}`));
+    });
 
     if (prov === 'gemini') {
         if (btnGemini) btnGemini.className = 'flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-amber-500/25';
@@ -4099,6 +4107,9 @@ function setAiProvider(provider) {
         if (promptLabel) promptLabel.textContent = 'Pergunta ou solicitação para a Groq:';
         if (btnText) btnText.textContent = 'Enviar para Groq';
     }
+    if (btnGroq) btnGroq.classList.add('ai-provider','ai-provider-primary');
+    if (btnGemini) btnGemini.classList.add('ai-provider');
+    if (btnOpenai) btnOpenai.classList.add('ai-provider');
 }
 
 /**
@@ -4232,7 +4243,7 @@ function prepararContextoIndicadoresIA(prompt) {
 }
 
 async function chamarEdgeFunctionIA(prompt, options = {}) {
-    const provider = options.provider || currentAiProvider || 'gemini';
+    const provider = options.provider || currentAiProvider || 'groq';
 
     // 1. Obtém sessão ativa do Supabase Auth garantindo renovação de token se expirado
     const { data, error: sessionError } = await supabaseClient.auth.getSession();
@@ -4302,7 +4313,7 @@ async function chamarEdgeFunctionIA(prompt, options = {}) {
  * @param {string|null} [targetProvider] Opcionalmente força um provedor específico ('gemini', 'openai' ou 'groq').
  */
 async function executarTesteIA(targetProvider = null) {
-    const provider = targetProvider || currentAiProvider || 'gemini';
+    const provider = targetProvider || currentAiProvider || 'groq';
     const isGroq = provider === 'groq';
     const isOp = provider === 'openai';
     const providerName = isGroq ? 'Groq' : isOp ? 'OpenAI' : 'Google Gemini';

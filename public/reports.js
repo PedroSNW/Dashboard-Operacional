@@ -103,35 +103,8 @@ async function interpretManagementReport() {
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
-window.buildManagementPdf = function(r, images=[]) {
-    const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});
-    const text=(value,x,y,size=11)=>{doc.setFontSize(size);doc.text(String(value),x,y);};
-    const paragraph=(value,y)=>{const lines=doc.splitTextToSize(String(value),174);for(const line of lines){if(y>270){doc.addPage();y=24;}text(line,18,y);y+=5;}return y+4;};
-    doc.setFillColor(10,19,41);doc.rect(0,0,210,297,'F');doc.setTextColor(245,185,55);
-    text("D'GRANEL TRANSPORTES",18,45,23);doc.setTextColor(255,255,255);
-    let y=paragraph(`Relatório Gerencial de Segurança Viária • ${r.type}`,75);
-    y=paragraph(`${r.competencias[0]} a ${r.competencias.at(-1)}`,y+8);
-    y=paragraph(`Gerado em ${new Date(r.generatedAt).toLocaleString('pt-BR')}`,y);
-    paragraph(`Uso interno • IA ${r.aiUsed?'utilizada':'não utilizada'}\nCompetências sujeitas a revisão retroativa.`,y+20);
-    doc.addPage();doc.setTextColor(25,35,50);y=26;
-    text('Resumo executivo',18,y,18);y+=10;
-    y=paragraph(`${r.selectedCount} indicadores selecionados; ${r.indicators.length} exibidos. ${r.criticalCount} pontos de atenção por meta ou piora descritiva. Não há consolidação de unidades distintas.`,y);
-    if(r.interpretation)y=paragraph(r.interpretation,y);
-    r.indicators.forEach((i,n)=>{
-        doc.addPage();y=24;doc.setTextColor(25,35,50);
-        y=paragraph(i.indicador,y);y=paragraph(`${i.setor} • Unidade: ${i.unidade??'não informada'} • Meta: ${i.meta===null?'não cadastrada':reportValue(i.meta)} • Direção: ${i.direcaoDesempenho??'indefinida'}`,y);
-        const s=i.estatisticas;
-        y=paragraph(`Média: ${reportValue(s.media)}; soma: ${s.somaAplicavel?reportValue(s.soma):'não aplicável'}; mínimo: ${reportValue(s.minimo)}; máximo: ${reportValue(s.maximo)}; ausentes: ${s.ausentes}. ${i.criticalReason??''}`,y);
-        if(images[n]){if(y+65>272){doc.addPage();y=24;}doc.addImage(images[n],'PNG',18,y,174,60);y+=66;}
-        doc.autoTable({startY:y,margin:{left:18,right:18,top:22,bottom:22},head:[['Competência','Valor','Variação absoluta','Variação %']],body:s.mensais.map(p=>[p.competencia,reportValue(p.valor),reportValue(p.variacaoAnterior?.absoluta),reportValue(p.variacaoAnterior?.percentual)]),styles:{fontSize:9,cellPadding:3,overflow:'linebreak'},headStyles:{fillColor:[10,19,41]},rowPageBreak:'avoid',showHead:'everyPage'});
-    });
-    doc.addPage();y=26;text('Metodologia e limitações',18,y,17);y+=12;
-    y=paragraph(r.limitations.join('\n'),y);
-    paragraph('Médias consideram somente valores válidos. Percentuais com base zero são indisponíveis. Comparações usam a direção cadastrada. Piora é descritiva entre primeiro e último valor válido, sem atribuir causalidade. O tipo crítico filtra apenas os critérios configurados, sem presumir gravidade por nome. Snapshot: '+(r.snapshotUpdatedAt??'data não informada'),y);
-    const pages=doc.getNumberOfPages();for(let p=1;p<=pages;p++){doc.setPage(p);doc.setFontSize(9);doc.setTextColor(p===1?255:100);doc.text(`D'Granel • Uso interno • ${p}/${pages}`,18,287);}
-    return doc;
-};
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=2');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 async function exportManagementReport(){
     try{reportReady();if(!managementReport||managementSignature!==JSON.stringify(reportSelection()))throw Error('Gere uma prévia atualizada.');
         await loadReportPdfLibraries();reportReady();if(managementSignature!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram. Atualize a prévia.');const images=managementChartImages();

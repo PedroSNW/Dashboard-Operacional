@@ -29,7 +29,23 @@ try {
             const data=await call('Runtime.evaluate',{expression:'document.getElementById("report-pdf").value',returnByValue:true},sessionId);
             await Deno.writeFile(new URL('.validation-tools/report-charts.pdf',root),Uint8Array.from(atob(data.result.value),c=>c.charCodeAt(0)));
         }
-        console.log(status);await call('Target.closeTarget',{targetId});
+        const ai=await call('Runtime.evaluate',{expression:`(()=>{
+            if(currentAiProvider!=='groq')throw Error('Padrão não é Groq');
+            setAiProvider('gemini');if(currentAiProvider!=='gemini')throw Error('Gemini indisponível');
+            setAiProvider('openai');if(currentAiProvider!=='openai')throw Error('OpenAI indisponível');
+            setAiProvider('groq');document.getElementById('aiAlternativeProviders').open=false;
+            document.querySelectorAll('main > div').forEach(e=>e.classList.add('hidden'));
+            document.getElementById('view-intelligence').classList.remove('hidden');switchIntelligenceSubtab('pilot');
+            document.getElementById('aiIntegrationTestCard').scrollIntoView({block:'start'});
+            if(document.getElementById('provider-btn-groq').getAttribute('aria-pressed')!=='true'||!document.getElementById('aiTestButtonText').textContent.includes('Groq'))throw Error('Ativo/botão principal');
+            return 'PASS Groq padrão, troca Gemini/OpenAI/Groq e alternativas acessíveis';
+        })()`,returnByValue:true},sessionId);
+        if(ai.exceptionDetails)throw Error(JSON.stringify(ai.exceptionDetails));
+        await new Promise(r=>setTimeout(r,150));
+        const aiGeometry=await call('Runtime.evaluate',{expression:'document.documentElement.scrollWidth',returnByValue:true},sessionId);if(aiGeometry.result.value>width)throw Error('IA com overflow');
+        const aiShot=await call('Page.captureScreenshot',{format:'png'},sessionId);
+        await Deno.writeFile(new URL(`.validation-tools/ai-${name}.png`,root),Uint8Array.from(atob(aiShot.data),c=>c.charCodeAt(0)));
+        console.log(status);console.log(ai.result.value);await call('Target.closeTarget',{targetId});
     }
     await call('Browser.close');
 }finally{try{ws?.close();}catch{}try{child.kill();}catch{}}

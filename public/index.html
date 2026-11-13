@@ -20,7 +20,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=reports-20261113">
+        <link rel="stylesheet" href="style.css?v=executive-v2">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <section id="authScreen" class="flex items-center justify-center p-4">
@@ -294,12 +294,12 @@
                             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
                                 <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
                             </div>
-                            <div>
-                                <div class="flex items-center gap-2">
-                                    <h3 class="text-sm font-bold text-white">Central de IA — Piloto Multiprovedor</h3>
-                                    <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Gemini &amp; OpenAI</span>
+                            <div class="ai-card-copy">
+                                <div class="ai-card-heading flex items-center gap-2">
+                                    <h3 class="ai-card-title text-sm font-bold text-white">Central de Inteligência Artificial</h3>
+                                    <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Groq • IA principal</span>
                                 </div>
-                                <p class="text-xs text-slate-400">Validação técnica: Dashboard → Supabase Edge Function → Provedor Selecionado (Gemini / OpenAI).</p>
+                                <p class="text-xs text-slate-400">Interpretação gerencial dos indicadores reais, com cálculos determinísticos e recomendações fundamentadas.</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 text-xs text-slate-400">
@@ -308,63 +308,36 @@
                         </div>
                     </div>
 
-                    <!-- Seletor de Provedor de IA -->
-                    <div class="space-y-2 rounded-xl border border-slate-800/80 bg-slate-900/40 p-4">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-semibold text-slate-300">Escolha o Provedor de Inteligência Artificial:</span>
-                            <span class="text-[11px] text-slate-400">Secrets mantidos exclusivamente no backend</span>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-3 pt-1">
-                            <button id="provider-btn-gemini" type="button" onclick="setAiProvider('gemini')" class="flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-amber-500/25">
-                                <i class="fa-brands fa-google text-amber-400"></i>
-                                <span>Google Gemini</span>
-                                <span id="badge-provider-gemini" class="ml-1 rounded-full bg-amber-500/30 px-2 py-0.5 text-[10px] font-extrabold text-amber-300">Ativo</span>
-                            </button>
-                            <button id="provider-btn-openai" type="button" onclick="setAiProvider('openai')" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white">
-                                <i class="fa-solid fa-bolt text-emerald-400"></i>
-                                <span>OpenAI</span>
-                                <span id="badge-provider-openai" class="hidden ml-1 rounded-full bg-emerald-500/30 px-2 py-0.5 text-[10px] font-extrabold text-emerald-300">Ativo</span>
-                            </button>
-                            <button id="provider-btn-groq" type="button" onclick="setAiProvider('groq')" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white">
-                                <i class="fa-solid fa-microchip text-violet-400"></i>
-                                <span>Groq</span>
-                                <span id="badge-provider-groq" class="hidden ml-1 rounded-full bg-violet-500/30 px-2 py-0.5 text-[10px] font-extrabold text-violet-300">Ativo</span>
-                            </button>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
-                            <span>Provedor ativo:</span>
-                            <strong id="currentProviderLabel" class="text-amber-400 font-bold">Google Gemini (gemini-3.8-flash)</strong>
-                            <span class="text-slate-600">·</span>
-                            <span id="currentProviderApiInfo" class="text-slate-400 text-[10px]">API GenerativeLanguage v1beta</span>
-                        </div>
+                    <div class="ai-provider-panel space-y-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-xs font-semibold text-slate-300">Motor de interpretação</span><span class="text-xs text-slate-400">Cálculos verificados pelo sistema</span></div>
+                        <button id="provider-btn-groq" type="button" onclick="setAiProvider('groq')" aria-pressed="true" class="ai-provider ai-provider-primary">
+                            <i class="fa-solid fa-microchip" aria-hidden="true"></i><span>Groq</span><span class="ai-primary-tag">IA principal</span><span id="badge-provider-groq" class="ai-active-tag">Ativo</span>
+                        </button>
+                        <p class="text-xs text-slate-400">Groq é o motor principal para sínteses e recomendações. As estatísticas continuam sendo calculadas e validadas pelo Dashboard.</p>
+                        <details id="aiAlternativeProviders" class="ai-alternatives">
+                            <summary>Outros provedores • teste e comparação</summary>
+                            <div class="flex flex-wrap gap-2 mt-3">
+                                <button id="provider-btn-gemini" type="button" onclick="setAiProvider('gemini')" aria-pressed="false" class="ai-provider"><i class="fa-brands fa-google" aria-hidden="true"></i> Google Gemini <span id="badge-provider-gemini" class="hidden ai-active-tag">Ativo</span></button>
+                                <button id="provider-btn-openai" type="button" onclick="setAiProvider('openai')" aria-pressed="false" class="ai-provider"><i class="fa-solid fa-bolt" aria-hidden="true"></i> OpenAI <span id="badge-provider-openai" class="hidden ai-active-tag">Ativo</span></button>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">Alternativas para comparar interpretações. Selecione um provedor e use o botão de envio abaixo.</p>
+                            <div class="flex flex-wrap gap-2 mt-3"><button type="button" class="ai-secondary-test" onclick="executarTesteConexaoDireta('gemini')">Testar Gemini</button><button type="button" class="ai-secondary-test" onclick="executarTesteConexaoDireta('openai')">Testar OpenAI</button></div>
+                        </details>
+                        <div class="text-xs text-slate-400">Provedor ativo: <strong id="currentProviderLabel" class="text-violet-400">Groq</strong><span id="currentProviderApiInfo" hidden aria-hidden="true"></span></div>
                     </div>
-
                     <div class="space-y-3">
                         <div>
                             <label for="aiPromptInput" id="aiPromptLabel" class="mb-1.5 block text-xs font-semibold text-slate-300">Pergunta ou solicitação para a IA:</label>
                             <div class="flex flex-col gap-2 sm:flex-row">
-                                <input id="aiPromptInput" type="text" value="Explique brevemente o que é Segurança Viária na operação de transporte pesado." class="flex-1 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Digite uma pergunta para a IA...">
+                                <input id="aiPromptInput" type="text" value="Analise os indicadores de acidentes e acidentes com culpa." class="flex-1 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Digite uma pergunta para a IA...">
                                 <button id="aiTestButton" type="button" onclick="executarTesteIA()" class="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i id="aiTestButtonIcon" class="fa-solid fa-paper-plane"></i>
-                                    <span id="aiTestButtonText">Enviar para Gemini</span>
+                                    <span id="aiTestButtonText">Enviar para Groq</span>
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Testes rápidos de conectividade individual -->
-                        <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/60">
-                            <span class="text-[11px] text-slate-400">Testar conexão direta:</span>
-                            <button type="button" onclick="executarTesteConexaoDireta('gemini')" class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-amber-500/40 hover:bg-slate-700">
-                                <i class="fa-brands fa-google text-amber-400"></i> Testar Gemini
-                            </button>
-                            <button type="button" onclick="executarTesteConexaoDireta('openai')" class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-emerald-500/40 hover:bg-slate-700">
-                                <i class="fa-solid fa-bolt text-emerald-400"></i> Testar OpenAI
-                            </button>
-                            <button type="button" onclick="executarTesteConexaoDireta('groq')" class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-violet-500/40 hover:bg-slate-700">
-                                <i class="fa-solid fa-microchip text-violet-400"></i> Testar Groq
-                            </button>
-                        </div>
-
+                        <div class="flex flex-wrap items-center gap-3 border-t border-slate-800/60 pt-3"><button type="button" class="ai-secondary-test" onclick="executarTesteConexaoDireta('groq')">Testar Groq</button><span class="text-xs text-slate-400">Gemini e OpenAI estão disponíveis em Outros provedores.</span></div>
                         <div id="aiResponseContainer" class="hidden space-y-2 rounded-xl border border-slate-800 bg-[#070D1E]/80 p-4">
                             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2 text-xs text-slate-400">
                                 <span class="flex items-center gap-2 font-bold" id="aiResponseHeader">
@@ -728,8 +701,8 @@
 
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
-        <script src="main.js?v=reports-v1"></script>
-        <script src="reports.js?v=1"></script>
+        <script src="main.js?v=groq-primary-v2"></script>
+        <script src="reports.js?v=2"></script>
 </body>
 </html>
 

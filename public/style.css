@@ -646,3 +646,21 @@ body.light-theme .report-filters select { background: #fff; color: #172033; bord
 body.light-theme .report-filters label { color: #475569; }
 #reportPreview article { break-inside: avoid; }
 
+/* Componentes de interpretação: tokens locais para evolução do design. */
+.ai-provider-panel { --ai-accent: #a78bfa; --ai-accent-soft: rgba(139,92,246,.12); border: 1px solid #334155; border-radius: 1rem; padding: 1.25rem; background: rgba(15,23,42,.35); }
+.ai-provider { display: inline-flex; align-items: center; gap: .6rem; border: 1px solid #475569; border-radius: .75rem; padding: .65rem 1rem; color: #cbd5e1; font-size: .8rem; transition: border-color .15s, background .15s; }
+.ai-provider-primary { width: 100%; justify-content: flex-start; min-height: 62px; border-color: var(--ai-accent) !important; background: var(--ai-accent-soft) !important; font-size: 1rem !important; font-weight: 700; box-shadow: inset 3px 0 var(--ai-accent); }
+.ai-primary-tag, .ai-active-tag { border-radius: 999px; padding: .2rem .6rem; font-size: .65rem; font-weight: 700; background: rgba(139,92,246,.18); color: #c4b5fd; }
+.ai-provider-primary .ai-active-tag { margin-left: auto; }
+.ai-alternatives { border-top: 1px solid #334155; padding-top: .9rem; }
+.ai-alternatives summary { cursor: pointer; color: #94a3b8; font-size: .8rem; }
+.ai-secondary-test { border: 1px solid #475569; border-radius: .5rem; padding: .45rem .7rem; color: #94a3b8; font-size: .7rem; }
+.ai-card-copy { min-width: 0; }
+.ai-card-heading { flex-wrap: wrap; }
+.ai-provider:focus-visible, .ai-secondary-test:focus-visible { outline: 2px solid #a78bfa; outline-offset: 3px; }
+body.light-theme .ai-provider-panel { background: #fff; border-color: #dbe2eb; --ai-accent: #7c3aed; --ai-accent-soft: #f5f0ff; }
+body.light-theme .ai-provider { color: #334155 !important; }
+body.light-theme .ai-primary-tag, body.light-theme .ai-active-tag { color: #6d28d9; background: #ede9fe; }
+body.light-theme .ai-alternatives { border-color: #e2e8f0; }
+body.light-theme .ai-alternatives summary, body.light-theme .ai-secondary-test { color: #475569; }
+

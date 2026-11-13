@@ -27,7 +27,7 @@ addEventListener('load',async()=>{
   result.textContent='PASS relatório sem IA, quatro gráficos Chart.js reais, falha Groq preserva prévia, PDF multipágina com gráficos, filtros, tema e sem overflow em '+innerWidth+'px';
  }catch(e){result.textContent='FAIL '+e.message;}
 });`;
-const scripts=[setup,await read('.validation-tools/tailwind.js'),await read('.validation-tools/chart.js'),await read('public/vendor/jspdf-4.2.1.umd.min.js'),await read('public/vendor/jspdf-autotable-5.0.8.min.js'),await read('public/main.js'),await read('public/reports.js'),checks];
+const scripts=[setup,await read('.validation-tools/tailwind.js'),await read('.validation-tools/chart.js'),await read('public/vendor/jspdf-4.2.1.umd.min.js'),await read('public/vendor/jspdf-autotable-5.0.8.min.js'),await read('public/report-pdf.js'),await read('public/main.js'),await read('public/reports.js'),checks];
 const tags=scripts.map(s=>'<script>'+s.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n');
 html=html.replace('<head>',()=>`<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:"><style>${Deno.readTextFileSync(new URL('public/style.css',root))}</style>`).replace('</body>',()=>tags+'</body>');
 await Deno.writeTextFile(new URL('.validation-tools/reports-browser.html',root),html);
