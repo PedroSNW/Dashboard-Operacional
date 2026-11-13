@@ -1,10 +1,10 @@
-import { analyzeIndicator, analyticalResponse } from '../supabase/functions/seguranca-viaria-ia/analytics.js';
+import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentation } from '../supabase/functions/seguranca-viaria-ia/analytics.js';
 import { readFileSync } from 'node:fs';
 
 export function runEnrichmentTest(back, analyze = analyzeIndicator, render = analyticalResponse) {
     const source = back.slice(back.indexOf('    const analyticalContext ='), back.indexOf('    const SYSTEM_INSTRUCTION_TEXT =')).replace('(text: string): string', '(text)');
     const context = {competencias:['Jan','Fev'],indicadores:[{indicador:'Teste',unidade:'Qtd',valores:[2,4],meta:3}],totalIndicadoresNoDashboard:1,contextoParcial:false};
-    const output = new Function('contextText','analyzeIndicator','analyticalResponse', source + '\nreturn {context:JSON.parse(contextText), response:composeResponse("Verificar hipóteses.")};')(JSON.stringify(context),analyze,render);
+    const output = new Function('contextText','analyzeIndicator','analyticalResponse','scopeAnalysis','analysisPresentation','prompt', source + '\nreturn {context:JSON.parse(contextText), response:composeResponse("Verificar hipóteses.")};')(JSON.stringify(context),analyze,render,scopeAnalysis,analysisPresentation,'Analise');
     if (output.context.indicadores[0].estatisticas.soma !== 6 || !output.response.includes('Soma: 6')) throw Error('Integração analítica Edge falhou');
     return 'Enriquecimento e composição reais da Edge passaram.';
 }

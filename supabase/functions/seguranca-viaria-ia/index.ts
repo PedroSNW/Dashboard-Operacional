@@ -4,7 +4,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
-import { analyzeIndicator, analyticalResponse } from "./analytics.js";
+import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentation } from "./analytics.js";
+import { compactGroqContext, groqFailure, GROQ_OUTPUT_BUDGET, GROQ_MAX_BODY_BYTES } from "./groq-context.js";
 
 const MAX_BODY_BYTES = 25 * 1024;
 const MAX_PROMPT_CHARS = 1000;
@@ -22,10 +23,12 @@ const AI_TIMEOUT_MS = 35_000;
 // Importante: Edge Functions podem executar em várias instâncias; este controle
 // é uma proteção básica local, não substitui rate limiting distribuído.
 let activeRequests = 0;
+let groqBlockedUntil = 0;
 const userRequestTimestamps = new Map<string, number[]>();
 
 class HttpError extends Error {
   status: number;
+  retryAfter?: number;
 
   constructor(message: string, status: number) {
     super(message);
@@ -73,6 +76,8 @@ function jsonResponse(
       ...getCorsHeaders(req),
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      ...(data && typeof data === "object" && "retryAfter" in data && typeof data.retryAfter === "number"
+        ? { "Retry-After": String(data.retryAfter), "Access-Control-Expose-Headers": "Retry-After" } : {}),
     },
   });
 }
@@ -429,15 +434,21 @@ serve(async (req: Request) => {
       throw new HttpError("Provedor de IA inválido. Escolha 'gemini', 'openai' ou 'groq'.", 400);
     }
     const provider = rawProvider;
-    const analyticalContext = contextText ? JSON.parse(contextText) : null;
+    const analyticalContext = contextText ? scopeAnalysis(JSON.parse(contextText), prompt) : null;
     if (analyticalContext) {
       for (const item of analyticalContext.indicadores) {
         item.estatisticas = analyzeIndicator(item, analyticalContext.competencias);
       }
       contextText = JSON.stringify(analyticalContext);
     }
-    const composeResponse = (text: string): string => analyticalContext
-      ? analyticalResponse(analyticalContext, text) : text;
+    let groqCoverage = "";
+    let technicalDetails = "";
+    const composeResponse = (text: string): string => {
+      if (!analyticalContext) return text;
+      const presentation = analysisPresentation(analyticalContext, text);
+      technicalDetails = presentation.details;
+      return groqCoverage + presentation.summary;
+    };
 
     const SYSTEM_INSTRUCTION_TEXT =
       "Você é o analista e assistente de Inteligência Artificial da Central de Segurança Viária da D'Granel Transportes. " +
@@ -613,6 +624,7 @@ serve(async (req: Request) => {
         model: openaiModel,
         prompt,
         response: composeResponse(candidateText),
+        technicalDetails,
         meta: {
           promptTokens,
           candidatesTokens: outputTokens,
@@ -633,17 +645,32 @@ serve(async (req: Request) => {
       }
 
       const groqModel = getGroqModel();
+      if (Date.now() < groqBlockedUntil) {
+        const seconds = Math.ceil((groqBlockedUntil - Date.now()) / 1000);
+        const error = new HttpError(`Groq: aguarde ${seconds} segundos antes de tentar novamente.`, 429);
+        error.retryAfter = seconds;
+        throw error;
+      }
       const groqEndpoint = "https://api.groq.com/openai/v1/chat/completions";
+      let compact;
+      try { compact = compactGroqContext(analyticalContext, prompt); }
+      catch { throw new HttpError("O contexto não cabe no orçamento Groq. Especifique os indicadores ou reduza a pergunta. Nenhuma série foi truncada.", 413); }
+      if (compact.omitted || compact.summarized) groqCoverage = `Cobertura da interpretação Groq: ${compact.omitted} indicador(es) omitido(s); ${compact.summarized} série(s) substituída(s) por resumo determinístico. A seção numérica abaixo preserva o contexto validado completo recebido.\n\n`;
 
       const groqPayload = {
         model: groqModel,
-        messages: [
-          { role: "system", content: EFFECTIVE_SYSTEM_INSTRUCTION },
-          { role: "user", content: MODEL_USER_INPUT },
-        ],
+        messages: compact.messages,
         temperature: 0.3,
-        max_tokens: 4096,
+        max_completion_tokens: GROQ_OUTPUT_BUDGET,
+        ...(groqModel === "openai/gpt-oss-120b" || groqModel === "openai/gpt-oss-20b" ? { reasoning_effort: "low" } : {}),
       };
+
+      // Mede e envia exatamente a mesma serialização, incluindo parâmetros/modelo.
+      const groqBody = JSON.stringify(groqPayload);
+      const groqRequestBytes = new TextEncoder().encode(groqBody).length;
+      if (groqRequestBytes > GROQ_MAX_BODY_BYTES) {
+        throw new HttpError("A solicitação ultrapassa o orçamento local de bytes da Groq. Reduza o escopo da pergunta.", 413);
+      }
 
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
@@ -656,9 +683,11 @@ serve(async (req: Request) => {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${groqApiKey}`,
           },
-          body: JSON.stringify(groqPayload),
+          body: groqBody,
           signal: abortController.signal,
         });
+        // Inclui a leitura do corpo na mesma janela de timeout do fetch.
+        groqResponse = new Response(await groqResponse.arrayBuffer(), { status: groqResponse.status, headers: groqResponse.headers });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           throw new HttpError(
@@ -675,50 +704,20 @@ serve(async (req: Request) => {
       }
 
       if (!groqResponse.ok) {
-        const status = groqResponse.status;
-        console.error("Groq API error response", { status });
-
-        if (status === 429) {
-          throw new HttpError(
-            "Limite de uso gratuito da Groq API atingido. Aguarde alguns instantes e tente novamente, ou verifique sua cota no painel da Groq.",
-            429,
-          );
+        const diagnostic = await groqFailure(groqResponse);
+        console.error('Groq API error', { provider: 'groq', status: diagnostic.status, code: diagnostic.code,
+          category: diagnostic.category, requestId: diagnostic.requestId, retryAfter: diagnostic.retryAfter,
+          estimatedInputTokens: compact.estimatedTokens, inputBytes: compact.bytes,
+          requestBytes: groqRequestBytes, sentIndicators: compact.sent, messageCount: compact.messages.length,
+          systemBytes: new TextEncoder().encode(compact.messages[0].content).length });
+        const error = new HttpError(diagnostic.message,
+          diagnostic.status === 429 ? 429 : diagnostic.status === 413 ? 413 : 502);
+        if (diagnostic.status === 429) {
+          error.retryAfter = diagnostic.retryAfter ?? 60;
+          groqBlockedUntil = Date.now() + error.retryAfter * 1000;
         }
-
-        if (status === 401 || status === 403) {
-          throw new HttpError(
-            "A Groq API recusou as credenciais (GROQ_API_KEY) configuradas no servidor.",
-            502,
-          );
-        }
-
-        if (status === 400) {
-          throw new HttpError(
-            "A Groq API rejeitou a solicitação. Verifique o modelo configurado em GROQ_MODEL e tente novamente.",
-            502,
-          );
-        }
-
-        if (status === 404) {
-          throw new HttpError(
-            `O modelo '${groqModel}' não foi encontrado na Groq API. Verifique o Secret GROQ_MODEL ou aguarde a disponibilização do modelo na sua conta.`,
-            502,
-          );
-        }
-
-        if (status === 503 || status === 500) {
-          throw new HttpError(
-            "A Groq API está temporariamente sobrecarregada ou indisponível. Aguarde alguns instantes e tente novamente.",
-            503,
-          );
-        }
-
-        throw new HttpError(
-          "Não foi possível concluir a solicitação na Groq API.",
-          502,
-        );
+        throw error;
       }
-
       let groqData: Record<string, unknown>;
       try {
         groqData = await groqResponse.json();
@@ -738,7 +737,9 @@ serve(async (req: Request) => {
 
       if (!groqText) {
         throw new HttpError(
-          "A Groq API não retornou uma resposta textual válida.",
+          groqFirstChoice?.finish_reason === "length"
+            ? "A Groq atingiu o orçamento de saída/raciocínio antes de gerar texto. Solicite uma análise mais específica."
+            : "A Groq API não retornou uma resposta textual válida.",
           502,
         );
       }
@@ -750,9 +751,17 @@ serve(async (req: Request) => {
         provider: "groq",
         model: groqData.model ?? groqModel,
         prompt,
-        response: composeResponse(groqText),
+        response: (groqFirstChoice?.finish_reason === "length" ? "A interpretação da Groq atingiu o limite de saída e pode estar incompleta. Os cálculos abaixo foram preservados.\n\n" : "") + composeResponse(groqText),
+        technicalDetails,
         meta: {
           promptTokens: groqUsage.prompt_tokens ?? 0,
+          inputEstimatedTokens: compact.estimatedTokens,
+          inputBytes: compact.bytes,
+          requestBytes: groqRequestBytes,
+          sentIndicators: compact.sent,
+          contextBuild: "groq-compact-bytes-v2",
+          omittedIndicators: compact.omitted,
+          summarizedSeries: compact.summarized,
           candidatesTokens: groqUsage.completion_tokens ?? 0,
           totalTokens: groqUsage.total_tokens ?? 0,
           timestamp: new Date().toISOString(),
@@ -976,6 +985,7 @@ serve(async (req: Request) => {
       model: geminiModel,
       prompt,
       response: composeResponse(candidateText),
+      technicalDetails,
       meta: {
         promptTokens: usage?.promptTokenCount ?? 0,
         candidatesTokens: usage?.candidatesTokenCount ?? 0,
@@ -989,7 +999,11 @@ serve(async (req: Request) => {
       return jsonResponse(req, {
         success: false,
         error: error.message,
+        ...(error.retryAfter !== undefined ? { retryAfter: error.retryAfter } : {}),
       }, error.status);
+    }
+    if (error instanceof Error && error.message === "INTERVALO_AMBIGUO") {
+      return jsonResponse(req, { success: false, error: "Intervalo de competências indisponível ou ambíguo. Informe o ano e um intervalo dentro dele." }, 400);
     }
 
     // Registra diagnóstico sanitizado no servidor sem expor tokens, chaves, cabeçalhos ou payloads

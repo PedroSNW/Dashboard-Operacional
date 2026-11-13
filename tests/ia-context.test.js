@@ -52,6 +52,9 @@ async function runAuditTests(front, back, Encoder) {
         assert(frontend().prepare('documentação').indicadores.some(i => i.indicador === 'CRLV liberados'), 'Documentação ausente');
         assert(frontend().prepare('autuações').indicadores.some(i => i.indicador === 'Multas'), 'Multas ausentes');
         assert(frontend().prepare('acidentes e score').indicadores.some(i => i.indicador === 'SCORE'), 'Consulta multitema falhou');
+        assert(frontend().prepare('Qual foi a média de acidentes com culpa?').indicadores.length === 1, 'Culpa ampliou a seleção');
+        assert(frontend().prepare('Analise acidentes e acidentes com culpa').indicadores.length === 2, 'Dois indicadores explícitos');
+        assert(frontend().prepare('Acidentes com culpa e score').indicadores.some(i=>i.indicador==='SCORE'), 'Setor explícito perdido');
     });
     let captured;
     await test('3. Contexto e bytes UTF-8 no fetch real do frontend', async () => {
@@ -97,7 +100,7 @@ async function runAuditTests(front, back, Encoder) {
             // Os blocos internos terminam com seis espaços.
             const end = back.indexOf('\n      };', start);
             const source = name === 'gemini' ? snippet : back.slice(start, end + 9);
-            const payload = new Function('EFFECTIVE_SYSTEM_INSTRUCTION','MODEL_USER_INPUT',`${source}\nreturn ${name}Payload;`.replaceAll(`${name}Model`, "'modelo-mock'"))(built.system,built.user);
+            const payload = new Function('EFFECTIVE_SYSTEM_INSTRUCTION','MODEL_USER_INPUT','compact','GROQ_OUTPUT_BUDGET',`${source}\nreturn ${name}Payload;`.replaceAll(`${name}Model`, "'modelo-mock'"))(built.system,built.user,{messages:[{role:'system',content:built.system},{role:'user',content:built.user}]},1200);
             const text = name === 'groq' ? payload.messages[1].content : name === 'openai' ? payload.input : payload.contents[0].parts[0].text;
             assert(text.includes(verified), `${name} perdeu contexto`);
             const system = name === 'groq' ? payload.messages[0].content : name === 'openai' ? payload.instructions : payload.systemInstruction.parts[0].text;

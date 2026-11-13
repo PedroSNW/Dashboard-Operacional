@@ -4160,9 +4160,19 @@ function prepararContextoIndicadoresIA(prompt) {
     // Sem associação explícita: permite perguntas gerais, mas usa apenas o que
     // couber no limite, deixando claro que a resposta é um recorte parcial.
     const haCorrespondencias = selecionados.some(registro => registro.pontos > 0);
-    const candidatos = haCorrespondencias
+    let candidatos = haCorrespondencias
         ? selecionados.filter(registro => registro.pontos > 0)
         : selecionados;
+    if (/acident\w* com culpa|sinistr\w* com culpa/.test(pergunta) && !/\btod[oa]s\b/.test(pergunta)) {
+        const restante = pergunta.replace(/acident\w* com culpa|sinistr\w* com culpa/g, '');
+        candidatos = candidatos.filter(({item}) => {
+            const nome = normalizar(item.indicador);
+            const simples = nome.replace(/\s*-?\s*mensal$/, '').trim();
+            const outros = restante.match(/multa|autuac|score|velocidade|crlv|document|quilometr|receita|custo|les|morte|obito|fatal|trein/g) || [];
+            return (nome.includes('culpa') && !nome.includes('sem culpa')) || (/acident|sinistr/.test(restante) && /total de acident/.test(nome))
+                || (simples && pergunta.includes(simples)) || outros.some(termo => nome.includes(termo));
+        });
+    }
     candidatos.sort((a, b) => b.pontos - a.pontos || a.index - b.index);
 
     // As competências são enviadas uma única vez, evitando repetir a string do
@@ -4334,6 +4344,18 @@ async function executarTesteIA(targetProvider = null) {
 
         if (responseBody) {
             responseBody.textContent = resultado.response;
+            if (typeof resultado.technicalDetails === 'string' && resultado.technicalDetails) {
+                const details = document.createElement('details');
+                details.className = 'mt-4 border-t border-slate-700 pt-3';
+                const summary = document.createElement('summary');
+                summary.textContent = 'Detalhes técnicos: séries, cálculos, metas e metodologia';
+                summary.className = 'cursor-pointer font-semibold text-amber-400';
+                const content = document.createElement('pre');
+                content.className = 'mt-3 whitespace-pre-wrap text-xs';
+                content.textContent = resultado.technicalDetails;
+                details.append(summary, content);
+                responseBody.appendChild(details);
+            }
         }
 
         if (responseMeta) {

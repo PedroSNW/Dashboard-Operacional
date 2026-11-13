@@ -8,7 +8,7 @@ window.__errors=[];addEventListener('error',e=>window.__errors.push(e.message));
 window.Chart={register(){},defaults:{plugins:{}},getChart(){return null}};window.ChartDataLabels={};
 window.Swal={fire:async()=>({isConfirmed:false})};
 window.__session=null;window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:window.__session}}),onAuthStateChange(){}}})};
-window.fetch=async(url,init)=>{window.__payload=JSON.parse(init.body);return {ok:true,json:async()=>({success:true,contextVersion:1,model:'mock',response:'Resultados verificados — soma: 6',meta:{}})}};
+window.fetch=async(url,init)=>{window.__payload=JSON.parse(init.body);return {ok:true,json:async()=>({success:true,contextVersion:1,model:'mock',response:'Resultados verificados — soma: 6',technicalDetails:'Jan: 2; Fev: 4; Soma: 6',meta:{}})}};
 `;
 const checks = `
 addEventListener('load',async()=>{
@@ -19,12 +19,18 @@ addEventListener('load',async()=>{
   window.__session={access_token:'mock-browser-token'};
   document.getElementById('aiPromptInput').value='Analise acidentes';
   await executarTesteIA('groq');
-  if(document.getElementById('aiResponseBody').textContent!=='Resultados verificados — soma: 6')throw Error('Renderização resposta');
+  if(!document.getElementById('aiResponseBody').textContent.startsWith('Resultados verificados — soma: 6'))throw Error('Renderização resposta');
+  const details=document.querySelector('#aiResponseBody details');
+  if(!details||details.open||!details.textContent.includes('Jan: 2'))throw Error('Detalhes recolhidos ausentes');
+  details.querySelector('summary').click();
+  if(!details.open)throw Error('Detalhes não expandem');
+  details.querySelector('summary').click();
+  if(details.open)throw Error('Detalhes não recolhem');
   if(document.getElementById('aiTestButton').disabled)throw Error('Botão não reativado');
   if(window.__payload.context.indicadores[0].valores[1]!==4)throw Error('Payload incorreto');
   if(!document.getElementById('aiResponseMeta').textContent.includes('1/1'))throw Error('Cobertura ausente');
   if(window.__errors.length)throw Error(window.__errors.join(';'));
-  status.textContent='PASS: inicialização sem sessão, payload Groq, resposta textContent, cobertura e botão reativado; sem erros JS. Bibliotecas externas simuladas.';
+  status.textContent='PASS: inicialização, payload Groq, resposta segura, detalhes expandem/recolhem, cobertura e botão; sem erros JS. Bibliotecas externas simuladas.';
  }catch(e){status.textContent='FAIL: '+e.message+'; erros: '+window.__errors.join(';');}
 });`;
 const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">`;
