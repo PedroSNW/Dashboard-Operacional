@@ -10,7 +10,9 @@ try {
     let seq=0;const waiting=new Map();
     ws.onmessage=e=>{const m=JSON.parse(e.data);if(waiting.has(m.id)){const {resolve,reject}=waiting.get(m.id);waiting.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}};
     const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;waiting.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});
-    for(const [name,width,height,theme] of [['desktop',1440,1100,'dark'],['mobile',390,1000,'light']]){
+    const extra=await Deno.readTextFile(new URL('tests/workspace-v3-browser.js',root));
+    const cases=Deno.args.includes('--v3')?[["320",320,1000,'dark'],['360',360,1000,'light'],['mobile',390,1000,'light'],['768',768,1100,'dark'],['1024',1024,1100,'light'],['desktop',1440,1100,'dark'],['1920',1920,1100,'light']]:[['desktop',1440,1100,'dark'],['mobile',390,1000,'light']];
+    for(const [name,width,height,theme] of cases){
         const {targetId}=await call('Target.createTarget',{url:'about:blank'});
         const {sessionId}=await call('Target.attachToTarget',{targetId,flatten:true});
         await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<500},sessionId);
@@ -29,6 +31,28 @@ try {
             const data=await call('Runtime.evaluate',{expression:'document.getElementById("report-pdf").value',returnByValue:true},sessionId);
             await Deno.writeFile(new URL('.validation-tools/report-charts.pdf',root),Uint8Array.from(atob(data.result.value),c=>c.charCodeAt(0)));
         }
+        if(Deno.args.includes('--v3')&&(width===1440||width===320||width===390)){
+            await call('Page.bringToFront',{},sessionId);
+            const pendingChecks=call('Runtime.evaluate',{expression:extra+'\nrunWorkspaceV3Checks()',awaitPromise:true,returnByValue:true},sessionId);
+            for(let n=0;n<30;n++){
+                const state=await call('Runtime.evaluate',{expression:'Boolean(window.PdfProgress?.running && PdfProgress.value>=10 && PdfProgress.value<95)',returnByValue:true},sessionId);
+                if(state.result.value){const progressShot=await call('Page.captureScreenshot',{format:'png'},sessionId);await Deno.writeFile(new URL(`.validation-tools/v3-pdf-progress-${name}.png`,root),Uint8Array.from(atob(progressShot.data),c=>c.charCodeAt(0)));break;}
+                await new Promise(r=>setTimeout(r,40));
+            }
+            const checks=await pendingChecks;
+            if(checks.exceptionDetails)throw Error(JSON.stringify(checks.exceptionDetails));console.log(checks.result.value);
+            for(const tab of ['home','dashboard','datagrid','intelligence','reports','governance','audit']){
+                await call('Runtime.evaluate',{expression:`switchTab('${tab}');window.scrollTo(0,0);`,returnByValue:true},sessionId);
+                await new Promise(r=>setTimeout(r,70));
+                const overflow=await call('Runtime.evaluate',{expression:'document.documentElement.scrollWidth>innerWidth+1',returnByValue:true},sessionId);if(overflow.result.value)throw Error(`Overflow em ${tab}, ${width}px`);
+                const page=await call('Page.captureScreenshot',{format:'png'},sessionId);
+                await Deno.writeFile(new URL(`.validation-tools/v3-${tab}-${name}.png`,root),Uint8Array.from(atob(page.data),c=>c.charCodeAt(0)));
+            }
+            await call('Runtime.evaluate',{expression:"document.body.classList.remove('authenticated');window.scrollTo(0,0);",returnByValue:true},sessionId);
+            const loginShot=await call('Page.captureScreenshot',{format:'png'},sessionId);
+            await Deno.writeFile(new URL(`.validation-tools/v3-login-${name}.png`,root),Uint8Array.from(atob(loginShot.data),c=>c.charCodeAt(0)));
+            await call('Runtime.evaluate',{expression:"document.body.classList.add('authenticated');",returnByValue:true},sessionId);
+        }
         const ai=await call('Runtime.evaluate',{expression:`(()=>{
             if(currentAiProvider!=='groq')throw Error('Padrão não é Groq');
             setAiProvider('gemini');if(currentAiProvider!=='gemini')throw Error('Gemini indisponível');
@@ -36,6 +60,7 @@ try {
             setAiProvider('groq');document.getElementById('aiAlternativeProviders').open=false;
             document.querySelectorAll('main > div').forEach(e=>e.classList.add('hidden'));
             document.getElementById('view-intelligence').classList.remove('hidden');switchIntelligenceSubtab('pilot');
+            window.onWorkspaceNavigation?.('intelligence');
             document.getElementById('aiIntegrationTestCard').scrollIntoView({block:'start'});
             if(document.getElementById('provider-btn-groq').getAttribute('aria-pressed')!=='true'||!document.getElementById('aiTestButtonText').textContent.includes('Groq'))throw Error('Ativo/botão principal');
             return 'PASS Groq padrão, troca Gemini/OpenAI/Groq e alternativas acessíveis';

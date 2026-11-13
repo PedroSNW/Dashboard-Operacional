@@ -2,7 +2,13 @@
 // Paleta e métricas centralizadas para a próxima etapa de design.
 window.ReportPdf = {
     theme: Object.freeze({navy:[10,23,43],gold:[217,153,35],ink:[25,39,57],muted:[91,108,127],paper:[245,248,251],line:[221,228,235],margin:14,bodyTop:30,bodyBottom:278}),
-    build(r,images=[]) {
+    build(r,images=[]) { const steps=this.compose(r,images);let step;do{step=steps.next();}while(!step.done);return step.value; },
+    async buildAsync(r,images=[],onProgress=()=>{},yieldUI=()=>new Promise(resolve=>setTimeout(resolve,0))) {
+        const steps=this.compose(r,images);let step;
+        do{step=steps.next();if(!step.done){onProgress(step.value);await yieldUI();}}while(!step.done);
+        return step.value;
+    },
+    *compose(r,images=[]) {
         const T=this.theme, doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});
         const W=210-2*T.margin;
         const fmt=v=>v===null||v===undefined?'Indisponível':new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(v);
@@ -46,7 +52,7 @@ window.ReportPdf = {
             doc.addImage(images[focusIndex],'PNG',T.margin,y,W,65);y+=71;executiveFocus=focusIndex;
         }
         if(r.interpretation){heading('Interpretação gerencial','Apoio à decisão');paragraph(r.interpretation,9,T.ink);}
-        r.indicators.forEach((i,n)=>{
+        for(const [n,i] of r.indicators.entries()){
             // Mantém título, metadados, métricas e início do gráfico/tabela juntos.
             const showChart=Boolean(images[n]&&n!==executiveFocus);
             ensure(showChart?135:66);
@@ -69,7 +75,8 @@ window.ReportPdf = {
                 columnStyles:{0:{cellWidth:32,halign:'left'},1:{halign:'right'},2:{halign:'right'},3:{halign:'right'}},
                 rowPageBreak:'avoid',showHead:'everyPage'});
             y=doc.lastAutoTable.finalY+9;
-        });
+            yield {stage:'compose',processed:n+1,total:r.indicators.length};
+        }
         ensure(46);heading('Metodologia e limitações','Rastreabilidade');
         r.limitations.forEach(l=>paragraph(l,8));
         paragraph('Médias usam somente valores válidos. Percentuais com base zero são indisponíveis. Piora é a comparação descritiva entre primeiro e último valor válido conforme direção cadastrada, sem atribuição causal. Taxas não são somadas nem ponderadas sem denominadores compatíveis.',8);
@@ -82,6 +89,7 @@ window.ReportPdf = {
             if(p===1){font(7,false,[218,226,235]);doc.text(`EMISSÃO ${date}`,196,23,{align:'right'});doc.text('USO INTERNO / GESTÃO OPERACIONAL',196,29,{align:'right'});font(8,true,T.gold);doc.text('TRANSPORTES  /  SEGURANÇA VIÁRIA',T.margin+6,32);font(18,true,[255,255,255]);doc.text('Relatório Gerencial',T.margin,46);font(9,false,[218,226,235]);doc.text(`${r.type.toUpperCase()}   |   ${period}`,T.margin,55);}
             else {font(8,false,[218,226,235]);doc.text(`${r.type.toUpperCase()}  /  ${period}`,196,14,{align:'right'});}
             doc.setDrawColor(...T.line);doc.line(T.margin,283,196,283);font(7.5,true,T.ink);doc.text("D'Granel Transportes  •  Uso interno",T.margin,288);font(7.5,false,T.muted);doc.text(`${p} / ${pages}`,196,288,{align:'right'});
+            yield {stage:'finalize',processed:p,total:pages};
         }
         return doc;
     }

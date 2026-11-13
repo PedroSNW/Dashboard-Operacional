@@ -157,7 +157,7 @@ Chart.register({
 document.addEventListener('DOMContentLoaded', async () => {
     setAiProvider(currentAiProvider);
     setupRevealObserver();
-    initSmartNavbar();
+    // V3: topbar estável; ações críticas não desaparecem na rolagem.
     applyTheme('dark');
     updateLastSaveStatus();
     setInterval(updateLastSaveStatus, 60 * 1000);
@@ -355,7 +355,7 @@ function initPXStyleAnimations(root = document) {
 function animateKpiCount(element) {
     const target = Number(element.dataset.countTo);
     if (!Number.isFinite(target)) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (document.body.classList.contains('workspace-v3') || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         element.textContent = `${target.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}${element.dataset.countUnit || ''}`;
         return;
     }
@@ -1036,7 +1036,7 @@ function getDefaultChartConfig(chartId) {
         chart1: { title: 'Evolução de Documentação, Score vs Acidentes & Multas', desc: 'Acompanhamento temporal dos indicadores críticos D\'Granel', type: 'bar', ind1: findIndicator('% CRLV LIBERADOS'), ind2: findIndicator('SCORE'), ind3: findIndicator('Total de acidentes'), ind4: findIndicator('Multas Cobradas Motoristas') },
         chart2: { title: 'Dimensionamento da Frota', desc: 'Evolução do volume de frota ativa', type: 'bar', ind1: findIndicator('cavalo mecânico'), ind2: findIndicator('semirreboques') },
         chart3: { title: 'Matriz de Eficiência (%)', desc: 'Comparativo Mês Inicial vs Mais Recente', type: 'radar', ind1: findIndicator('% CRLV LIBERADOS'), ind2: findIndicator('Cronotacógrafo'), ind3: findIndicator('40% de desconto') },
-        chart4: { title: 'Correlação: Sinistros vs Excesso de Velocidade', desc: 'Análise de impacto direto: Picos de velocidade vs acidentes', type: 'line', ind1: findIndicator('velocidade permitida'), ind2: findIndicator('Total de acidentes') }
+        chart4: { title: 'Evolução comparativa: sinistros e velocidade', desc: 'Séries descritivas; não demonstram causalidade.', type: 'line', ind1: findIndicator('velocidade permitida'), ind2: findIndicator('Total de acidentes') }
     };
     return { ...defaults[chartId], ...(defaultChartConfigs[chartId] || {}) };
 }
@@ -1149,7 +1149,7 @@ function renderConfiguredDefaultCharts() {
         const labels = getDashboardChartData(indicators[0] || { valores: [] }).labels;
         if (!indicators.length) return;
         const supportsYAxis = !['radar', 'doughnut', 'polarArea', 'horizontalBar'].includes(config.type);
-        const usesIndependentAxes = config.axisMode === 'independent' && supportsYAxis && indicators.length > 1;
+        const usesIndependentAxes = (config.axisMode === 'independent' || new Set(indicators.map(i=>i.und)).size > 1) && supportsYAxis && indicators.length > 1;
         let datasets = indicators.map((indicator, index) => ({
             label: indicator.indicador,
             data: getDashboardChartData(indicator).values,
@@ -1224,17 +1224,21 @@ function markStateDirty() {
 }
 
 function updateSaveButton() {
+    window.refreshOperationalUI?.();
     const button = document.getElementById('saveStateButton');
     const icon = document.getElementById('saveStateButtonIcon');
     if (!button || !icon) return;
 
-    button.disabled = isSavingState;
+    button.disabled = isSavingState || !supabaseStateLoaded || !supabaseReady;
     button.classList.toggle('bg-amber-500', hasUnsavedChanges && !isSavingState);
     button.classList.toggle('hover:bg-amber-400', hasUnsavedChanges && !isSavingState);
     button.classList.toggle('bg-emerald-600', !hasUnsavedChanges || isSavingState);
     button.classList.toggle('hover:bg-emerald-500', !hasUnsavedChanges || isSavingState);
 
-    if (isSavingState) {
+    if (!supabaseStateLoaded || !supabaseReady) {
+        icon.className = 'fa-solid fa-floppy-disk text-sm';
+        button.title = 'Salvamento bloqueado: a leitura do Supabase precisa ser validada.';
+    } else if (isSavingState) {
         icon.className = 'fa-solid fa-spinner animate-spin text-sm';
         button.title = 'Salvando dados no banco...';
     } else {
@@ -1513,6 +1517,7 @@ function switchTab(tabName) {
         updateJSONEditor();
         carregarLogsAuditoria();
     }
+    window.onWorkspaceNavigation?.(tabName);
 }
 
 // RETORNA ÚLTIMO VALOR VÁLIDO E SEU ÍNDICE
@@ -2763,7 +2768,7 @@ function renderKPIs() {
         const el = document.createElement('div');
         el.className = 'glass-card page-load-item rounded-2xl p-5 flex flex-col justify-between';
         const valueMarkup = last.val !== null && last.val !== undefined && Number.isFinite(Number(last.val))
-            ? `<span data-count-to="${Number(last.val)}" data-count-unit="${unit === '%' ? '%' : ''}">0</span>`
+            ? `<span data-count-to="${Number(last.val)}" data-count-unit="${unit === '%' ? '%' : ''}">${fmtVal(last.val,unit === '%' ? '%' : '')}</span>`
             : '-';
         el.innerHTML = `
             <div class="flex items-start justify-between">
@@ -2784,6 +2789,12 @@ function renderKPIs() {
                 <button onclick="deleteKpi(${escapeHtml(JSON.stringify(c.id))})" title="Excluir Balão" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
             </div>
         `;
+        const directionInfo = document.createElement('p');
+        directionInfo.className = 'v3-help';
+        const previous = last.idx > 0 ? monthly.values[last.idx - 1] : null;
+        const delta = last.val !== null && previous !== null && previous !== undefined && Number.isFinite(Number(previous)) ? Number(last.val) - Number(previous) : null;
+        directionInfo.textContent = `Direção: ${getIntelligenceDirection(indicator) || 'não definida'} • Variação absoluta mensal: ${delta === null ? 'indisponível' : fmtVal(delta, unit)}`;
+        el.appendChild(directionInfo);
         kpiContainer.appendChild(el);
     });
     initPXStyleAnimations(kpiContainer);
@@ -3210,7 +3221,7 @@ function renderDynamicCharts() {
         const chartLabels = chartMonthData.labels.length > 0
             ? chartMonthData.labels
             : getSelectedDashboardMonthLabels(mesesLabels);
-        const usesIndependentAxes = c.axisMode === 'independent' && indicatorObjects.length > 1;
+        const usesIndependentAxes = (c.axisMode === 'independent' || new Set(indicatorObjects.map(i=>i.und)).size > 1) && ['line','bar','horizontalBar','area'].includes(c.type) && indicatorObjects.length > 1;
 
         const wrapper = document.createElement('div');
         wrapper.className = `lg:col-span-${c.span} glass-card rounded-2xl p-5 flex flex-col`;
@@ -3413,6 +3424,12 @@ function renderTable() {
     document.getElementById('statMetaOk').textContent = `${((okCount / (currentData.length || 1)) * 100).toFixed(0)}%`;
     document.getElementById('statMetaOff').textContent = offCount;
     document.getElementById('filteredCount').textContent = filtered.length;
+    if (!filtered.length) {
+        const row = document.createElement('tr'), cell = document.createElement('td');
+        cell.colSpan = mesesLabels.length + 8;
+        cell.textContent = supabaseStateLoaded ? 'Nenhum indicador corresponde aos filtros. Limpe a pesquisa ou escolha outro setor.' : 'Indicadores indisponíveis. Aguarde ou refaça a leitura do Supabase.';
+        row.appendChild(cell);tbody.appendChild(row);
+    }
 
     filtered.forEach(item => {
         const origIndex = currentData.indexOf(item);
@@ -3428,7 +3445,7 @@ function renderTable() {
 
         let badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">N/A</span>';
         if (m.status === 'OK') badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">OK</span>';
-        if (m.status === 'ACOMPANHAR') badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20 font-semibold">ABAIXO</span>';
+        if (m.status === 'ACOMPANHAR') badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20 font-semibold">FORA DA META</span>';
 
         let valoresTdHtml = '';
         monthly.labels.forEach((_, idx) => {

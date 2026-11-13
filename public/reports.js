@@ -103,15 +103,43 @@ async function interpretManagementReport() {
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=2');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=3');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
+const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
 async function exportManagementReport(){
-    try{reportReady();if(!managementReport||managementSignature!==JSON.stringify(reportSelection()))throw Error('Gere uma prévia atualizada.');
-        await loadReportPdfLibraries();reportReady();if(managementSignature!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram. Atualize a prévia.');const images=managementChartImages();
-        const doc=window.buildManagementPdf(managementReport,images);doc.save(`DGranel-${managementReport.type}-${new Date(managementReport.generatedAt).toISOString().slice(0,10)}.pdf`);reportMessage('PDF gerado localmente. Nenhum indicador foi enviado a um serviço de PDF.');
-    }catch(e){reportMessage(e.message);}
+    if(managementBusy)return;
+    managementBusy=true;const source=managementReport;const signature=managementSignature;
+    const buttons=['reportExport','reportGenerate','reportAI','reportRefresh'].map(reportEl);const previous=buttons.map(b=>b.disabled);buttons.forEach(b=>b.disabled=true);
+    try{
+        if(!source)throw Error('Gere uma prévia atualizada.');
+        PdfProgress.open(`Relatório ${source.type}`,source.indicators.length);await reportPaint();
+        reportReady();const {data,error}=await supabaseClient.auth.getSession();if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
+        if(signature!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram. Atualize a prévia.');
+        if(source.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(source.snapshotUpdatedAt))throw Error('Os dados foram atualizados. Gere uma nova prévia.');
+        PdfProgress.update('Carregando bibliotecas locais',5);await reportPaint();await loadReportPdfLibraries();
+        PdfProgress.update('Bibliotecas carregadas',10);await reportPaint();
+        const report=JSON.parse(JSON.stringify(source)),charts=[...managementCharts],images=[];
+        for(let n=0;n<charts.length;n++){
+            images.push(managementChartImages([charts[n]])[0]);
+            PdfProgress.update('Preparando gráficos',10+35*(n+1)/Math.max(1,charts.length),n+1,charts.length);await reportPaint();
+        }
+        PdfProgress.update('Compondo páginas do PDF',45,0,report.indicators.length);await reportPaint();
+        const doc=await window.ReportPdf.buildAsync(report,images,event=>{
+            const percent=event.stage==='compose'?45+40*event.processed/Math.max(1,event.total):85+9*event.processed/Math.max(1,event.total);
+            PdfProgress.update(event.stage==='compose'?'Compondo páginas do PDF':'Finalizando páginas',percent,event.processed,event.total);
+        },reportPaint);
+        PdfProgress.update('Finalizando o documento — serialização local',null);await reportPaint();
+        const blob=doc.output('blob');
+        if(!(blob instanceof Blob)||!blob.size)throw Error('O documento gerado está vazio.');
+        PdfProgress.update('Preparando download',97);await reportPaint();
+        reportReady();if(managementReport!==source||managementSignature!==signature||signature!==JSON.stringify(reportSelection()))throw Error('A prévia mudou durante a geração. Gere novamente.');
+        const name=`DGranel-${report.type}-${new Date(report.generatedAt).toISOString().slice(0,10)}.pdf`;
+        reportDownloadBlob(blob,name);PdfProgress.finish(name);reportMessage('Download iniciado. A confirmação de gravação depende do navegador.');
+    }catch(e){if(window.PdfProgress?.dialog?.open)PdfProgress.error(e.message);reportMessage(`PDF não gerado: ${e.message}`);}
+    finally{managementBusy=false;buttons.forEach((b,n)=>b.disabled=previous[n]);if(!managementReport||managementSignature!==JSON.stringify(reportSelection())){reportEl('reportExport').disabled=true;reportEl('reportAI').disabled=true;}}
 }
-function managementChartImages(){return managementCharts.map(chart=>{
+function managementChartImages(charts=managementCharts){return charts.map(chart=>{
     const canvas=document.createElement('canvas');canvas.width=1400;canvas.height=500;
     const renderer=new Chart(canvas,{type:'line',data:{labels:[...chart.data.labels],datasets:chart.data.datasets.map(d=>({...d,data:[...d.data],pointRadius:3,borderWidth:2}))},options:{responsive:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:'#334155',font:{size:16},maxTicksLimit:12,maxRotation:0}},y:{ticks:{color:'#334155',font:{size:16}}}}}});
     try {

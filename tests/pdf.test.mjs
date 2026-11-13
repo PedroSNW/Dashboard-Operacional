@@ -22,3 +22,12 @@ const narrative=win.buildManagementPdf({...short,aiUsed:true,interpretation:Arra
 if(narrative.getNumberOfPages()<=shortPdf.getNumberOfPages()||!narrative.internal.pages.some(p=>p?.join(' ').includes('ANALISE GERENCIAL TESTE')))throw Error('Interpretação longa não preservada');
 for(let page=1;page<=narrative.getNumberOfPages();page++)if(!narrative.internal.pages[page].join('\n').includes("D'GRANEL"))throw Error('Cabeçalho ausente na interpretação longa');
 console.log('PASS interpretação longa, continuação e cabeçalhos em todas as páginas');
+const progress=[];
+const asyncDoc=await win.ReportPdf.buildAsync(short,[],event=>progress.push(event),()=>Promise.resolve());
+if(progress.filter(e=>e.stage==='compose').length!==short.indicators.length||progress.filter(e=>e.stage==='finalize').length!==asyncDoc.getNumberOfPages())throw Error('Callbacks não correspondem ao trabalho real');
+console.log('PASS composição assíncrona: um callback por indicador e por página finalizada');
+const single=buildReport(stored,{type:'executivo',sector:'TODOS',ids:['indice:0'],start:'1/2020',end:'9/2020'});
+const singleProgress=[];
+const singleDoc=await win.ReportPdf.buildAsync(single,[],event=>singleProgress.push(event),()=>Promise.resolve());
+if(!singleDoc.output('arraybuffer').byteLength||singleProgress.filter(e=>e.stage==='compose').length!==1)throw Error('PDF individual inválido');
+console.log('PASS PDF individual com um indicador e callback correspondente');
