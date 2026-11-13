@@ -7,6 +7,7 @@ let handler: (req: Request) => Promise<Response>;
 let authDenied = false, readDenied = false, providerStatus = 200;
 let captured: any;
 let timeout = false, invalidJson = false;
+let finishReason = 'stop';
 let calls = 0;
 const logs: string[] = [];
 const realError = console.error;
@@ -34,7 +35,8 @@ globalThis.fetch = async (input, init) => {
     captured = JSON.parse(String(init?.body));
     const url = String(input);
     assert(/api.groq.com|api.openai.com|generativelanguage.googleapis.com/.test(url), 'Destino inesperado');
-    const data = url.includes('groq') ? {choices:[{message:{content:'Investigar hipóteses sem presumir causas.'}}]} : url.includes('openai') ? {output_text:'Investigar hipóteses.'} : {candidates:[{content:{parts:[{text:'Investigar hipóteses.'}]}}]};
+    const structured=JSON.stringify({resumo:[{id:'indice:0',stat:'media',competencia:''}],fatos:[],atencao:[],hipoteses:[],recomendacoes:['investigar_registros'],limitacoes:[]});
+    const data = url.includes('groq') ? {choices:[{finish_reason:finishReason,message:{content:finishReason==='length'?'':structured}}]} : url.includes('openai') ? {output_text:structured} : {candidates:[{content:{parts:[{text:structured}]}}]};
     return Response.json(providerStatus === 200 ? data : {error:{code:'rate_limit_exceeded',message: providerStatus===400 ? 'context length exceeded SECRET_SENTINEL' : 'tokens per minute SECRET_SENTINEL'}},{status:providerStatus,headers:{'retry-after':'30','x-request-id':'req-test'}});
 };
 const generated = new URL('.validation-tools/edge-handler.fixture.ts',root);
@@ -73,7 +75,7 @@ try {
     for (const provider of ['groq','openai','gemini']) await test(`${provider}: snapshot → cálculo → API → resposta frontend`,async()=>{
         const res=await handler(request({prompt:'Analise acidentes',context:context(),provider}));
         const body=await res.json();assert(res.status===200 && body.success && body.contextVersion===1,'Contrato frontend');
-        assert(body.response.includes('Soma: 345') && body.response.includes('38,33'),'Cálculo na resposta');
+        assert(body.technicalDetails.includes('Soma: 345') && body.response.includes('38,33'),'Cálculo na resposta');
         if(provider==='groq')assert(body.meta.requestBytes===new TextEncoder().encode(JSON.stringify(captured)).length && body.meta.requestBytes<=6000 && body.meta.sentIndicators===1 && body.meta.contextBuild==='groq-compact-bytes-v2','Medição do corpo Groq');
         const input=provider==='groq'?captured.messages[1].content:provider==='openai'?captured.input:captured.contents[0].parts[0].text;
         const sent=JSON.parse(input.slice(input.indexOf('{')));
@@ -86,10 +88,19 @@ try {
         try {
             const res=await handler(request({prompt:'Analise acidentes de janeiro a setembro',context:context(),provider:'groq'}));
             const body=await res.json();
-            assert(res.status===200 && body.response.includes('Soma: 345') && !body.technicalDetails.includes('Out:'),'Intervalo não aplicado');
+            assert(res.status===200 && body.technicalDetails.includes('Soma: 345') && !body.technicalDetails.includes('Out:'),'Intervalo não aplicado');
             const input=captured.messages[1].content;const sent=JSON.parse(input.slice(input.indexOf('{')));
             assert(sent.competencias.length===9&&sent.indicadores[0].valores.length===9,'Provedor recebeu outubro');
         } finally {months.pop();indicator.valores.pop();}
+    });
+    await test('Pergunta simples sem chamada; limite de saída retorna síntese segura',async()=>{
+        let before=calls;
+        let res=await handler(request({prompt:'Qual a média de Total de acidentes?',context:context(),provider:'groq'}));
+        let body=await res.json();assert(res.status===200 && body.meta.deterministicOnly && calls===before && body.response.includes('38,33'),'Resposta direta');
+        finishReason='length';
+        res=await handler(request({prompt:'Analise acidentes',context:context(),provider:'groq'}));body=await res.json();
+        assert(res.status===200 && body.response.includes('38,33') && body.meta.finishReason==='length' && !body.response.includes('incompleta'),'Fallback limite');
+        finishReason='stop';
     });
     await test('Parcialidade inconsistente, provedor inválido e prompt excessivo',async()=>{
         const c=context();c.contextoParcial=true;

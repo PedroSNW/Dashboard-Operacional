@@ -4174,6 +4174,13 @@ function prepararContextoIndicadoresIA(prompt) {
         });
     }
     candidatos.sort((a, b) => b.pontos - a.pontos || a.index - b.index);
+    if (/media|soma|minimo|maximo/.test(pergunta) && !/analise|evolu|todos|gerencial/.test(pergunta)) {
+        const exatos = candidatos.filter(({item}) => {
+            const nome = normalizar(item.indicador).replace(/\s*-?\s*mensal$/, '').trim();
+            return nome && pergunta.includes(nome);
+        });
+        if (exatos.length) candidatos = exatos;
+    }
 
     // As competências são enviadas uma única vez, evitando repetir a string do
     // mês para cada valor e reduzindo drasticamente o tamanho da requisição.
@@ -4336,6 +4343,7 @@ async function executarTesteIA(targetProvider = null) {
 
     try {
         const resultado = await chamarEdgeFunctionIA(prompt, { provider });
+        if (resultado.meta?.deterministicOnly && responseProviderName) responseProviderName.textContent = 'Resultado calculado pelo sistema';
         const durationSec = ((performance.now() - startTime) / 1000).toFixed(2);
 
         // Sucesso

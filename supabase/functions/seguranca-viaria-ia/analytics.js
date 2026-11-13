@@ -3,6 +3,10 @@ export function scopeAnalysis(context, prompt) {
     const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const q=norm(prompt), general=/\btod[oa]s\b/.test(q);
     let items=context.indicadores;
+    if(/media|soma|minimo|maximo/.test(q)&&!/analise|evolu|todos|gerencial/.test(q)) {
+        const exact=items.filter(i=>{const n=norm(i.indicador).replace(/\s*-?\s*mensal$/,'').trim();return n&&q.includes(n);});
+        if(exact.length)items=exact;
+    }
     const culpa=/acident\w* com culpa|sinistr\w* com culpa/.test(q);
     const remainder=q.replace(/acident\w* com culpa|sinistr\w* com culpa/g,'');
     if(culpa&&!general) {
@@ -28,7 +32,83 @@ export function scopeAnalysis(context, prompt) {
     return {...context,totalIndicadoresSelecionados:items.length+(context.contextoParcial?Math.max(0,(context.totalIndicadoresSelecionados??context.indicadores.length)-context.indicadores.length):0),competencias:indexes.map(i=>context.competencias[i]),indicadores:items.map(item=>({...item,valores:indexes.map(i=>item.valores?.[i]??null)})),intervaloSolicitado:range?range[0]:null};
 }
 
-export function analysisPresentation(context, interpretation) {
+export const INTERPRETATION_CONTRACT = 'Retorne somente JSON curto, sem prosa nem markdown: {"resumo":[],"fatos":[],"atencao":[],"hipoteses":[],"recomendacoes":[],"limitacoes":[]}. Resumo/fatos/atencao contêm no máximo duas referências {"id":"ID recebido","stat":"media|soma|minimo|maximo|ultimo_vs_media","competencia":"rótulo recebido ou string vazia"}; não escreva valores ou comparações. Hipoteses: códigos verificar_registros ou associacao_nao_validada. Recomendacoes: códigos investigar_registros, revisar_direcao ou avaliar_prevencao. Limitacoes: códigos dados_agregados, retroativos ou denominador_sem_vinculo. Máximo dois códigos por campo; arrays vazios quando não aplicável. Não copie todo o relatório. A tarefa é escolher referências, não calcular ou justificar seu raciocínio.';
+
+export function analysisPresentation(context, interpretation, prompt = '') {
+    const base=legacyAnalysisPresentation(context,'');
+    const fmt=v=>v===null?'indisponível':new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(v);
+    const catalog={
+        verificar_registros:'Hipótese para investigação: conferir os registros individuais autorizados antes de atribuir causas.',
+        associacao_nao_validada:'Hipótese para investigação: verificar se há associação documentada entre os indicadores.',
+        investigar_registros:'Investigar os registros autorizados das competências destacadas, sem presumir causas.',
+        revisar_direcao:'Revisar a classificação humana dos indicadores cuja direção não está definida.',
+        avaliar_prevencao:'Avaliar ações preventivas com a equipe responsável, sem criar novas metas oficiais.',
+        dados_agregados:'Os indicadores são agregados e não comprovam causas ou resultados individuais.',
+        retroativos:'As competências permanecem sujeitas a revisões retroativas.',
+        denominador_sem_vinculo:'Uma taxa por quilometragem exige vínculo e período compatíveis entre numerador e denominador; esse vínculo não foi validado.'
+    };
+    const resolve=ref=>{
+        if(!ref||typeof ref!=='object'||Array.isArray(ref)||Object.keys(ref).length!==3||!['id','stat','competencia'].every(k=>Object.hasOwn(ref,k))||typeof ref.competencia!=='string')return null;
+        const item=context.indicadores.find(i=>i.id===ref.id);if(!item)return null;
+        const s=item.estatisticas;
+        if(ref.competencia && !context.competencias.includes(ref.competencia))return null;
+        if(ref.stat==='ultimo_vs_media'){
+            const p=ref.competencia?s.mensais.find(p=>p.competencia===ref.competencia):s.mensais.filter(p=>p.valor!==null).at(-1);
+            if(!p||p.valor===null||s.media===null)return null;
+            return `${item.indicador}, ${p.competencia}: ${fmt(p.valor)}, ${p.valor<s.media?'abaixo':p.valor>s.media?'acima':'igual'} à média ${fmt(s.media)}.`;
+        }
+        const labels={media:'média',soma:'Soma',minimo:'mínimo',maximo:'máximo'};
+        if(!Object.hasOwn(labels,ref.stat)||ref.competencia)return null;
+        return `${item.indicador}: ${labels[ref.stat]} ${fmt(s[ref.stat])}${item.unidade?' '+item.unidade:''}.`;
+    };
+    let parsed=null;try {parsed=JSON.parse(String(interpretation));}catch { /* fallback sem nova chamada */ }
+    const fields=['resumo','fatos','atencao','hipoteses','recomendacoes','limitacoes'];
+    const valid=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&Object.keys(parsed).length===fields.length&&fields.every(k=>Array.isArray(parsed[k])&&parsed[k].length<=2);
+    const sections={};const rejected=[];
+    if(valid) for(const field of fields){
+        sections[field]=[];
+        for(const entry of parsed[field]){
+            const text=['resumo','fatos','atencao'].includes(field)?resolve(entry)
+                : typeof entry==='string' && ({hipoteses:['verificar_registros','associacao_nao_validada'],recomendacoes:['investigar_registros','revisar_direcao','avaliar_prevencao'],limitacoes:['dados_agregados','retroativos','denominador_sem_vinculo']}[field]||[]).includes(entry)?catalog[entry]:null;
+            if(text)sections[field].push(text);else rejected.push({reason:'referencia_ou_codigo_invalido'});
+        }
+    }
+    else if(String(interpretation).trim()) {
+        rejected.push({reason:'estrutura_invalida'});
+        if(!String(interpretation).trim().startsWith('{')) {
+            const legacy=legacyAnalysisPresentation(context,interpretation);
+            const safe=legacy.summary.split('Hipóteses e recomendações\n')[1]?.split('\nProteção analítica:')[0]??'';
+            sections.recomendacoes=safe.split('\n').filter(s=>s.trim()&&!/^(?:#+\s*)?(?:resumo executivo|fatos observados|pontos de aten[çc][aã]o|hip[oó]teses|recomenda[çc][oõ]es|limita[çc][oõ]es)\s*:?$/i.test(s.trim()));
+        }
+    }
+    // Fatos e comparações sempre resolvidos pelo sistema, nunca por números do modelo.
+    const q=String(prompt).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const simple=/media|soma|minimo|maximo/.test(q)&&!(/analise|evolu|todos|gerencial/.test(q));
+    const requested=['media','soma','minimo','maximo'].filter(k=>q.includes(k));
+    const defaults=context.indicadores.slice(0,8).flatMap(i=>(simple?requested:['media','ultimo_vs_media']).map(stat=>resolve({id:i.id,stat,competencia:''})).filter(Boolean));
+    const seen=new Set();const unique=lines=>lines.filter(line=>{if(seen.has(line))return false;seen.add(line);return true;});
+    const lines=[];
+    const add=(heading,texts)=>{const clean=unique(texts);if(clean.length){if(heading)lines.push(heading);lines.push(...clean);}};
+    if(simple)add('',defaults);
+    else {
+        add('Resumo executivo',valid?(sections.resumo.length?sections.resumo:defaults):defaults);
+        add('Resultados relevantes',valid?sections.fatos:[]);
+        add('Pontos de atenção',valid?sections.atencao:[]);
+        add('Hipóteses para investigação',valid?sections.hipoteses:[]);
+        add('Recomendações',sections.recomendacoes?.length?sections.recomendacoes:[catalog.investigar_registros]);
+    }
+    const limitations=valid?sections.limitacoes:[];
+    if(context.contextoParcial)limitations.push('Consulta parcial: há indicadores omitidos do contexto.');
+    if(context.indicadores.length>8)limitations.push('Os demais indicadores recebidos permanecem disponíveis nos detalhes técnicos.');
+    if(!context.indicadores.length)limitations.push('O indicador solicitado não foi recebido no contexto autorizado.');
+    if(context.indicadores.some(i=>i.estatisticas.ausentes>0))limitations.push('Há competências com valores ausentes, preservados nos detalhes.');
+    if(!simple)limitations.push(`Cobertura: ${context.indicadores.length}/${context.totalIndicadoresNoDashboard} indicadores; competências ${context.competencias[0]??'indisponíveis'} a ${context.competencias.at(-1)??'indisponíveis'}.`);
+    add('Limitações importantes',limitations);
+    const audit=rejected.length?'\nValidação da interpretação: '+rejected.map(r=>r.reason).join(', '):'';
+    return {summary:lines.join('\n'),details:base.details+audit,rejections:rejected,structured:Boolean(valid)};
+}
+
+function legacyAnalysisPresentation(context, interpretation) {
     const fmt=v=>v===null?'indisponível':new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(v);
     const facts=[], comparisons=[];
     for(const item of context.indicadores) {

@@ -93,7 +93,7 @@ async function runAuditTests(front, back, Encoder) {
     });
     await test('5. Payloads Groq, OpenAI e Gemini contêm os mesmos dados', () => {
         const instructions = back.slice(back.indexOf('    const SYSTEM_INSTRUCTION_TEXT ='), back.indexOf('    // 5. Integração com OpenAI'));
-        const built = new Function('contextText','prompt', instructions + '\nreturn {system:EFFECTIVE_SYSTEM_INSTRUCTION,user:MODEL_USER_INPUT};')(verified, 'Analise acidentes');
+        const built = new Function('contextText','prompt','INTERPRETATION_CONTRACT', instructions + '\nreturn {system:EFFECTIVE_SYSTEM_INSTRUCTION,user:MODEL_USER_INPUT};')(verified, 'Analise acidentes','Contrato JSON de teste');
         for (const name of ['groq','openai','gemini']) {
             const start = back.indexOf(`      const ${name}Payload =`) >= 0 ? back.indexOf(`      const ${name}Payload =`) : back.indexOf(`    const ${name}Payload =`);
             const snippet = back.slice(start, back.indexOf('\n    };', start) + 7);

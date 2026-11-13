@@ -1,5 +1,5 @@
 import {compactGroqContext,estimateTokens,GROQ_MARGIN,GROQ_INPUT_BUDGET,GROQ_MAX_BODY_BYTES,GROQ_OUTPUT_BUDGET,groqFailure} from '../supabase/functions/seguranca-viaria-ia/groq-context.js';
-import {analyzeIndicator,analyticalResponse} from '../supabase/functions/seguranca-viaria-ia/analytics.js';
+import {analyzeIndicator,analyticalResponse,INTERPRETATION_CONTRACT} from '../supabase/functions/seguranca-viaria-ia/analytics.js';
 import {readFileSync} from 'node:fs';
 const assert=(v,m)=>{if(!v)throw Error(m);};
 const make=(count,months)=>{
@@ -19,10 +19,10 @@ for(const [name,count,months,question] of [['dois indicadores',2,9],['dez indica
  for(const item of sent.indicadores)if(item.valores)assert(item.valores.length===months && item.valores[0]===null,'Série truncada/null');
  const back=readFileSync('supabase/functions/seguranca-viaria-ia/index.ts','utf8');
  const instructions=back.slice(back.indexOf('    const SYSTEM_INSTRUCTION_TEXT ='),back.indexOf('    // 5. Integração com OpenAI'));
- const oldMessages=new Function('contextText','prompt',instructions+';return [{role:"system",content:EFFECTIVE_SYSTEM_INSTRUCTION},{role:"user",content:MODEL_USER_INPUT}];')(original,prompt);
+ const oldMessages=new Function('contextText','prompt','INTERPRETATION_CONTRACT',instructions+';return [{role:"system",content:EFFECTIVE_SYSTEM_INSTRUCTION},{role:"user",content:MODEL_USER_INPUT}];')(original,prompt,INTERPRETATION_CONTRACT);
  const model='openai/gpt-oss-120b';
  const beforeBody=JSON.stringify({model,messages:oldMessages,temperature:0.3,max_tokens:4096});
- const afterBody=JSON.stringify({model,messages:compact.messages,temperature:0.3,max_completion_tokens:GROQ_OUTPUT_BUDGET,reasoning_effort:'low'});
+ const afterBody=JSON.stringify({model,messages:compact.messages,temperature:0.3,max_completion_tokens:GROQ_OUTPUT_BUDGET,response_format:{type:'json_object'},reasoning_effort:'low'});
  const afterBytes=new TextEncoder().encode(afterBody).length;
  assert(afterBytes<=GROQ_MAX_BODY_BYTES,'Corpo completo acima do limite');
  if(!question) assert(compact.sent===2,'Enviou indicadores desnecessários');
