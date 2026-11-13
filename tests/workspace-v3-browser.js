@@ -28,7 +28,7 @@ async function runWorkspaceV3Checks(){
     for(const tab of ['home','dashboard','datagrid','intelligence','reports','governance']){switchTab(tab);assert(!document.getElementById('view-'+tab).classList.contains('hidden'),'Módulo '+tab);}
     document.body.classList.add('developer-mode');switchTab('audit');assert(!document.getElementById('view-audit').classList.contains('hidden'),'Auditoria');
     switchTab('dashboard');assert(document.querySelector('#kpiContainer [data-count-to]'),'KPI');assert(Object.values(Chart.instances).some(c=>c.canvas.id==='canvas_test-chart'),'Gráfico personalizado');
-    const zoom=document.querySelector('.chart-scroll-box [data-z="in"]');assert(zoom,'Zoom');zoom.click();assert(hasUnsavedChanges,'Zoom não acionou estado');hasUnsavedChanges=false;
+    const zoom=document.querySelector('.chart-scroll-box [data-z="in"]');assert(zoom,'Zoom');const beforeZoom=PendingState.stable(projectPersistedState());zoom.click();assert(PendingState.stable(projectPersistedState())===beforeZoom,'Zoom alterou configuração corporativa');
     switchTab('datagrid');document.getElementById('searchInput').value='inexistente';renderTable();assert(document.getElementById('filteredCount').textContent==='0','Busca');document.getElementById('searchInput').value='';renderTable();
     document.getElementById('v3MenuToggle').focus();openNewIndicatorModal();await new Promise(r=>setTimeout(r,60));
     assert(!document.getElementById('modalEdit').classList.contains('hidden')&&document.getElementById('modalEdit').getAttribute('role')==='dialog','Edição acessível');
@@ -39,7 +39,7 @@ async function runWorkspaceV3Checks(){
     window.Papa={parse:(_text,options)=>options.complete({data:[['Setor','Indicador','Meta','Und.','Direção','Jan','Fev'],['Sinistros','CSV de teste','0','Qtd','menor_melhor','5','0']]})};
     try{parseCSVContent('parser simulado','teste.csv',true);assert(currentData.some(i=>i.indicador==='CSV de teste'&&i.meta===0&&i.valores.includes(0)),'Pipeline CSV');}
     finally{currentData=savedData;mesesLabels=savedMonths;sectors=savedSectors;window.Papa=papa;hasUnsavedChanges=false;}
-    await saveCurrentState();assert(!isSavingState&&!hasUnsavedChanges,'Salvamento simulado');
+    await saveCurrentState();await saveReviewedState(inspectPendingState().payload);document.getElementById('pendingChangesDialog').close();assert(!isSavingState&&!hasUnsavedChanges,'Salvamento simulado');
     switchTab('home');refreshOperationalUI();
     if(innerWidth<1024){document.getElementById('v3MenuToggle').click();assert(document.body.classList.contains('v3-drawer-open')&&document.querySelector('main').inert,'Drawer');document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert(!document.body.classList.contains('v3-drawer-open')&&document.activeElement.id==='v3MenuToggle','Escape/foco');}
     else{document.getElementById('v3MenuToggle').click();assert(document.body.classList.contains('v3-sidebar-collapsed'),'Recolher');document.getElementById('v3MenuToggle').click();}

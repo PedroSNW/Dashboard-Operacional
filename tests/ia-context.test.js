@@ -37,8 +37,9 @@ async function runAuditTests(front, back, Encoder) {
         const state = await new AsyncFunction('console', `
             let currentData = [], supabaseReady = true, supabaseStateLoaded = false;
             let hasUnsavedChanges = false, lastSupabaseSavedAt = null;
+            let sessionEpoch=0,isSavingState=false;const refreshPendingState=()=>{};
             const carregarDadosSupabase = async () => ({ data: { indicadores: null } });
-            const initSystem = () => {}, showAlert = () => {}, updateLastSaveStatus = () => {};
+            const initSystem = () => {}, showAlert = () => {}, updateLastSaveStatus = () => {},updateSaveButton=()=>{};
             ${loader}\nawait carregarDadosCompartilhados();
             return {currentData, supabaseStateLoaded};
         `)({error:()=>{}});

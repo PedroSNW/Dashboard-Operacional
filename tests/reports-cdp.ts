@@ -11,7 +11,7 @@ try {
     ws.onmessage=e=>{const m=JSON.parse(e.data);if(waiting.has(m.id)){const {resolve,reject}=waiting.get(m.id);waiting.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}};
     const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;waiting.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});
     const extra=await Deno.readTextFile(new URL('tests/workspace-v3-browser.js',root));
-    const cases=Deno.args.includes('--v3')?[["320",320,1000,'dark'],['360',360,1000,'light'],['mobile',390,1000,'light'],['768',768,1100,'dark'],['1024',1024,1100,'light'],['desktop',1440,1100,'dark'],['1920',1920,1100,'light']]:[['desktop',1440,1100,'dark'],['mobile',390,1000,'light']];
+    const cases=Deno.args.includes('--v3')||Deno.args.includes('--pending')?[["320",320,1000,'dark'],['360',360,1000,'light'],['mobile',390,1000,'light'],['768',768,1100,'dark'],['1024',1024,1100,'light'],['desktop',1440,1100,'dark'],['1920',1920,1100,'light']]:[['desktop',1440,1100,'dark'],['mobile',390,1000,'light']];
     for(const [name,width,height,theme] of cases){
         const {targetId}=await call('Target.createTarget',{url:'about:blank'});
         const {sessionId}=await call('Target.attachToTarget',{targetId,flatten:true});
@@ -23,6 +23,18 @@ try {
             status=r.result.value;if(status.startsWith('PASS')||status.startsWith('FAIL'))break;await new Promise(r=>setTimeout(r,100));
         }
         if(!status.startsWith('PASS'))throw Error(name+': '+status);
+        if(Deno.args.includes('--pending')){
+            const pending=await call('Runtime.evaluate',{expression:(await Deno.readTextFile(new URL('tests/pending-browser.js',root)))+'\nrunPendingChecks()',awaitPromise:true,returnByValue:true},sessionId);
+            if(pending.exceptionDetails)throw Error(JSON.stringify(pending.exceptionDetails));console.log(name,pending.result.value);
+            await new Promise(r=>setTimeout(r,300));
+            const screenshot=await call('Page.captureScreenshot',{format:'png'},sessionId);await Deno.writeFile(new URL(`.validation-tools/pending-${name}.png`,root),Uint8Array.from(atob(screenshot.data),c=>c.charCodeAt(0)));
+            const key=async(name,code)=>{for(const type of ['keyDown','keyUp'])await call('Input.dispatchKeyEvent',{type,key:name,code:name,windowsVirtualKeyCode:code,...(type==='keyDown'&&name==='Enter'?{text:'\r'}:{})},sessionId);};
+            await key('Escape',27);
+            const restored=await call('Runtime.evaluate',{expression:"document.activeElement.id==='pendingChangesButton'",returnByValue:true},sessionId);if(!restored.result.value)throw Error('Foco após Escape na prévia');
+            await key('Enter',13);await key('Tab',9);
+            const focused=await call('Runtime.evaluate',{expression:"document.getElementById('pendingChangesDialog').open&&document.activeElement.id==='pendingSaveConfirm'",returnByValue:true},sessionId);if(!focused.result.value)throw Error('Teclado na prévia');
+            await key('Escape',27);console.log('PASS prévia por Enter, Tab, Escape e retorno do foco');
+        }
         const geometry=await call('Runtime.evaluate',{expression:'JSON.stringify({width:innerWidth,scroll:document.documentElement.scrollWidth,oversized:[...document.querySelectorAll("body *")].filter(e=>e.getBoundingClientRect().right>400).slice(0,12).map(e=>[e.tagName,e.id,String(e.className),e.getBoundingClientRect().right])})',returnByValue:true},sessionId);
         const g=JSON.parse(geometry.result.value);if(g.width!==width||g.scroll>width)throw Error('Responsividade '+JSON.stringify(g));
         const shot=await call('Page.captureScreenshot',{format:'png'},sessionId);

@@ -11,9 +11,11 @@ addEventListener('load',async()=>{
  try{
   const report=${JSON.stringify(report)};
   currentData=report.indicators.map(i=>({...i,und:i.unidade}));mesesLabels=report.competencias;supabaseStateLoaded=true;supabaseReady=true;hasUnsavedChanges=false;currentSession={access_token:'mock-report',user:{id:'test-user',email:'teste@dgranel.com.br'}};window.__session=currentSession;
-  window.fetch=async(url,options)=>{if(!options?.body)return {ok:true,json:async()=>[]};const body=JSON.parse(options.body);if(body.interpret)return {ok:false,status:429,json:async()=>({error:'Groq indisponível no teste'})};return {ok:true,json:async()=>({success:true,report})};};
+  window.fetch=async(url,options)=>{if(!options?.body)return {ok:true,json:async()=>[]};const body=JSON.parse(options.body);if(options.method==='PATCH')return {ok:true,json:async()=>[{id:1,...body}]};if(body.interpret)return {ok:false,status:429,json:async()=>({error:'Groq indisponível no teste'})};return {ok:true,json:async()=>({success:true,report})};};
+  confirmPersistedSnapshot(projectPersistedState(),'2026-11-13T10:00:00.000Z');
   document.body.classList.add('authenticated');switchTab('reports');document.getElementById('reportType').value='comparativo';
   await generateManagementReport();
+  if(hasUnsavedChanges)throw Error('Relatório gerou pendências');
   if(!managementReport||managementCharts.length!==4||document.getElementById('reportExport').disabled)throw Error('Prévia/gráficos');
   await interpretManagementReport();if(!managementReport||managementReport.aiUsed||!document.getElementById('reportStatus').textContent.includes('preservado'))throw Error('Falha IA apagou relatório');
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
@@ -27,7 +29,7 @@ addEventListener('load',async()=>{
   result.textContent='PASS relatório sem IA, quatro gráficos Chart.js reais, falha Groq preserva prévia, PDF multipágina com gráficos, filtros, tema e sem overflow em '+innerWidth+'px';
  }catch(e){result.textContent='FAIL '+e.message;}
 });`;
-const scripts=[setup,await read('public/theme-preference.js'),await read('.validation-tools/tailwind.js'),await read('.validation-tools/chart.js'),await read('public/vendor/jspdf-4.2.1.umd.min.js'),await read('public/vendor/jspdf-autotable-5.0.8.min.js'),await read('public/report-pdf.js'),await read('public/main.js'),await read('public/pdf-progress.js'),await read('public/reports.js'),await read('public/workspace-v3.js'),await read('public/motion-v3-1.js'),checks];
+const scripts=[setup,await read('public/theme-preference.js'),await read('.validation-tools/tailwind.js'),await read('.validation-tools/chart.js'),await read('public/vendor/jspdf-4.2.1.umd.min.js'),await read('public/vendor/jspdf-autotable-5.0.8.min.js'),await read('public/report-pdf.js'),await read('public/pending-state.js'),await read('public/main.js'),await read('public/pdf-progress.js'),await read('public/reports.js'),await read('public/workspace-v3.js'),await read('public/motion-v3-1.js'),await read('public/pending-changes.js'),checks];
 const tags=scripts.map(s=>'<script>'+s.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n');
-html=html.replace('<head>',()=>`<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:"><style>${Deno.readTextFileSync(new URL('public/style.css',root))}\n${Deno.readTextFileSync(new URL('public/workspace-v3.css',root))}\n${Deno.readTextFileSync(new URL('public/motion-v3-1.css',root))}</style>`).replace('</body>',()=>tags+'</body>');
+html=html.replace('<head>',()=>`<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:"><style>${Deno.readTextFileSync(new URL('public/style.css',root))}\n${Deno.readTextFileSync(new URL('public/workspace-v3.css',root))}\n${Deno.readTextFileSync(new URL('public/motion-v3-1.css',root))}\n${Deno.readTextFileSync(new URL('public/pending-changes.css',root))}</style>`).replace('</body>',()=>tags+'</body>');
 await Deno.writeTextFile(new URL('.validation-tools/reports-browser.html',root),html);

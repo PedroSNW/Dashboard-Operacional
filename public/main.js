@@ -45,6 +45,28 @@ let hasUnsavedChanges = false;
 let isSavingState = false;
 let stateRevision = 0;
 let supabaseSaveQueue = Promise.resolve();
+const pendingTracker=new PendingState.Tracker();
+let sharedViewPreferences={activeDashboardId:null,zoomGraficos:{}};
+let sessionEpoch=0;
+function projectPersistedState(){
+    return PendingState.clone({indicadores:currentData,setores:sectors,graficos:customCharts,graficosPadrao:defaultChartConfigs,kpis:kpiCards,dashboards,
+        activeDashboardId:dashboards.some(d=>d.id===sharedViewPreferences.activeDashboardId)?sharedViewPreferences.activeDashboardId:dashboards[0]?.id??null,
+        mesesLabels,showDataLabels,zoomGraficos:sharedViewPreferences.zoomGraficos,theme:sharedTheme,logo:customLogoSrc});
+}
+function inspectPendingState(){return pendingTracker.inspect(projectPersistedState());}
+function refreshPendingState(){
+    const state=inspectPendingState();hasUnsavedChanges=state.loaded&&state.changes.length>0;
+    window.PendingChangesUI?.update(state);return state;
+}
+function confirmPersistedSnapshot(data,version){pendingTracker.accept(data,version);refreshPendingState();}
+function personalViewKey(){return `dgranel.view.${currentSession?.user?.id||'local'}`;}
+function savePersonalView(){try{localStorage.setItem(personalViewKey(),JSON.stringify({activeDashboardId,zoomGraficos:chartZoomState}));}catch{}}
+function restorePersonalView(){
+    try{const v=JSON.parse(localStorage.getItem(personalViewKey())||'null');if(!v)return;
+        if(dashboards.some(d=>d.id===v.activeDashboardId))activeDashboardId=v.activeDashboardId;
+        for(const [id,value]of Object.entries(v.zoomGraficos||{}))if(typeof value==='number'&&Number.isFinite(value))chartZoomState[id]=Math.min(CHART_ZOOM_MAX,Math.max(CHART_ZOOM_MIN,value));
+    }catch{}
+}
 let intelligenceRenderRevision = 0;
 let intelligenceVisibleLimit = 24;
 let revealObserver = null;
@@ -123,7 +145,7 @@ function wrapCanvasForScroll(canvas) {
         const zoom = Math.min(CHART_ZOOM_MAX, Math.max(CHART_ZOOM_MIN, value));
         const centerRatio = (scroller.scrollLeft + scroller.clientWidth / 2) / (inner.scrollWidth || 1);
         chartZoomState[canvas.id] = zoom;
-        markStateDirty();
+        savePersonalView();
         label.textContent = `${Math.round(zoom * 100)}%`;
         const chart = Chart.getChart(canvas);
         if (chart) applyChartScrollWidth(chart);
@@ -464,6 +486,7 @@ async function signOutUser() {
 }
 
 async function handleAuthSession(session) {
+    if(currentSession?.user?.id!==session?.user?.id||!session){sessionEpoch++;pendingTracker.clear();appInitialized=false;window.PendingChangesUI?.clear();}
     currentSession = session;
     document.body.classList.toggle('authenticated', Boolean(session));
 
@@ -474,6 +497,7 @@ async function handleAuthSession(session) {
         supabaseReady = false;
         currentData = [];
         Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
+        hasUnsavedChanges=false;updateSaveButton();
         return;
     }
 
@@ -677,7 +701,6 @@ function loadStoredDashboards() {
             defaultDashboard.widgets.push({ id: `widget_${chart.id}`, type: 'custom-chart', ref: chart.id });
         }
     });
-    saveDashboards();
 }
 
 function saveDashboards() {
@@ -740,7 +763,7 @@ function selectDashboard(id) {
     const nextIndex = dashboards.findIndex(dashboard => dashboard.id === id);
     const direction = nextIndex >= previousIndex ? 'next' : 'previous';
     activeDashboardId = id;
-    saveDashboards();
+    savePersonalView();
     renderDashboardTabs();
     renderKPIs();
     renderCharts();
@@ -994,12 +1017,12 @@ function syncSectorsFromData() {
 }
 
 function populateSectorSelect(selectedSector = '', syncWithData = true) {
-    if (syncWithData) syncSectorsFromData();
+    const options=syncWithData?[...new Set([...sectors,...currentData.map(i=>i.setor).filter(Boolean)])]:sectors;
     const select = document.getElementById('editSetor');
     if (!select) return;
 
     select.innerHTML = '<option value="">Selecione um setor</option>';
-    sectors.forEach(sector => {
+    options.forEach(sector => {
         const option = document.createElement('option');
         option.value = sector;
         option.textContent = sector;
@@ -1021,6 +1044,7 @@ function createSector() {
 
     sectors.push(sectorName);
     sectors.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    markStateDirty();
     populateSectorSelect(sectorName, false);
 }
 
@@ -1219,8 +1243,8 @@ function renderConfiguredDefaultCharts() {
     });
 }
 
-async function salvarEstadoSupabase() {
-    const pendingSave = supabaseSaveQueue.then(persistirEstadoSupabase);
+async function salvarEstadoSupabase(prepared) {
+    const pendingSave = supabaseSaveQueue.then(()=>persistirEstadoSupabase(prepared));
     supabaseSaveQueue = pendingSave.catch(error => {
         console.error('Erro ao processar gravação no Supabase:', error);
     });
@@ -1229,17 +1253,17 @@ async function salvarEstadoSupabase() {
 
 function markStateDirty() {
     stateRevision += 1;
-    hasUnsavedChanges = true;
     updateSaveButton();
 }
 
 function updateSaveButton() {
+    refreshPendingState();
     window.refreshOperationalUI?.();
     const button = document.getElementById('saveStateButton');
     const icon = document.getElementById('saveStateButtonIcon');
     if (!button || !icon) return;
 
-    button.disabled = isSavingState || !supabaseStateLoaded || !supabaseReady;
+    button.disabled = isSavingState || !supabaseStateLoaded || !supabaseReady || !hasUnsavedChanges;
     button.classList.toggle('bg-amber-500', hasUnsavedChanges && !isSavingState);
     button.classList.toggle('hover:bg-amber-400', hasUnsavedChanges && !isSavingState);
     button.classList.toggle('bg-emerald-600', !hasUnsavedChanges || isSavingState);
@@ -1260,64 +1284,71 @@ function updateSaveButton() {
 
 async function saveCurrentState() {
     if (isSavingState) return;
-    const revisionBeingSaved = stateRevision;
+    updateSaveButton();
+    if(!supabaseStateLoaded||!supabaseReady||!pendingTracker.reference){showAlert('Salvamento bloqueado','A leitura autorizada do Supabase precisa ser validada.','error');return;}
+    window.PendingChangesUI?.open();
+}
+
+async function saveReviewedState(payload) {
+    if(isSavingState)return;
+    if(!supabaseStateLoaded||!supabaseReady||!pendingTracker.reference){window.PendingChangesUI?.result('Leitura Supabase não validada. Salvamento bloqueado.');return;}
+    const state=refreshPendingState();
+    if(!state.changes.length)return;
+    if(!PendingState.equal(payload,state.payload)){window.PendingChangesUI?.result('A prévia mudou. Revise antes de confirmar.');return;}
+    const prepared={payload:PendingState.clone(payload),version:pendingTracker.version,epoch:sessionEpoch,userId:currentSession?.user?.id};
     isSavingState = true;
     updateSaveButton();
     try {
-        await salvarEstadoSupabase();
-        hasUnsavedChanges = stateRevision !== revisionBeingSaved;
+        await salvarEstadoSupabase(prepared);
+        if(prepared.epoch!==sessionEpoch)return;
         document.getElementById('lastSavedTag').textContent = 'Salvo agora';
-        showAlert('Salvo com sucesso', 'As alterações foram salvas.', 'success');
+        window.PendingChangesUI?.result(hasUnsavedChanges?'Salvamento confirmado. Alterações feitas durante o envio continuam pendentes.':'Salvamento confirmado. Sem alterações pendentes.');
     } catch (error) {
+        if(prepared.epoch!==sessionEpoch)return;
         console.error('Erro ao salvar o estado no Supabase:', error);
         document.getElementById('lastSavedTag').textContent = 'Falha ao salvar';
-        showAlert('Falha ao salvar', 'Não foi possível salvar os dados no banco. Suas alterações continuam nesta tela; verifique a conexão e tente novamente.', 'error');
+        window.PendingChangesUI?.result(error.message==='SAVE_CONFLICT'?'O estado remoto mudou ou a atualização não foi autorizada. Nenhuma linha foi confirmada. Preserve suas alterações e compare com uma leitura atualizada antes de tentar novamente.':'Não foi possível confirmar o salvamento. As alterações continuam pendentes. Verifique a sessão/conexão antes de tentar novamente.');
     } finally {
         isSavingState = false;
         updateSaveButton();
     }
 }
 
-async function persistirEstadoSupabase() {
+async function persistirEstadoSupabase(prepared) {
     const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) throw new Error('Sessão Supabase indisponível.');
+    if (!session?.access_token) throw new Error('Sessão Supabase indisponível.');
     if (!supabaseStateLoaded) throw new Error('O estado remoto ainda não foi carregado; gravação cancelada para preservar os dados existentes.');
-
-    const data = {
-        indicadores: currentData,
-        setores: sectors,
-        graficos: customCharts,
-        graficosPadrao: defaultChartConfigs,
-        kpis: kpiCards,
-        dashboards,
-        activeDashboardId,
-        mesesLabels,
-        showDataLabels,
-        zoomGraficos: chartZoomState,
-        theme: sharedTheme,
-        logo: customLogoSrc
-    };
-
-    const response = await fetch(SUPABASE_STATE_ENDPOINT, {
-        method: 'POST',
+    if(!supabaseReady||!prepared||!pendingTracker.reference)throw Error('Prévia de salvamento não validada.');
+    if(prepared.epoch!==sessionEpoch||prepared.userId!==session.user?.id||!currentSession||pendingTracker.version!==prepared.version)throw Error('SAVE_CONFLICT');
+    if(typeof prepared.version!=='string'||!Number.isFinite(Date.parse(prepared.version)))throw Error('Versão do snapshot indisponível. Recarregue antes de salvar.');
+    const data=prepared.payload;
+    const updatedAt=new Date(Math.max(Date.now(),Date.parse(prepared.version)+1)).toISOString();
+    const response = await fetch(`${SUPABASE_STATE_ENDPOINT}?id=eq.1&updated_at=eq.${encodeURIComponent(prepared.version)}`, {
+        method: 'PATCH',
+        signal:AbortSignal.timeout(30000),
         headers: {
             'apikey': SUPABASE_PUBLISHABLE_KEY,
             'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
-            'Prefer': 'resolution=merge-duplicates,return=minimal'
+            'Prefer': 'return=representation'
         },
         body: JSON.stringify({
-            id: 1,
             data,
-            updated_at: new Date().toISOString()
+            updated_at: updatedAt
         })
     });
 
     if (!response.ok) throw new Error(`Supabase HTTP ${response.status}`);
+    const rows=await response.json();
+    if(!Array.isArray(rows)||rows.length!==1)throw Error('SAVE_CONFLICT');
+    if(String(rows[0].id)!=='1'||!PendingState.equal(rows[0].data,data)||typeof rows[0].updated_at!=='string'||!Number.isFinite(Date.parse(rows[0].updated_at))||Date.parse(rows[0].updated_at)<=Date.parse(prepared.version))throw Error('Resposta de confirmação inválida.');
+    if(prepared.epoch!==sessionEpoch||currentSession?.user?.id!==prepared.userId)return;
+    confirmPersistedSnapshot(data,rows[0].updated_at);
     supabaseReady = true;
-    lastSupabaseSavedAt = Date.now();
+    lastSupabaseSavedAt = Date.parse(rows[0].updated_at);
     updateLastSaveStatus();
-    await registrarLog('SALVAMENTO', 'Alterações salvas manualmente no banco');
+    // A confirmação da linha não depende da disponibilidade da tabela de auditoria.
+    void registrarLog('SALVAMENTO', 'Alterações salvas manualmente no banco').catch(()=>console.warn('Auditoria de salvamento indisponível. Gravação de estado confirmada.'));
 }
 
 async function carregarDadosSupabase(silencioso = false) {
@@ -1338,9 +1369,14 @@ async function carregarDadosSupabase(silencioso = false) {
 }
 
 async function carregarDadosCompartilhados(silencioso = false) {
+    const loadingEpoch=sessionEpoch;
+    refreshPendingState();
+    if(isSavingState)return;
     if (silencioso && hasUnsavedChanges) return;
     try {
         const sharedState = await carregarDadosSupabase(silencioso);
+        if(loadingEpoch!==sessionEpoch)return;
+        refreshPendingState();
         if (silencioso && hasUnsavedChanges) return;
         const remoteSavedAt = sharedState?.updated_at
             ? new Date(sharedState.updated_at).getTime()
@@ -1371,18 +1407,15 @@ async function carregarDadosCompartilhados(silencioso = false) {
                 ? dataObj.dashboards
                 : [{ id: 'dashboard_main', name: 'Geral', widgets: getDefaultDashboardWidgets() }];
             dashboards = dashboards.map((dashboard, index) => ({
+                ...dashboard,
                 id: dashboard.id || `dashboard_${index + 1}`,
                 name: dashboard.name || `Dashboard ${index + 1}`,
-                widgets: Array.isArray(dashboard.widgets)
-                    ? dashboard.widgets.filter(widget => !(
-                        (widget.type === 'kpi' && /^kpi[1-4]$/.test(widget.ref)) ||
-                        (widget.type === 'default-chart' && /^chart[1-4]$/.test(widget.ref))
-                    ))
-                    : []
+                widgets: Array.isArray(dashboard.widgets) ? dashboard.widgets : []
             }));
             activeDashboardId = dashboards.some(dashboard => dashboard.id === dataObj.activeDashboardId)
                 ? dataObj.activeDashboardId
                 : dashboards[0].id;
+            sharedViewPreferences={activeDashboardId,zoomGraficos:PendingState.clone(dataObj.zoomGraficos||{})};
             mesesLabels = Array.isArray(dataObj.mesesLabels) ? dataObj.mesesLabels.filter(isMonthLabel) : ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul'];
             showDataLabels = dataObj.showDataLabels === true;
             Object.keys(chartZoomState).forEach(key => delete chartZoomState[key]);
@@ -1405,18 +1438,22 @@ async function carregarDadosCompartilhados(silencioso = false) {
                 if (logoImg) logoImg.src = DEFAULT_LOGO_SRC;
                 document.getElementById('removeLogoBtn')?.classList.add('hidden');
             }
-            syncMonthLabels();
+            confirmPersistedSnapshot(projectPersistedState(),sharedState.updated_at);
+            restorePersonalView();
             initSystem();
+            updateSaveButton();
             return;
         }
 
         initSystem();
     } catch (error) {
+        if(loadingEpoch!==sessionEpoch)return;
         supabaseReady = false;
         supabaseStateLoaded = false;
         console.error('Erro ao carregar dados compartilhados:', error);
         if (!silencioso) showAlert('Indicadores indisponíveis', 'Não foi possível carregar os indicadores reais. Os dados padrão não serão usados. Recarregue a página para tentar novamente.', 'error');
         initSystem();
+        updateSaveButton();
     }
 }
 
@@ -1433,7 +1470,6 @@ function saveCustomChartsStorage() {
 }
 
 function initSystem() {
-    syncMonthLabels();
     renderDashboardMonthFilter();
     renderDashboardTabs();
     updateDataLabelsButton();
@@ -3363,10 +3399,10 @@ function renderDynamicCharts() {
 
 // POPULAR DROPDOWN SETORES
 function populateSetoresDropdown() {
-    syncSectorsFromData();
+    const availableSectors=[...new Set([...sectors,...currentData.map(i=>i.setor).filter(Boolean)])];
     const select = document.getElementById('setorFilter');
     select.innerHTML = '<option value="TODOS">Todos os Setores</option>';
-    sectors.forEach(s => {
+    availableSectors.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s;
         opt.textContent = s;
@@ -3687,7 +3723,7 @@ document.addEventListener('keydown', event => {
         return;
     }
 
-    if (event.key !== 'Escape') return;
+    if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
 
     ['modalDetail', 'modalEdit', 'modalChartConfig', 'modalKpiConfig'].forEach(id => {
         const modal = document.getElementById(id);
