@@ -21,7 +21,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=executive-v2">
+        <link rel="stylesheet" href="style.css?v=reports-v4">
     <link rel="stylesheet" href="workspace-v3.css?v=settings-footer-1">
     <link rel="stylesheet" href="motion-v3-1.css?v=3.1">
     <link rel="stylesheet" href="pending-changes.css?v=1">
@@ -373,7 +373,7 @@
                     <button id="reportRefresh" class="rounded-xl border border-slate-600 px-4 py-3 text-sm">Atualizar filtros</button>
                     <button id="reportExport" disabled class="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white">Exportar PDF</button>
                 </div>
-                <div class="report-filters flex flex-wrap items-end gap-3 border-t border-slate-700 pt-4"><label>Interpretação opcional<select id="reportProvider"><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label><button id="reportAI" disabled class="rounded-xl border border-amber-500/50 px-4 py-3 text-sm text-amber-400">Solicitar interpretação</button><span class="text-xs text-slate-400">O relatório funciona sem IA. Consultas podem consumir a cota do provedor.</span></div>
+                <div class="report-filters flex flex-wrap items-end gap-3 border-t border-slate-700 pt-4"><label>Provedor de análise complementar<select id="reportProvider"><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label><button id="reportAI" disabled class="rounded-xl border border-amber-500/50 px-4 py-3 text-sm text-amber-400">Aprofundar diagnóstico e plano de ação</button><span class="text-xs text-slate-400">Consulta opcional: pode consumir a cota do provedor. Todas as propostas dependem de avaliação da empresa.</span></div>
                 <p id="reportStatus" role="status" aria-live="polite" class="text-sm text-slate-400">Escolha os filtros e gere uma prévia.</p>
             </section>
             <section id="reportPreview" aria-label="Prévia do relatório" class="glass-card rounded-2xl p-5 sm:p-7 space-y-5"></section>
@@ -709,7 +709,8 @@
         <script src="pending-state.js?v=1"></script>
         <script src="main.js?v=pending-1"></script>
         <script src="pdf-progress.js?v=3"></script>
-        <script src="reports.js?v=3"></script>
+        <script src="report-content.js?v=4"></script>
+        <script src="reports.js?v=4"></script>
     <script src="workspace-v3.js?v=settings-footer-1"></script>
     <script src="motion-v3-1.js?v=3.1"></script>
     <script src="pending-changes.js?v=1"></script>

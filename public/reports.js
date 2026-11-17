@@ -3,6 +3,7 @@ let managementReport = null;
 let managementSignature = '';
 let managementCharts = [];
 let managementBusy = false;
+let managementEnrichmentKey='';
 window.resetManagementReport = function(){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';reportEl('reportPreview')?.replaceChildren();if(reportEl('reportExport'))reportEl('reportExport').disabled=true;if(reportEl('reportAI'))reportEl('reportAI').disabled=true;};
 const reportEl = id => document.getElementById(id);
 const reportValue = value => value === null || value === undefined ? 'Ausente' : new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(value);
@@ -49,7 +50,7 @@ async function requestManagementReport(interpret=false) {
     const {data,error}=await supabaseClient.auth.getSession();
     if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
     const response=await fetch(SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({action:'report',selection:reportSelection(),interpret,provider:reportEl('reportProvider').value,...(interpret?{expectedUpdatedAt:managementReport.snapshotUpdatedAt}:{})})});
+        body:JSON.stringify({action:'report',selection:reportSelection(),interpret,provider:reportEl('reportProvider').value,...(interpret?{expectedUpdatedAt:managementReport.snapshotUpdatedAt,expectedReportBasis:managementReport.basis}:{})})});
     const body=await response.json().catch(()=>null);
     if(!response.ok||!body?.success)throw Error(body?.error||`Relatório indisponível (HTTP ${response.status}).`);
     return body;
@@ -60,7 +61,16 @@ function renderManagementReport() {
     const preview=reportEl('reportPreview');preview.replaceChildren();const r=managementReport;
     preview.append(reportNode('h2',`D'Granel • Relatório ${r.type}`,'text-xl font-bold'),
         reportNode('p',`${r.competencias[0]} a ${r.competencias.at(-1)} • Gerado ${new Date(r.generatedAt).toLocaleString('pt-BR')} • Snapshot ${r.snapshotUpdatedAt?new Date(r.snapshotUpdatedAt).toLocaleString('pt-BR'):'sem data informada'}`,'text-xs text-slate-400'),
-        reportNode('p',`${r.selectedCount} indicadores selecionados; ${r.indicators.length} exibidos; ${r.criticalCount} com atenção por meta/direção. IA ${r.aiUsed?'utilizada':'não utilizada'}.`));
+        reportNode('p',`${r.selectedCount} indicadores selecionados; ${r.indicators.length} exibidos; ${r.criticalCount} com atenção por meta/direção.`));
+    const sections=window.ReportContent.sections(r);
+    if(!sections.diagnosis.length)preview.append(reportNode('p','Conteúdo gerencial complementar indisponível nesta versão. Os resultados numéricos permanecem disponíveis.','text-xs text-slate-400'));
+    const renderSections=items=>items.forEach(section=>{
+        const area=reportNode('section','','report-management-section space-y-3');area.append(reportNode('h3',section.title,'font-bold text-lg'));
+        section.blocks.forEach(block=>{const card=reportNode('article','','glass-card rounded-xl p-4 space-y-2');card.append(reportNode('h4',block.title,'font-bold'));block.lines.forEach(line=>card.append(reportNode('p',line,'text-sm')));area.append(card);});
+        if(!section.blocks.length)area.append(reportNode('p','Não há propostas específicas para este recorte. Consulte os critérios e as limitações.','text-sm'));
+        preview.append(area);
+    });
+    renderSections(sections.diagnosis);
     if(!r.indicators.length)preview.append(reportNode('p','Nenhum indicador corresponde aos critérios críticos no período.'));
     r.indicators.forEach(i=>{
         const card=reportNode('article','','glass-card rounded-2xl border border-slate-700 p-5 space-y-3');
@@ -75,7 +85,7 @@ function renderManagementReport() {
         const light=document.body.classList.contains('light-theme');
         managementCharts.push(new Chart(canvas,{type:'line',data:{labels:r.competencias,datasets:[{label:i.unidade??'Valor',data:i.valores,borderColor:'#d38b00',backgroundColor:'#d38b0022',spanGaps:false,tension:0.15,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:light?'#334155':'#cbd5e1'}},y:{ticks:{color:light?'#334155':'#cbd5e1'}}}}}));
     });
-    if(r.interpretation)preview.append(reportNode('h3','Interpretação gerencial','font-bold'),reportNode('pre',r.interpretation,'whitespace-pre-wrap text-sm'));
+    renderSections(sections.final);
     preview.append(reportNode('h3','Metodologia e limitações','font-bold'),reportNode('p',r.limitations.join(' '),'text-xs text-slate-400'));
 }
 async function generateManagementReport() {
@@ -85,7 +95,7 @@ async function generateManagementReport() {
     try {
         const selection=JSON.stringify(reportSelection());const body=await requestManagementReport();
         if(selection!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram durante a leitura. Gere novamente.');
-        managementReport=body.report;managementSignature=selection;renderManagementReport();
+        managementReport=body.report;managementSignature=selection;managementEnrichmentKey='';renderManagementReport();
         reportEl('reportExport').disabled=false;reportEl('reportAI').disabled=!managementReport.indicators.length;reportMessage('Prévia pronta. Revise antes de exportar; nenhum dado foi gravado.');
     }catch(e){managementReport=null;reportEl('reportPreview').replaceChildren();reportMessage(e.message);}
     finally{managementBusy=false;reportEl('reportGenerate').disabled=false;}
@@ -94,16 +104,19 @@ async function interpretManagementReport() {
     if(managementBusy||!managementReport)return;managementBusy=true;reportEl('reportAI').disabled=true;
     try {
         if(managementSignature!==JSON.stringify(reportSelection()))throw Error('Atualize a prévia.');
+        const source=managementReport,key=JSON.stringify([managementSignature,source.basis,source.snapshotUpdatedAt,reportEl('reportProvider').value]);
+        if(managementEnrichmentKey===key){reportMessage('O diagnóstico e o plano de ação já estão atualizados para esta seleção.');return;}
         const body=await requestManagementReport(true);
-        if(managementSignature!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram. Atualize a prévia.');
-        managementReport.interpretation=body.response;managementReport.aiUsed=body.meta?.deterministicOnly!==true;
-        renderManagementReport();reportMessage('Interpretação disponível. Os números do relatório foram preservados.');
-    }catch(e){reportMessage(`Relatório determinístico preservado. Interpretação indisponível: ${e.message}`);}
+        if(source!==managementReport||managementSignature!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram. Atualize a prévia.');
+        if((source.basis&&body.reportBasis!==source.basis)||!window.ReportContent.valid(body.management,source))throw Error('Conteúdo complementar incompatível. Atualize a geração do relatório.');
+        managementReport.management=body.management;managementReport.aiUsed=body.meta?.deterministicOnly!==true;managementReport.interpretation=body.response;
+        managementEnrichmentKey=key;renderManagementReport();reportMessage('Diagnóstico e propostas atualizados. Os resultados numéricos foram preservados.');
+    }catch(e){reportMessage(`Relatório e propostas preservados. Análise complementar indisponível: ${e.message}`);}
     finally{managementBusy=false;if(managementSignature===JSON.stringify(reportSelection()))reportEl('reportAI').disabled=false;}
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=3');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=4');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
@@ -126,8 +139,9 @@ async function exportManagementReport(){
         }
         PdfProgress.update('Compondo páginas do PDF',45,0,report.indicators.length);await reportPaint();
         const doc=await window.ReportPdf.buildAsync(report,images,event=>{
-            const percent=event.stage==='compose'?45+40*event.processed/Math.max(1,event.total):85+9*event.processed/Math.max(1,event.total);
-            PdfProgress.update(event.stage==='compose'?'Compondo páginas do PDF':'Finalizando páginas',percent,event.processed,event.total);
+            const fraction=event.processed/Math.max(1,event.total);
+            const stage={diagnosis:['Preparando diagnóstico',45,7],compose:['Compondo páginas do PDF',52,26],management:['Diagramando plano de ação',78,10],finalize:['Finalizando páginas',88,6]}[event.stage];
+            PdfProgress.update(stage[0],stage[1]+stage[2]*fraction,event.processed,event.total);
         },reportPaint);
         PdfProgress.update('Finalizando o documento — serialização local',null);await reportPaint();
         const blob=doc.output('blob');

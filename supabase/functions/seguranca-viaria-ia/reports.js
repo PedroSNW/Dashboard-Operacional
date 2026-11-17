@@ -1,4 +1,6 @@
 import {analyzeIndicator} from './analytics.js';
+import {buildReportManagement} from './report-management.js';
+export {buildReportManagement,compactReportContext} from './report-management.js';
 export function buildReport(stored, selection, updatedAt = null) {
     if(!stored||!Array.isArray(stored.indicadores)||!Array.isArray(stored.mesesLabels))throw Error('REPORT: Estado remoto indisponível.');
     const labels=stored.mesesLabels;
@@ -30,6 +32,7 @@ export function buildReport(stored, selection, updatedAt = null) {
         const worse=d!==null&&d!==undefined&&(stats.direcao==='menor_melhor'?d>0:stats.direcao==='maior_melhor'?d<0:false);
         return {...item,estatisticas:stats,critical:Boolean(off||worse),criticalReason:off?'Último valor válido fora da meta':worse?'Piora descritiva entre primeiro e último valor válido':null};
     });
-    return {type,sector,competencias:competencies,generatedAt:new Date().toISOString(),snapshotUpdatedAt:updatedAt,selectedCount:items.length,indicators:type==='critico'?indicators.filter(i=>i.critical):indicators,criticalCount:indicators.filter(i=>i.critical).length,
+    const report={type,sector,competencias:competencies,generatedAt:new Date().toISOString(),snapshotUpdatedAt:updatedAt,selectedCount:items.length,indicators:type==='critico'?indicators.filter(i=>i.critical):indicators,criticalCount:indicators.filter(i=>i.critical).length,
         limitations:['Dados agregados; competências permanentemente revisáveis.','Valores ausentes não são zero. Taxas não são somadas; médias de taxas não são ponderadas sem denominadores vinculados.','Tendência é descritiva, não causa comprovada. Direção neutra/indefinida não recebe julgamento.'],aiUsed:false,context};
+    return {...report,management:buildReportManagement(report)};
 }

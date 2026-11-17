@@ -94,14 +94,14 @@ async function runAuditTests(front, back, Encoder) {
     });
     await test('5. Payloads Groq, OpenAI e Gemini contêm os mesmos dados', () => {
         const instructions = back.slice(back.indexOf('    const SYSTEM_INSTRUCTION_TEXT ='), back.indexOf('    // 5. Integração com OpenAI'));
-        const built = new Function('contextText','prompt','INTERPRETATION_CONTRACT', instructions + '\nreturn {system:EFFECTIVE_SYSTEM_INSTRUCTION,user:MODEL_USER_INPUT};')(verified, 'Analise acidentes','Contrato JSON de teste');
+        const built = new Function('contextText','prompt','INTERPRETATION_CONTRACT','reportCompact', instructions + '\nreturn {system:EFFECTIVE_SYSTEM_INSTRUCTION,user:MODEL_USER_INPUT};')(verified, 'Analise acidentes','Contrato JSON de teste',null);
         for (const name of ['groq','openai','gemini']) {
             const start = back.indexOf(`      const ${name}Payload =`) >= 0 ? back.indexOf(`      const ${name}Payload =`) : back.indexOf(`    const ${name}Payload =`);
             const snippet = back.slice(start, back.indexOf('\n    };', start) + 7);
             // Os blocos internos terminam com seis espaços.
             const end = back.indexOf('\n      };', start);
             const source = name === 'gemini' ? snippet : back.slice(start, end + 9);
-            const payload = new Function('EFFECTIVE_SYSTEM_INSTRUCTION','MODEL_USER_INPUT','compact','GROQ_OUTPUT_BUDGET',`${source}\nreturn ${name}Payload;`.replaceAll(`${name}Model`, "'modelo-mock'"))(built.system,built.user,{messages:[{role:'system',content:built.system},{role:'user',content:built.user}]},1200);
+            const payload = new Function('EFFECTIVE_SYSTEM_INSTRUCTION','MODEL_USER_INPUT','compact','GROQ_OUTPUT_BUDGET','requestedReport',`${source}\nreturn ${name}Payload;`.replaceAll(`${name}Model`, "'modelo-mock'"))(built.system,built.user,{messages:[{role:'system',content:built.system},{role:'user',content:built.user}]},1200,null);
             const text = name === 'groq' ? payload.messages[1].content : name === 'openai' ? payload.input : payload.contents[0].parts[0].text;
             assert(text.includes(verified), `${name} perdeu contexto`);
             const system = name === 'groq' ? payload.messages[0].content : name === 'openai' ? payload.instructions : payload.systemInstruction.parts[0].text;

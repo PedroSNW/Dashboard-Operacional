@@ -640,6 +640,10 @@ body.light-theme #provider-btn-groq.border-violet-500\/50 {
 }
 
 .report-filters label { display: block; font-size: .8rem; color: #94a3b8; }
+.report-management-section { min-width:0; }
+.report-management-section :is(h3,h4,p) { overflow-wrap:anywhere; }
+.report-management-section>h3 { padding-bottom:8px; border-bottom:1px solid var(--ds-border); }
+.report-management-section article { border-left:2px solid var(--ds-brand); }
 .report-filters select { display: block; width: 100%; margin-top: .4rem; border: 1px solid #334155; border-radius: .75rem; padding: .65rem; background: #070d1e; color: #f1f5f9; }
 #view-reports button:disabled { opacity: .45; cursor: not-allowed; }
 body.light-theme .report-filters select { background: #fff; color: #172033; border-color: #cbd5e1; }

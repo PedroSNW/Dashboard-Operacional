@@ -19,7 +19,7 @@ for(const [name,count,months,question] of [['dois indicadores',2,9],['dez indica
  for(const item of sent.indicadores)if(item.valores)assert(item.valores.length===months && item.valores[0]===null,'Série truncada/null');
  const back=readFileSync('supabase/functions/seguranca-viaria-ia/index.ts','utf8');
  const instructions=back.slice(back.indexOf('    const SYSTEM_INSTRUCTION_TEXT ='),back.indexOf('    // 5. Integração com OpenAI'));
- const oldMessages=new Function('contextText','prompt','INTERPRETATION_CONTRACT',instructions+';return [{role:"system",content:EFFECTIVE_SYSTEM_INSTRUCTION},{role:"user",content:MODEL_USER_INPUT}];')(original,prompt,INTERPRETATION_CONTRACT);
+ const oldMessages=new Function('contextText','prompt','INTERPRETATION_CONTRACT','reportCompact',instructions+';return [{role:"system",content:EFFECTIVE_SYSTEM_INSTRUCTION},{role:"user",content:MODEL_USER_INPUT}];')(original,prompt,INTERPRETATION_CONTRACT,null);
  const model='openai/gpt-oss-120b';
  const beforeBody=JSON.stringify({model,messages:oldMessages,temperature:0.3,max_tokens:4096});
  const afterBody=JSON.stringify({model,messages:compact.messages,temperature:0.3,max_completion_tokens:GROQ_OUTPUT_BUDGET,response_format:{type:'json_object'},reasoning_effort:'low'});

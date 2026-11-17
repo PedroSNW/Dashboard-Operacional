@@ -24,8 +24,8 @@ window.ReportPdf = {
             y+=2;
         };
         const heading=(title,kicker)=>{
-            ensure(17);if(kicker){font(7.2,true,T.gold);doc.text(kicker.toUpperCase(),T.margin,y);y+=5;}
-            font(13,true);doc.text(title,T.margin,y);y+=8;
+            font(13,true);const lines=doc.splitTextToSize(String(title),W);ensure(lines.length*6+12+(kicker?5:0));if(kicker){font(7.2,true,T.gold);doc.text(kicker.toUpperCase(),T.margin,y);y+=5;}
+            for(const line of lines){ensure(6);font(13,true);doc.text(line,T.margin,y);y+=6;}y+=2;
         };
         const metric=(x,label,value,width,height=21)=>{
             doc.setFillColor(...T.paper);doc.roundedRect(x,y,width,height,2,2,'F');
@@ -38,7 +38,7 @@ window.ReportPdf = {
         metric(T.margin+(card+gap)*2,'Pontos de atenção',r.criticalCount,card);
         metric(T.margin+(card+gap)*3,'Competências',r.competencias.length,card);
         y+=30;heading('Resumo executivo','Visão de gestão');
-        paragraph(`Cobertura: ${r.indicators.length} de ${r.selectedCount} indicadores selecionados. Setor: ${r.sector==='TODOS'?'todos os setores':r.sector??'selecionado'}. IA ${r.aiUsed?'utilizada como apoio interpretativo':'não utilizada; análise determinística'}.`);
+        paragraph(`Cobertura: ${r.indicators.length} de ${r.selectedCount} indicadores selecionados. Setor: ${r.sector==='TODOS'?'todos os setores':r.sector??'selecionado'}.`);
         const critical=r.indicators.filter(i=>i.critical);
         if(critical.length){font(8,true,T.ink);doc.text('PRINCIPAIS PONTOS DE ATENÇÃO',T.margin,y);y+=5;critical.slice(0,3).forEach(i=>paragraph(`${i.indicador}: ${i.criticalReason}.`,8.5,T.ink));if(critical.length>3)paragraph(`Outros ${critical.length-3} indicadores com atenção estão detalhados a seguir.`,8);}
         else paragraph('Nenhum ponto de atenção pelos critérios de meta e direção configurados. Isso não comprova ausência de risco operacional.',8.5);
@@ -51,7 +51,10 @@ window.ReportPdf = {
             paragraph(focus.indicador,9,T.ink);
             doc.addImage(images[focusIndex],'PNG',T.margin,y,W,65);y+=71;executiveFocus=focusIndex;
         }
-        if(r.interpretation){heading('Interpretação gerencial','Apoio à decisão');paragraph(r.interpretation,9,T.ink);}
+        if(r.interpretation&&!r.management){heading('Interpretação gerencial','Apoio à decisão');paragraph(r.interpretation,9,T.ink);}
+        const sections=window.ReportContent?.sections(r)??{diagnosis:[],final:[]};
+        const diagnosisTotal=sections.diagnosis.reduce((n,s)=>n+s.blocks.length,0);let diagnosed=0;
+        for(const section of sections.diagnosis){heading(section.title,'Apoio à decisão');for(const block of section.blocks){heading(block.title);block.lines.forEach(line=>paragraph(line,8.5));yield {stage:'diagnosis',processed:++diagnosed,total:diagnosisTotal};}}
         for(const [n,i] of r.indicators.entries()){
             // Mantém título, metadados, métricas e início do gráfico/tabela juntos.
             const showChart=Boolean(images[n]&&n!==executiveFocus);
@@ -76,6 +79,12 @@ window.ReportPdf = {
                 rowPageBreak:'avoid',showHead:'everyPage'});
             y=doc.lastAutoTable.finalY+9;
             yield {stage:'compose',processed:n+1,total:r.indicators.length};
+        }
+        const totalBlocks=sections.final.reduce((n,s)=>n+s.blocks.length,0);let completedBlocks=0;
+        for(const section of sections.final){
+            heading(section.title,'Gestão preventiva');
+            if(!section.blocks.length)paragraph('Não há propostas específicas para este recorte; verifique as limitações e os critérios de seleção.',8.5);
+            for(const block of section.blocks){heading(block.title);block.lines.forEach(line=>paragraph(line,8.5,T.ink));yield {stage:'management',processed:++completedBlocks,total:totalBlocks};}
         }
         ensure(46);heading('Metodologia e limitações','Rastreabilidade');
         r.limitations.forEach(l=>paragraph(l,8));

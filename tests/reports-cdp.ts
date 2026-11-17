@@ -11,7 +11,7 @@ try {
     ws.onmessage=e=>{const m=JSON.parse(e.data);if(waiting.has(m.id)){const {resolve,reject}=waiting.get(m.id);waiting.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}};
     const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;waiting.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});
     const extra=await Deno.readTextFile(new URL('tests/workspace-v3-browser.js',root));
-    const cases=Deno.args.includes('--v3')||Deno.args.includes('--pending')?[["320",320,1000,'dark'],['360',360,1000,'light'],['mobile',390,1000,'light'],['768',768,1100,'dark'],['1024',1024,1100,'light'],['desktop',1440,1100,'dark'],['1920',1920,1100,'light']]:[['desktop',1440,1100,'dark'],['mobile',390,1000,'light']];
+    const cases=Deno.args.includes('--v3')||Deno.args.includes('--pending')||Deno.args.includes('--reports-v4')?[["320",320,1000,'dark'],['360',360,1000,'light'],['mobile',390,1000,'light'],['768',768,1100,'dark'],['1024',1024,1100,'light'],['desktop',1440,1100,'dark'],['1920',1920,1100,'light']]:[['desktop',1440,1100,'dark'],['mobile',390,1000,'light']];
     for(const [name,width,height,theme] of cases){
         const {targetId}=await call('Target.createTarget',{url:'about:blank'});
         const {sessionId}=await call('Target.attachToTarget',{targetId,flatten:true});
@@ -23,6 +23,12 @@ try {
             status=r.result.value;if(status.startsWith('PASS')||status.startsWith('FAIL'))break;await new Promise(r=>setTimeout(r,100));
         }
         if(!status.startsWith('PASS'))throw Error(name+': '+status);
+        if(Deno.args.includes('--reports-v4')){
+            const v4=await call('Runtime.evaluate',{expression:(await Deno.readTextFile(new URL('tests/reports-v4-browser.js',root)))+'\nrunReportV4Checks()',awaitPromise:true,returnByValue:true},sessionId);
+            if(v4.exceptionDetails)throw Error(JSON.stringify(v4.exceptionDetails));console.log(name,v4.result.value);
+            await new Promise(r=>setTimeout(r,250));
+            const shot=await call('Page.captureScreenshot',{format:'png'},sessionId);await Deno.writeFile(new URL(`.validation-tools/reports-v4-${name}.png`,root),Uint8Array.from(atob(shot.data),c=>c.charCodeAt(0)));
+        }
         if(Deno.args.includes('--pending')){
             const pending=await call('Runtime.evaluate',{expression:(await Deno.readTextFile(new URL('tests/pending-browser.js',root)))+'\nrunPendingChecks()',awaitPromise:true,returnByValue:true},sessionId);
             if(pending.exceptionDetails)throw Error(JSON.stringify(pending.exceptionDetails));console.log(name,pending.result.value);

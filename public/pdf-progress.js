@@ -15,7 +15,7 @@ window.PdfProgress={
         if(percent===null){bar.removeAttribute('value');bar.removeAttribute('aria-valuenow');}
         else{this.value=Math.max(this.value,Math.min(100,percent));bar.value=this.value;bar.setAttribute('aria-valuenow',String(Math.round(this.value)));}
         this.dialog.querySelector('#pdfProgressStage').textContent=stage;
-        const unit=stage.startsWith('Finalizando')?'páginas':stage.startsWith('Preparando gráficos')?'gráficos':'indicadores';
+        const unit=stage.startsWith('Finalizando')?'páginas':stage.startsWith('Preparando gráficos')?'gráficos':stage.startsWith('Diagramando')?'blocos de propostas':stage.startsWith('Preparando diagnóstico')?'blocos de diagnóstico':'indicadores';
         this.dialog.querySelector('#pdfProgressCount').textContent=total?`${processed} de ${total} ${unit} processados`:percent===null?'Esta etapa não tem percentual mensurável.':'';
         const event={stage,percent:percent===null?null:this.value,processed,total};this.history.push(event);window.dispatchEvent(new CustomEvent('pdf-progress',{detail:event}));
     },

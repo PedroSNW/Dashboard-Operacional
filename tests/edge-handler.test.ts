@@ -8,6 +8,7 @@ let authDenied = false, readDenied = false, providerStatus = 200;
 let captured: any;
 let timeout = false, invalidJson = false;
 let finishReason = 'stop';
+let modelOutput: string|null=null;
 let calls = 0;
 const logs: string[] = [];
 const realError = console.error;
@@ -35,7 +36,7 @@ globalThis.fetch = async (input, init) => {
     captured = JSON.parse(String(init?.body));
     const url = String(input);
     assert(/api.groq.com|api.openai.com|generativelanguage.googleapis.com/.test(url), 'Destino inesperado');
-    const structured=JSON.stringify({resumo:[{id:'indice:0',stat:'media',competencia:''}],fatos:[],atencao:[],hipoteses:[],recomendacoes:['investigar_registros'],limitacoes:[]});
+    const structured=modelOutput??JSON.stringify({resumo:[{id:'indice:0',stat:'media',competencia:''}],fatos:[],atencao:[],hipoteses:[],recomendacoes:['investigar_registros'],limitacoes:[]});
     const data = url.includes('groq') ? {choices:[{finish_reason:finishReason,message:{content:finishReason==='length'?'':structured}}]} : url.includes('openai') ? {output_text:structured} : {candidates:[{content:{parts:[{text:structured}]}}]};
     return Response.json(providerStatus === 200 ? data : {error:{code:'rate_limit_exceeded',message: providerStatus===400 ? 'context length exceeded SECRET_SENTINEL' : 'tokens per minute SECRET_SENTINEL'}},{status:providerStatus,headers:{'retry-after':'30','x-request-id':'req-test'}});
 };
@@ -103,6 +104,21 @@ try {
         assert(res.status===200 && body.response.includes('26') && !body.technicalDetails.includes('Fev:'),'IA fora do período do relatório');
         res=await handler(request({action:'report',selection,interpret:true,provider:'groq',expectedUpdatedAt:'versao-obsoleta'}));assert(res.status===409,'Snapshot alterado não detectado');
         readDenied=true;res=await handler(request({action:'report',selection}));assert(res.status===403,'RLS relatório');readDenied=false;
+    });
+    await test('Relatórios V4: três provedores, referências, orçamento, formato inválido e limite de saída',async()=>{
+        const selection={type:'comparativo',sector:'TODOS',ids:['indice:0'],start:'Jan',end:'Set'};
+        const base=await(await handler(request({action:'report',selection}))).json();
+        modelOutput=JSON.stringify({executiveDiagnosis:[{indicatorId:'indice:0',stat:'ultimo'}],priorityRisks:[{indicatorId:'indice:0'}],actionPlan:[{indicatorId:'indice:0',strategy:'defensiva'}],campaignSuggestions:[{indicatorId:'indice:0',strategy:'distracao'}],communicationSuggestions:[{indicatorId:'indice:0',strategy:'distracao',channel:'stories',format:'cards'}],limitations:['causalidade']});
+        for(const provider of ['groq','openai','gemini']){
+            const before=calls,res=await handler(request({action:'report',selection,interpret:true,provider,expectedReportBasis:base.report.basis})),body=await res.json();
+            assert(res.status===200&&calls===before+1&&body.management.audit.structured&&body.reportBasis===base.report.basis,'V4 provedor '+provider);
+            assert(body.management.actionPlan[0].evidence[0].text.includes('40')&&body.meta.reportVersion===4,'Evidência/referência');
+            if(provider==='groq')assert(new TextEncoder().encode(JSON.stringify(captured)).length<=6000&&captured.max_completion_tokens===1200,'Orçamento Groq');
+        }
+        assert((await handler(request({action:'report',selection,interpret:true,expectedReportBasis:'obsoleto'}))).status===409,'Basis obsoleta aceita');
+        modelOutput='{';let res=await handler(request({action:'report',selection,interpret:true,provider:'groq'})),body=await res.json();assert(res.status===200&&body.management.audit.fallback,'JSON inválido');
+        finishReason='length';res=await handler(request({action:'report',selection,interpret:true,provider:'groq'}));body=await res.json();assert(body.management.audit.fallback&&body.meta.finishReason==='length','Saída truncada');finishReason='stop';modelOutput=null;
+        timeout=true;assert((await handler(request({action:'report',selection,interpret:true,provider:'groq'}))).status===504,'Timeout V4');timeout=false;
     });
     await test('Pergunta simples sem chamada; limite de saída retorna síntese segura',async()=>{
         let before=calls;
