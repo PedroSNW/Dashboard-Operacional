@@ -1,7 +1,7 @@
 // Chrome isolado + CDP, sem bibliotecas de automação ou dados de produção.
 const root=new URL('../',import.meta.url);
 const profile=new URL('.validation-tools/report-cdp-profile',root).pathname.replace(/^\/([A-Za-z]:)/,'$1');
-const child=new Deno.Command('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',{args:['--headless','--disable-gpu','--no-first-run','--disable-extensions','--disable-background-networking','--remote-debugging-port=9337',`--user-data-dir=${decodeURIComponent(profile)}`],stdout:'null',stderr:'null'}).spawn();
+const child=new Deno.Command('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',{args:['--headless','--disable-gpu','--no-first-run','--disable-extensions','--disable-background-networking','--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--remote-debugging-port=9337',`--user-data-dir=${decodeURIComponent(profile)}`],stdout:'null',stderr:'null'}).spawn();
 let ws;
 try {
     let version;for(let n=0;n<30;n++){try{version=await (await fetch('http://127.0.0.1:9337/json/version')).json();break;}catch{await new Promise(r=>setTimeout(r,100));}}
@@ -17,6 +17,7 @@ try {
         const {sessionId}=await call('Target.attachToTarget',{targetId,flatten:true});
         await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<500},sessionId);
         await call('Page.enable',{},sessionId);
+        await call('Page.bringToFront',{},sessionId);
         await call('Page.navigate',{url:new URL('.validation-tools/reports-browser.html',root).href+'#'+theme},sessionId);
         let status='';for(let n=0;n<100;n++){
             const r=await call('Runtime.evaluate',{expression:'document.getElementById("report-validation")?.textContent ?? ""',returnByValue:true},sessionId);

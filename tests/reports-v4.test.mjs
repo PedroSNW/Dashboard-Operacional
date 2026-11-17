@@ -37,7 +37,7 @@ assert(JSON.parse(compact.messages[1].content).partial&&buildReportManagement(lo
 const m={exports:{}};new Function('module','exports',readFileSync('public/vendor/jspdf-4.2.1.umd.min.js','utf8'))(m,m.exports);const table={exports:{}};new Function('module','exports','require',readFileSync('public/vendor/jspdf-autotable-5.0.8.min.js','utf8'))(table,table.exports,()=>m.exports);table.exports.applyPlugin(m.exports.jsPDF);window.jspdf=m.exports;
 new Function('window',readFileSync('public/report-pdf.js','utf8'))(window);
 const sections=window.ReportContent.sections({...report,management});assert(sections.final.some(s=>s.title.includes('PLANO DE AÇÃO'))&&sections.final.some(s=>s.title.includes('Comunicação')),'Seções compartilhadas');
-const doc=window.ReportPdf.build(long);assert(doc.getNumberOfPages()>40,'PDF dezenas de indicadores não exercitado');
+const doc=window.ReportPdf.build(long);assert(doc.getNumberOfPages()>1&&doc.reportLayout.coverage.length===40&&doc.reportLayout.coverage.every(c=>c.months===12),'PDF dezenas de indicadores não exercitado integralmente');
 writeFileSync('.validation-tools/report-v4-dozens.pdf',new Uint8Array(doc.output('arraybuffer')));
 const expanded=clone(report);expanded.management=management;expanded.management.actionPlan[0].actions=Array(60).fill('AÇÃO EXTENSA: avaliar procedimentos sem atribuir causas, preservar revisões e acompanhar a qualidade dos registros.').concat('MARCADOR FINAL DA TRATATIVA');
 const events=[];const extended=await window.ReportPdf.buildAsync(expanded,[],e=>events.push(e),()=>Promise.resolve());

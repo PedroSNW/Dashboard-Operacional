@@ -103,7 +103,24 @@ function renderManagementReportDetails() {
         if(!section.blocks.length)area.append(reportNode('p','Não há propostas específicas para este recorte. Consulte os critérios e as limitações.','text-sm'));
         preview.append(area);
     });
-    renderSections(sections.diagnosis);
+    const editorial=window.ReportContent.editorial(r);
+    const section=(title,lines)=>{preview.append(reportNode('h3',title,'font-bold text-lg'));lines.forEach(line=>preview.append(reportNode('p',line,'text-sm')));};
+    section('1 Resumo executivo',editorial.summary);
+    section('2 Panorama de desempenho',['Todos os resultados por indicador constam dos apêndices abaixo, com unidade, competência, meta e direção.']);
+    const overview=document.createElement('table');overview.className='w-full text-sm';
+    const overviewHead=document.createElement('thead'),overviewHeader=document.createElement('tr');
+    ['Indicador / setor / unidade','Recente / competência','Meta / direção','Variação %','Situação'].forEach(label=>{const th=reportNode('th',label,'p-2 text-left');th.scope='col';overviewHeader.append(th);});overviewHead.append(overviewHeader);overview.append(overviewHead);
+    const overviewBody=document.createElement('tbody');window.ReportContent.panorama(r,reportValue).forEach(values=>{const row=document.createElement('tr');values.forEach(value=>row.append(reportNode('td',value,'p-2 border-b border-slate-700')));overviewBody.append(row);});overview.append(overviewBody);
+    const overviewScroll=reportNode('div','','overflow-x-auto');overviewScroll.tabIndex=0;overviewScroll.setAttribute('role','region');overviewScroll.setAttribute('aria-label','Panorama de desempenho; role horizontalmente para ver todas as colunas');overviewScroll.append(overview);preview.append(overviewScroll);
+    section('3 Análise dos indicadores prioritários',[editorial.selection]);
+    renderSections([{title:'Resultados prioritários',blocks:sections.diagnosis[0]?.blocks.filter((b,index)=>editorial.priority.some(i=>i.id===editorial.management?.executiveDiagnosis[index]?.indicatorId))??[]}]);
+    section('4 Riscos e oportunidades de melhoria',['Pontos de atenção por meta/direção; evidências completas nos apêndices.']);
+    renderSections([{title:'Riscos prioritários',blocks:sections.diagnosis[1]?.blocks.filter((b,index)=>editorial.priority.some(i=>i.id===editorial.management?.priorityRisks[index]?.indicatorId))??[]}]);
+    section('5 Plano de ação e recomendações preventivas',['Propostas para avaliação. Responsáveis e prazos dependem de aprovação.']);
+    renderSections(sections.final.slice(1));
+    section('6 Conclusão executiva',['Priorizar a revisão das evidências dos '+r.criticalCount+' indicadores com atenção e pactuar o acompanhamento das iniciativas propostas.']);
+    section('7 Metodologia e limitações',editorial.limitations);
+    section('Apêndices técnicos — cadastro, estatísticas e histórico completo',['Todos os indicadores do recorte permanecem disponíveis abaixo e no PDF, inclusive quando a prévia está recolhida.']);
     if(!r.indicators.length)preview.append(reportNode('p','Nenhum indicador corresponde aos critérios críticos no período.'));
     r.indicators.forEach(i=>{
         const card=reportNode('article','','glass-card rounded-2xl border border-slate-700 p-5 space-y-3');
@@ -118,7 +135,8 @@ function renderManagementReportDetails() {
         const light=document.body.classList.contains('light-theme');
         managementCharts.push(new Chart(canvas,{type:'line',data:{labels:r.competencias,datasets:[{label:i.unidade??'Valor',data:i.valores,borderColor:'#d38b00',backgroundColor:'#d38b0022',spanGaps:false,tension:0.15,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:light?'#334155':'#cbd5e1'}},y:{ticks:{color:light?'#334155':'#cbd5e1'}}}}}));
     });
-    renderSections(sections.final);
+    renderSections(sections.diagnosis);
+    renderSections(sections.final.slice(0,1));
     preview.append(reportNode('h3','Metodologia e limitações','font-bold'),reportNode('p',r.limitations.join(' '),'text-xs text-slate-400'));
 }
 async function generateManagementReport() {
@@ -150,7 +168,7 @@ async function interpretManagementReport() {
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=4');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=5');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
@@ -171,11 +189,13 @@ async function exportManagementReport(){
             PdfProgress.update('Preparando gráficos',10+35*(n+1)/Math.max(1,charts.length),n+1,charts.length);await reportPaint();
         }
         PdfProgress.update('Compondo páginas do PDF',45,0,report.indicators.length);await reportPaint();
+        let logo=null;const loadedLogo=document.getElementById('dashboardLogo');
+        if(loadedLogo?.complete&&loadedLogo.naturalWidth){try{const c=document.createElement('canvas');c.width=c.height=128;c.getContext('2d').drawImage(loadedLogo,0,0,128,128);logo=c.toDataURL('image/png');}catch{/* Imagem sem CORS: usar assinatura textual. */}}
         const doc=await window.ReportPdf.buildAsync(report,images,event=>{
             const fraction=event.processed/Math.max(1,event.total);
-            const stage={diagnosis:['Preparando diagnóstico',45,7],compose:['Compondo páginas do PDF',52,26],management:['Diagramando plano de ação',78,10],finalize:['Finalizando páginas',88,6]}[event.stage];
+            const stage={diagnosis:['Preparando diagnóstico',45,7],compose:['Compondo páginas do PDF',52,26],figures:['Preparando gráficos complementares',78,6],management:['Diagramando plano de ação',84,6],finalize:['Finalizando páginas',90,4]}[event.stage];
             PdfProgress.update(stage[0],stage[1]+stage[2]*fraction,event.processed,event.total);
-        },reportPaint);
+        },reportPaint,{logo});
         PdfProgress.update('Finalizando o documento — serialização local',null);await reportPaint();
         const blob=doc.output('blob');
         if(!(blob instanceof Blob)||!blob.size)throw Error('O documento gerado está vazio.');
@@ -188,7 +208,7 @@ async function exportManagementReport(){
 }
 function managementChartImages(charts=managementReport?.indicators.map(i=>managementChartSource(i))??[]){return charts.map(chart=>{
     const canvas=document.createElement('canvas');canvas.width=1400;canvas.height=500;
-    const renderer=new Chart(canvas,{type:'line',data:{labels:[...chart.data.labels],datasets:chart.data.datasets.map(d=>({...d,data:[...d.data],pointRadius:3,borderWidth:2}))},options:{responsive:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:'#334155',font:{size:16},maxTicksLimit:12,maxRotation:0}},y:{ticks:{color:'#334155',font:{size:16}}}}}});
+    const renderer=new Chart(canvas,{type:'line',data:{labels:[...chart.data.labels],datasets:chart.data.datasets.map(d=>({...d,data:[...d.data],pointRadius:3,borderWidth:2}))},options:{responsive:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:'#334155',font:{size:28},maxTicksLimit:12,maxRotation:0}},y:{ticks:{color:'#334155',font:{size:28}}}}}});
     try {
         const image=document.createElement('canvas');image.width=canvas.width;image.height=canvas.height;
         const ctx=image.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,image.width,image.height);ctx.drawImage(canvas,0,0);

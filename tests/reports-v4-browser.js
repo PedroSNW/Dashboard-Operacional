@@ -2,7 +2,7 @@ async function runReportV4Checks(){
     const assert=(v,m)=>{if(!v)throw Error(m);},clone=v=>JSON.parse(JSON.stringify(v));
     const state=PendingState.stable(projectPersistedState()),revision=stateRevision,source=managementReport,numbers=JSON.stringify(source.indicators),originalFetch=window.fetch;
     source.basis='mock-v4-basis';const base=clone(source.management);let calls=0,mode='valid';
-    assert(ReportContent.valid(base,source)&&document.querySelectorAll('.report-management-section').length===5,'Prévia inicial V4');
+    assert(ReportContent.valid(base,source)&&document.querySelectorAll('.report-management-section').length>=5&&document.getElementById('reportPreviewDetails').textContent.includes('1 Resumo executivo'),'Prévia inicial V5 / conteúdo V4');
     assert(base.actionPlan.length&&base.campaignSuggestions.length&&base.communicationSuggestions.length,'Propostas iniciais pertinentes');
     assert(!/IA utilizada|IA não utilizada|análise determinística|utilizada como apoio interpretativo/i.test(document.getElementById('reportPreview').textContent),'Indicação visual de execução');
     window.fetch=async(url,options)=>{
@@ -21,10 +21,18 @@ async function runReportV4Checks(){
         const before=calls,loaded=supabaseStateLoaded;supabaseStateLoaded=false;await interpretManagementReport();supabaseStateLoaded=loaded;assert(calls===before,'Consulta sem leitura validada');
         assert(JSON.stringify(source.indicators)===numbers&&PendingState.stable(projectPersistedState())===state&&stateRevision===revision&&!hasUnsavedChanges,'Relatório alterou estado persistido ou cálculos');
         source.management=base;renderManagementReport();
+        setManagementPreviewExpanded(true);
+        // Mesmo nome em setores diferentes não deve incluir um ID fora da seleção editorial.
+        const omitted=source.indicators.find(i=>!ReportContent.editorial(source).priority.includes(i));
+        if(omitted){const diagnosis=base.executiveDiagnosis.find(d=>d.indicatorId===omitted.id),oldName=omitted.indicador,oldTitle=diagnosis?.title;
+            try{omitted.indicador=source.indicators[0].indicador;if(diagnosis)diagnosis.title=omitted.indicador;renderManagementReport(true);
+                const priorityArea=[...document.querySelectorAll('.report-management-section')].find(s=>s.querySelector('h3').textContent==='Resultados prioritários');assert(priorityArea.querySelectorAll('article').length===ReportContent.editorial(source).priority.length,'Nomes repetidos ampliaram a seleção prioritária');
+            }finally{omitted.indicador=oldName;if(diagnosis)diagnosis.title=oldTitle;renderManagementReport(true);}
+        }
         const content=ReportContent.sections(source),pdf=buildManagementPdf(source);
         assert(content.final[1].blocks.length===base.actionPlan.length&&pdf.getNumberOfPages()>=3,'Prévia e PDF não compartilham conteúdo');
         assert(calls===before,'PDF disparou consulta');
-        const plan=document.querySelectorAll('.report-management-section')[3];plan.scrollIntoView({block:'start'});window.scrollBy(0,-100);
+        const plan=[...document.querySelectorAll('.report-management-section')].find(s=>s.querySelector('h3').textContent.includes('PLANO DE AÇÃO'));plan.scrollIntoView({block:'start'});window.scrollBy(0,-100);
         return 'PASS V4 prévia/plano/campanhas, contrato válido/inválido, fallback preservado, HTML como texto, sem consulta redundante/exportação, números e estado intactos';
     }finally{window.fetch=originalFetch;}
 }

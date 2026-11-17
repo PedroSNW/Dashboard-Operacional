@@ -15,13 +15,15 @@ async function runReportV41Checks(fixtures){
         assert(Boolean(document.getElementById('reportActions').compareDocumentPosition(document.getElementById('reportPreview'))&Node.DOCUMENT_POSITION_FOLLOWING),'Ações depois da prévia');
         assert(document.querySelectorAll('#reportAI').length===1&&document.querySelectorAll('#reportExport').length===1,'Barra duplicada');
         document.getElementById('reportPreviewToggle').click();assert(managementCharts.length===n&&!document.getElementById('reportPreviewDetails').hidden,'Expansão '+n);
+        const titles=[...document.querySelectorAll('#reportPreviewDetails h3')].map(h=>h.textContent);for(let section=1;section<=7;section++)assert(titles.some(t=>t.startsWith(section+' ')),'Seção editorial ausente '+section);
         document.getElementById('reportPreviewToggle').click();assert(managementCharts.length===0&&document.getElementById('reportPreviewDetails').hidden,'Recolhimento/limpeza');
         loadReportPdfLibraries=async()=>{};reportDownloadBlob=blob=>{assert(blob.size>0,'PDF vazio');downloads++;};
         managementChartImages=charts=>{assert(charts[0].data.labels.length===12&&charts[0].data.datasets[0].data.length===12,'Série incompleta no PDF');imageCount+=charts.length;return oldImages(charts);};
-        ReportPdf.buildAsync=async function(report,images,...args){assert(images.length===n&&JSON.stringify(report.indicators)===JSON.stringify(source.indicators),'Conteúdo/PDF diferente');const doc=await oldBuild.call(this,report,images,...args);pdfCount++;return doc;};
+        ReportPdf.buildAsync=async function(report,images,...args){assert(images.length===n&&JSON.stringify(report.indicators)===JSON.stringify(source.indicators),'Conteúdo/PDF diferente');const doc=await oldBuild.call(this,report,images,...args);assert(doc.reportLayout.figures.length===n&&new Set(doc.reportLayout.figures.map(f=>f.id)).size===n,'Gráficos omitidos ou duplicados no PDF');if(window.__captureV5){window.__v5samples??={};window.__v5samples[n]=doc.output('datauristring').split(',')[1];}pdfCount++;return doc;};
         await Promise.all([exportManagementReport(),exportManagementReport()]);
         assert(downloads===1&&pdfCount===1&&imageCount===n&&calls===1&&managementCharts.length===0,'Exportação recolhida/duplicada/consulta automática '+n);
         assert(PdfProgress.history.some(e=>e.stage==='Preparando gráficos'&&e.processed===n)&&PdfProgress.history.at(-1).percent===100,'Progresso real '+n);PdfProgress.dialog.close();
+        const complements=n-ReportContent.editorial(source).priority.length;if(complements)assert(PdfProgress.history.some(e=>e.stage==='Preparando gráficos complementares'&&e.processed===complements&&e.total===complements),'Progresso dos gráficos complementares '+n);
         await interpretManagementReport();assert(calls===2&&document.getElementById('reportPreviewDetails').hidden&&managementCharts.length===0,'Groq expandiu prévia');
         assert(JSON.stringify(ReportContent.sections(source))===content,'Conteúdo V4 alterado');
         await interpretManagementReport();assert(calls===2,'Groq redundante');
