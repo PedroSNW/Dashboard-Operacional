@@ -101,7 +101,7 @@ async function runAuditTests(front, back, Encoder) {
             // Os blocos internos terminam com seis espaços.
             const end = back.indexOf('\n      };', start);
             const source = name === 'gemini' ? snippet : back.slice(start, end + 9);
-            const payload = new Function('EFFECTIVE_SYSTEM_INSTRUCTION','MODEL_USER_INPUT','compact','GROQ_OUTPUT_BUDGET','requestedReport',`${source}\nreturn ${name}Payload;`.replaceAll(`${name}Model`, "'modelo-mock'"))(built.system,built.user,{messages:[{role:'system',content:built.system},{role:'user',content:built.user}]},1200,null);
+            const payload = new Function('EFFECTIVE_SYSTEM_INSTRUCTION','MODEL_USER_INPUT','compact','GROQ_OUTPUT_BUDGET','requestedReport','profile',`${source}\nreturn ${name}Payload;`.replaceAll(`${name}Model`, "'modelo-mock'"))(built.system,built.user,{messages:[{role:'system',content:built.system},{role:'user',content:built.user}]},1200,null,{maxCompletionTokens:1200,reasoningEffort:null});
             const text = name === 'groq' ? payload.messages[1].content : name === 'openai' ? payload.input : payload.contents[0].parts[0].text;
             assert(text.includes(verified), `${name} perdeu contexto`);
             const system = name === 'groq' ? payload.messages[0].content : name === 'openai' ? payload.instructions : payload.systemInstruction.parts[0].text;

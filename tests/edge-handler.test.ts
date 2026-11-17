@@ -11,7 +11,10 @@ let finishReason = 'stop';
 let modelOutput: string|null=null;
 let calls = 0;
 const logs: string[] = [];
-const realError = console.error;
+const realError = console.error,realInfo=console.info,realNow=Date.now;
+let testTime=realNow(),keepTime=false,fixedUserId:string|null=null,usage:any=undefined,holdProvider:Promise<void>|null=null,providerStarted=false;
+Date.now=()=>testTime;
+console.info=(...args)=>{logs.push(JSON.stringify(args));};
 console.error = (...args) => { logs.push(JSON.stringify(args)); };
 let reads = 0;
 const indicator = { indicador: 'Total de acidentes', setor: 'Sinistros', meta: 30, und: 'Qtd', direcaoDesempenho: 'menor_melhor', valores: [26,33,38,49,32,38,43,46,40] };
@@ -26,18 +29,18 @@ g.__edgeServe = (fn: typeof handler) => {handler=fn;};
 g.__edgeClient = (_url: string, _key: string, options: any) => {
     assert(options.global.headers.Authorization === 'Bearer mock-jwt', 'JWT não propagado ao cliente RLS');
     const query = {select:()=>query, eq:()=>query, single:async()=>{reads++; return readDenied ? {data:null,error:{}} : {data:{data:{indicadores:[indicator],mesesLabels:months}},error:null};}};
-    return {auth:{getUser:async()=>({data:{user:authDenied?null:{id:crypto.randomUUID(),email:'teste@dgranel.com.br'}},error:null})},from:(table:string)=>{assert(table==='dashboard_state','Tabela inesperada');return query;}};
+    return {auth:{getUser:async()=>({data:{user:authDenied?null:{id:fixedUserId??crypto.randomUUID(),email:'teste@dgranel.com.br'}},error:null})},from:(table:string)=>{assert(table==='dashboard_state','Tabela inesperada');return query;}};
 };
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
-    calls++;
+    calls++;if(holdProvider){providerStarted=true;await holdProvider;}
     if (timeout) throw new DOMException('mock timeout', 'AbortError');
     if (invalidJson) return new Response('invalid-json');
     captured = JSON.parse(String(init?.body));
     const url = String(input);
     assert(/api.groq.com|api.openai.com|generativelanguage.googleapis.com/.test(url), 'Destino inesperado');
     const structured=modelOutput??JSON.stringify({resumo:[{id:'indice:0',stat:'media',competencia:''}],fatos:[],atencao:[],hipoteses:[],recomendacoes:['investigar_registros'],limitacoes:[]});
-    const data = url.includes('groq') ? {choices:[{finish_reason:finishReason,message:{content:finishReason==='length'?'':structured}}]} : url.includes('openai') ? {output_text:structured} : {candidates:[{content:{parts:[{text:structured}]}}]};
+    const data = url.includes('groq') ? {usage,choices:[{finish_reason:finishReason,message:{content:finishReason==='length'?'':structured,reasoning:'SECRET_REASONING'}}]} : url.includes('openai') ? {output_text:structured} : {candidates:[{content:{parts:[{text:structured}]}}]};
     return Response.json(providerStatus === 200 ? data : {error:{code:'rate_limit_exceeded',message: providerStatus===400 ? 'context length exceeded SECRET_SENTINEL' : 'tokens per minute SECRET_SENTINEL'}},{status:providerStatus,headers:{'retry-after':'30','x-request-id':'req-test'}});
 };
 const generated = new URL('.validation-tools/edge-handler.fixture.ts',root);
@@ -45,10 +48,11 @@ const source = original.replace(/^import \{ serve \}.*;$/m,'const serve = (globa
     .replace(/^import \{ createClient \}.*;$/m,'const createClient = (globalThis as any).__edgeClient;')
     .replace('"./analytics.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/analytics.js',root).href))
     .replace('"./groq-context.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/groq-context.js',root).href))
+    .replace('"./groq-policy.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/groq-policy.js',root).href))
     .replace('"./reports.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/reports.js',root).href));
 await Deno.writeTextFile(generated,source);
 await import(generated.href);
-const request = (body: unknown, headers: Record<string,string> = {}) => new Request('https://edge.test', {method:'POST',headers:{Origin:'https://dashboard.test',Authorization:'Bearer mock-jwt','Content-Type':'application/json',...headers},body:JSON.stringify(body)});
+const request = (body: unknown, headers: Record<string,string> = {}) => {if(!keepTime)testTime+=360000;return new Request('https://edge.test', {method:'POST',headers:{Origin:'https://dashboard.test',Authorization:'Bearer mock-jwt','Content-Type':'application/json',...headers},body:JSON.stringify(body)});};
 let passed = 0;
 async function test(name: string, fn:()=>Promise<void>) {await fn();passed++;console.log('PASS',name);}
 try {
@@ -113,7 +117,7 @@ try {
             const before=calls,res=await handler(request({action:'report',selection,interpret:true,provider,expectedReportBasis:base.report.basis})),body=await res.json();
             assert(res.status===200&&calls===before+1&&body.management.audit.structured&&body.reportBasis===base.report.basis,'V4 provedor '+provider);
             assert(body.management.actionPlan[0].evidence[0].text.includes('40')&&body.meta.reportVersion===4,'Evidência/referência');
-            if(provider==='groq')assert(new TextEncoder().encode(JSON.stringify(captured)).length<=6000&&captured.max_completion_tokens===1200,'Orçamento Groq');
+            if(provider==='groq')assert(new TextEncoder().encode(JSON.stringify(captured)).length<=6000&&captured.max_completion_tokens===2048&&captured.reasoning_effort==='medium','Orçamento Groq');
         }
         assert((await handler(request({action:'report',selection,interpret:true,expectedReportBasis:'obsoleto'}))).status===409,'Basis obsoleta aceita');
         modelOutput='{';let res=await handler(request({action:'report',selection,interpret:true,provider:'groq'})),body=await res.json();assert(res.status===200&&body.management.audit.fallback,'JSON inválido');
@@ -148,19 +152,44 @@ try {
         invalidJson=true;res=await handler(request({prompt:'Analise acidentes',context:context(),provider:'groq'}));
         assert(res.status===502,'Parsing');invalidJson=false;
     });
+    await test('V5.1 perfil, uso real simulado, cache autorizado e isolamento',async()=>{
+        testTime+=86400000;fixedUserId='fixture-user';usage={prompt_tokens:500,completion_tokens:600,total_tokens:1100,completion_tokens_details:{reasoning_tokens:200}};
+        modelOutput=JSON.stringify({executiveDiagnosis:[{indicatorId:'indice:0',stat:'evolucao'}],priorityRisks:[{indicatorId:'indice:0'}],actionPlan:[{indicatorId:'indice:0',strategy:'defensiva'}],campaignSuggestions:[],communicationSuggestions:[],limitations:['causalidade']});
+        const body={action:'report',selection:{type:'executivo',sector:'TODOS',ids:['indice:0'],start:'Jan',end:'Set'},interpret:true,provider:'groq'};
+        const before=calls,first=await(await handler(request(body))).json();
+        assert(first.success&&captured.max_completion_tokens===2048&&captured.reasoning_effort==='medium'&&first.meta.reasoningTokens===200&&first.meta.totalTokens===1100,'Perfil/uso');
+        assert(first.management.executiveDiagnosis[0].evidence[0].includes('variação absoluta'),'Referência ignorada');
+        keepTime=true;const cached=await(await handler(request(body))).json();assert(cached.meta.cacheHit&&cached.meta.currentRequestTokens===0&&calls===before+1,'Cache não evitou duplicata');
+        readDenied=true;assert((await handler(request(body))).status===403,'Cache contornou autorização');readDenied=false;
+        fixedUserId='other-fixture-user';const other=await(await handler(request(body))).json();assert(other.success&&!other.meta.cacheHit&&calls===before+2,'Cache compartilhado entre usuários');
+        keepTime=false;fixedUserId=null;usage=undefined;modelOutput=null;
+    });
+    await test('V5.1 impede análises Groq simultâneas sem repetir chamadas',async()=>{
+        testTime+=86400000;let release!:()=>void;holdProvider=new Promise(resolve=>release=resolve);providerStarted=false;
+        const body={prompt:'Analise acidentes',context:context(),provider:'groq'},before=calls;
+        const pending=handler(request(body));for(let n=0;!providerStarted&&n<100;n++)await new Promise(r=>setTimeout(r,1));assert(providerStarted,'Mock não iniciou');
+        keepTime=true;const blocked=await handler(request(body));assert(blocked.status===429&&calls===before+1,'Concorrência chegou à API');release();await pending;
+        holdProvider=null;keepTime=false;
+    });
+    await test('V5.1 uso ausente não vira zero e logs não recebem texto de raciocínio',async()=>{
+        finishReason='SECRET_SENTINEL';const result=await(await handler(request({prompt:'Analise acidentes',context:context(),provider:'groq'}))).json();finishReason='stop';
+        assert(result.meta.promptTokens===null&&result.meta.reasoningTokens===null&&result.meta.finishReason==='unknown','Uso/finish inventados');
+        assert(logs.some(l=>l.includes('"profile":"reports-v5.1"')&&l.includes('"reasoningTokens":200')),'Telemetria ausente');
+        assert(!logs.join('').includes('SECRET_SENTINEL')&&!logs.join('').includes('SECRET_REASONING')&&!logs.join('').includes('mock-jwt')&&!logs.join('').includes('Total de acidentes'),'Logs sensíveis');
+    });
     await test('Erro HTTP da Groq preserva resposta sanitizada, retry-after e cooldown',async()=>{
         providerStatus=429;
         const res=await handler(request({prompt:'Analise acidentes',context:context(),provider:'groq'}));
         const body=await res.json();
         assert(res.status===429 && body.success===false && body.error.includes('tokens') && body.retryAfter===30 && res.headers.get('Retry-After')==='30','Erro HTTP/retry');providerStatus=200;
         const before=calls;
-        assert((await handler(request({prompt:'Analise acidentes',context:context(),provider:'groq'}))).status===429 && calls===before,'Cooldown não respeitado');
+        keepTime=true;assert((await handler(request({prompt:'Analise acidentes',context:context(),provider:'groq'}))).status===429 && calls===before,'Cooldown não respeitado');keepTime=false;
         assert(!logs.join('').includes('SECRET_SENTINEL') && !logs.join('').includes('mock-jwt') && !logs.join('').includes('Total de acidentes'),'Vazamento nos logs');
     });
     console.log(`${passed} cenários do handler completo passaram, com mocks sem rede.`);
 } finally {
     globalThis.fetch=realFetch;
-    console.error=realError;
+    console.error=realError;console.info=realInfo;Date.now=realNow;
     for (const [key,value] of saved) {if(value===undefined) Deno.env.delete(key);else Deno.env.set(key,value);}
     delete g.__edgeServe;delete g.__edgeClient;
     await Deno.remove(generated);

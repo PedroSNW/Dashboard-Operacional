@@ -84,9 +84,12 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 1. Acesse o projeto no painel do Supabase.
 2. Navegue até **Edge Functions**.
 3. Selecione a função `seguranca-viaria-ia` (ou crie-a caso ainda não exista).
-4. Substitua o código pelo conteúdo de `supabase/functions/seguranca-viaria-ia/index.ts`.
-5. Salve e implante a função.
-6. Em **Edge Functions > Secrets**, cadastre os Secrets necessários:
-   - `GEMINI_API_KEY` (Gemini)
-   - `OPENAI_API_KEY` (OpenAI)
-   - `GROQ_API_KEY` (Groq — obtenha em console.groq.com)
+4. Envie o conjunto completo da pasta: `index.ts`, `analytics.js`, `groq-context.js`, **`groq-policy.js`**, `reports.js` e `report-management.js`, com esses nomes e no mesmo nível. Publicar apenas `index.ts` causa erro de módulo ausente.
+5. Revise a versão e publique manualmente somente quando autorizado. Preserve as opções de autenticação da implantação atual.
+6. Na atualização V5.1, mantenha os Secrets existentes; não é necessário criar ou alterar credenciais.
+
+### Relatórios V5.1
+
+Groq: `2048` tokens de conclusão e esforço `medium` nos modelos GPT-OSS; chat comum mantém `1200/low`. OpenAI/Gemini preservam seus parâmetros. Tetos, cache autorizado e controle de chamadas estão em `groq-policy.js`. O controle é por instância, não distribuído. A comparação real de qualidade ainda depende de homologação com a API.
+
+Auditoria, medições, testes e procedimento separado de publicação: [GROQ-V5-1-RELATORIOS.md](../../../GROQ-V5-1-RELATORIOS.md).

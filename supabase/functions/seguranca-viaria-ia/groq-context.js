@@ -62,7 +62,7 @@ export function compactGroqContext(context, prompt, budget = GROQ_INPUT_BUDGET, 
 export async function groqFailure(response) {
     let error={};try {error=(await response.json())?.error??{};}catch { /* HTTP continua sendo evidência mesmo sem JSON */ }
     const text=String(error.message??'').toLowerCase();
-    const category=response.status===429 ? /quota|billing|daily|per day/.test(text)?'quota':/token/.test(text)?'tokens':/request/.test(text)?'requests':'rate_limit'
+    const category=response.status===429 ? /quota|billing|daily|per day|\btpd\b|\brpd\b/.test(text)||error.code==='insufficient_quota'?'quota':/token/.test(text)?'tokens':/request/.test(text)?'requests':'rate_limit'
         : response.status===400 ? /context|token.*limit|too.*token/.test(text)?'context_limit':'invalid_request'
         : response.status===413?'payload_too_large': 'provider_error';
     const raw=response.headers.get('retry-after');

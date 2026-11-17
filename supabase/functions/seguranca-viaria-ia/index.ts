@@ -7,6 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentation, INTERPRETATION_CONTRACT } from "./analytics.js";
 import { compactGroqContext, groqFailure, GROQ_OUTPUT_BUDGET, GROQ_MAX_BODY_BYTES } from "./groq-context.js";
 import { buildReport, buildReportManagement, compactReportContext } from "./reports.js";
+import { groqProfile, groqUsage, safeFinishReason, createGroqGuard, GROQ_LIMITS } from "./groq-policy.js";
 
 const MAX_BODY_BYTES = 25 * 1024;
 const MAX_PROMPT_CHARS = 1000;
@@ -24,7 +25,8 @@ const AI_TIMEOUT_MS = 35_000;
 // Importante: Edge Functions podem executar em várias instâncias; este controle
 // é uma proteção básica local, não substitui rate limiting distribuído.
 let activeRequests = 0;
-let groqBlockedUntil = 0;
+const groqGuard = createGroqGuard();
+const groqReportCache = new Map<string,{expires:number;body:Record<string,any>}>();
 const userRequestTimestamps = new Map<string, number[]>();
 
 class HttpError extends Error {
@@ -657,25 +659,20 @@ serve(async (req: Request) => {
       }
 
       const groqModel = getGroqModel();
-      if (Date.now() < groqBlockedUntil) {
-        const seconds = Math.ceil((groqBlockedUntil - Date.now()) / 1000);
-        const error = new HttpError(`Groq: aguarde ${seconds} segundos antes de tentar novamente.`, 429);
-        error.retryAfter = seconds;
-        throw error;
-      }
       const groqEndpoint = "https://api.groq.com/openai/v1/chat/completions";
       let compact;
       try { compact = reportCompact??compactGroqContext(analyticalContext, prompt); }
       catch { throw new HttpError("O contexto não cabe no orçamento Groq. Especifique os indicadores ou reduza a pergunta. Nenhuma série foi truncada.", 413); }
       if (compact.omitted || compact.summarized) groqCoverage = `Cobertura da interpretação Groq: ${compact.omitted} indicador(es) omitido(s); ${compact.summarized} série(s) substituída(s) por resumo determinístico. A seção numérica abaixo preserva o contexto validado completo recebido.\n\n`;
 
+      const profile = groqProfile(Boolean(requestedReport),groqModel);
       const groqPayload = {
         model: groqModel,
         messages: compact.messages,
         temperature: 0.3,
-        max_completion_tokens: GROQ_OUTPUT_BUDGET,
+        max_completion_tokens: profile.maxCompletionTokens,
         ...(groqModel === "openai/gpt-oss-120b" || groqModel === "openai/gpt-oss-20b" ? { response_format: { type: "json_object" } } : {}),
-        ...(groqModel === "openai/gpt-oss-120b" || groqModel === "openai/gpt-oss-20b" ? { reasoning_effort: "low" } : {}),
+        ...(profile.reasoningEffort ? { reasoning_effort: profile.reasoningEffort } : {}),
       };
 
       // Mede e envia exatamente a mesma serialização, incluindo parâmetros/modelo.
@@ -685,104 +682,141 @@ serve(async (req: Request) => {
         throw new HttpError("A solicitação ultrapassa o orçamento local de bytes da Groq. Reduza o escopo da pergunta.", 413);
       }
 
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
-      let groqResponse: Response;
-
+      const started = performance.now();
+      const cacheKey = requestedReport ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([user.id,requestedReportBasis,groqBody]))))).map(b=>b.toString(16).padStart(2,'0')).join('') : null;
+      for(const [key,entry] of groqReportCache)if(entry.expires<=Date.now())groqReportCache.delete(key);
+      const cached=cacheKey?groqReportCache.get(cacheKey):null;
+      if(cached){
+        console.info('Groq request metrics',{provider:'groq',model:groqModel,profile:profile.name,cacheHit:true,providerCall:false,status:200,promptTokens:0,completionTokens:0,reasoningTokens:0,totalTokens:0,finishReason:null,latencyMs:Math.round(performance.now()-started)});
+        return jsonResponse(req,{...cached.body,meta:{...cached.body.meta,cacheHit:true,providerCall:false,currentRequestTokens:0,usageSource:'cached_original'}});
+      }
+      const admission=groqGuard.reserve(compact.estimatedTokens+profile.maxCompletionTokens+GROQ_LIMITS.margin);
+      if(!admission.allowed){
+        console.info('Groq request metrics',{provider:'groq',model:groqModel,profile:profile.name,status:429,outcome:admission.reason,providerCall:false,retryAfter:admission.retryAfter,promptTokens:0,completionTokens:0,reasoningTokens:0,totalTokens:0,finishReason:null,latencyMs:Math.round(performance.now()-started)});
+        const error=new HttpError('Groq: limite local de consumo ou análise em andamento. Aguarde antes de solicitar novamente. O relatório determinístico permanece disponível.',429);
+        error.retryAfter=admission.retryAfter;throw error;
+      }
+      let observedUsage:ReturnType<typeof groqUsage>|null=null,metricLogged=false,finishReason:string|null=null;
+      const metrics=()=>({provider:'groq',model:groqModel,profile:profile.name,maxCompletionTokens:profile.maxCompletionTokens,reasoningEffort:profile.reasoningEffort,
+        inputEstimatedTokens:compact.estimatedTokens,inputBytes:compact.bytes,requestBytes:groqRequestBytes,sentIndicators:compact.sent,omittedIndicators:compact.omitted,
+        summarizedSeries:compact.summarized,latencyMs:Math.round(performance.now()-started),providerCall:true,finishReason,...(observedUsage??groqUsage(null))});
       try {
-        groqResponse = await fetch(groqEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${groqApiKey}`,
-          },
-          body: groqBody,
-          signal: abortController.signal,
-        });
-        // Inclui a leitura do corpo na mesma janela de timeout do fetch.
-        groqResponse = new Response(await groqResponse.arrayBuffer(), { status: groqResponse.status, headers: groqResponse.headers });
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), AI_TIMEOUT_MS);
+        let groqResponse: Response;
+
+        try {
+          groqResponse = await fetch(groqEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${groqApiKey}`,
+            },
+            body: groqBody,
+            signal: abortController.signal,
+          });
+          // Inclui a leitura do corpo na mesma janela de timeout do fetch.
+          groqResponse = new Response(await groqResponse.arrayBuffer(), { status: groqResponse.status, headers: groqResponse.headers });
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            throw new HttpError(
+              "A Groq API demorou mais que o esperado para responder (timeout de 35s). Tente novamente em instantes.",
+              504,
+            );
+          }
           throw new HttpError(
-            "A Groq API demorou mais que o esperado para responder (timeout de 35s). Tente novamente em instantes.",
-            504,
+            "Falha de conexão com a Groq API. Verifique a conectividade e tente novamente.",
+            502,
+          );
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        groqGuard.observe(groqResponse.headers);
+        if (!groqResponse.ok) {
+          const diagnostic = await groqFailure(groqResponse);
+          metricLogged=true;
+          console.error('Groq API error', { ...metrics(), status: diagnostic.status, code: diagnostic.code,
+            category: diagnostic.category, requestId: diagnostic.requestId, retryAfter: diagnostic.retryAfter,
+            estimatedInputTokens: compact.estimatedTokens, inputBytes: compact.bytes,
+            requestBytes: groqRequestBytes, sentIndicators: compact.sent, messageCount: compact.messages.length,
+            systemBytes: new TextEncoder().encode(compact.messages[0].content).length });
+          const error = new HttpError(diagnostic.message,
+            diagnostic.status === 429 ? 429 : diagnostic.status === 413 ? 413 : 502);
+          if (diagnostic.status === 429) {
+            error.retryAfter = diagnostic.retryAfter ?? (diagnostic.category==='quota'?86400:60);
+            groqGuard.observe(groqResponse.headers,429,error.retryAfter);
+          }
+          throw error;
+        }
+        let groqData: Record<string, unknown>;
+        try {
+          groqData = await groqResponse.json();
+        } catch {
+          throw new HttpError(
+            "A Groq API retornou uma resposta inválida.",
+            502,
           );
         }
-        throw new HttpError(
-          "Falha de conexão com a Groq API. Verifique a conectividade e tente novamente.",
-          502,
-        );
-      } finally {
-        clearTimeout(timeoutId);
-      }
 
-      if (!groqResponse.ok) {
-        const diagnostic = await groqFailure(groqResponse);
-        console.error('Groq API error', { provider: 'groq', status: diagnostic.status, code: diagnostic.code,
-          category: diagnostic.category, requestId: diagnostic.requestId, retryAfter: diagnostic.retryAfter,
-          estimatedInputTokens: compact.estimatedTokens, inputBytes: compact.bytes,
-          requestBytes: groqRequestBytes, sentIndicators: compact.sent, messageCount: compact.messages.length,
-          systemBytes: new TextEncoder().encode(compact.messages[0].content).length });
-        const error = new HttpError(diagnostic.message,
-          diagnostic.status === 429 ? 429 : diagnostic.status === 413 ? 413 : 502);
-        if (diagnostic.status === 429) {
-          error.retryAfter = diagnostic.retryAfter ?? 60;
-          groqBlockedUntil = Date.now() + error.retryAfter * 1000;
+        const groqChoices = groqData.choices as Array<Record<string, unknown>> | undefined;
+        const groqFirstChoice = groqChoices?.[0];
+        finishReason=safeFinishReason(groqFirstChoice?.finish_reason);
+        const groqMessage = groqFirstChoice?.message as Record<string, unknown> | undefined;
+        const groqText = typeof groqMessage?.content === "string"
+          ? groqMessage.content.trim()
+          : "";
+
+        observedUsage=groqUsage(groqData);
+        if (!groqText && groqFirstChoice?.finish_reason !== "length") {
+          throw new HttpError(
+            groqFirstChoice?.finish_reason === "length"
+              ? "A Groq atingiu o orçamento de saída/raciocínio antes de gerar texto. Solicite uma análise mais específica."
+              : "A Groq API não retornou uma resposta textual válida.",
+            502,
+          );
         }
+
+
+        const result = {
+          success: true,
+          provider: "groq",
+          model: groqData.model ?? groqModel,
+          prompt,
+          response: composeResponse(groqFirstChoice?.finish_reason === "length" ? "" : groqText),
+          ...reportFields(),
+          technicalDetails,
+          meta: {
+            ...reportMeta(),
+            promptTokens: observedUsage.promptTokens,
+            inputEstimatedTokens: compact.estimatedTokens,
+            inputBytes: compact.bytes,
+            requestBytes: groqRequestBytes,
+            sentIndicators: compact.sent,
+            contextBuild: requestedReport?"report-v5.1-compact":"groq-compact-bytes-v2",
+            omittedIndicators: compact.omitted,
+            summarizedSeries: compact.summarized,
+            candidatesTokens: observedUsage.completionTokens,
+            finishReason: safeFinishReason(groqFirstChoice?.finish_reason),
+            totalTokens: observedUsage.totalTokens,
+            reasoningTokens: observedUsage.reasoningTokens,
+            latencyMs: Math.round(performance.now()-started),
+            profile: profile.name, maxCompletionTokens:profile.maxCompletionTokens, reasoningEffort:profile.reasoningEffort,
+            cacheHit:false,providerCall:true,usageSource:observedUsage.totalTokens===null?"unavailable":"provider",
+            timestamp: new Date().toISOString(),
+          },
+        };
+        metricLogged=true;
+        console.info('Groq request metrics',{...metrics(),status:200,finishReason:safeFinishReason(groqFirstChoice?.finish_reason),outcome:groqFirstChoice?.finish_reason==='length'?'truncated':reportManagement?.audit.fallback?'deterministic_fallback':'completed'});
+        if(cacheKey&&reportManagement&&!reportManagement.audit.fallback){
+          if(groqReportCache.size>=GROQ_LIMITS.cacheEntries)groqReportCache.delete(groqReportCache.keys().next().value!);
+          groqReportCache.set(cacheKey,{expires:Date.now()+GROQ_LIMITS.cacheMs,body:result});
+        }
+        return jsonResponse(req,result);
+      }catch(error){
+        if(!metricLogged)console.error('Groq request metrics',{...metrics(),status:error instanceof HttpError?error.status:502,outcome:error instanceof HttpError&&error.status===504?'timeout':'invalid_or_failed_response'});
         throw error;
-      }
-      let groqData: Record<string, unknown>;
-      try {
-        groqData = await groqResponse.json();
-      } catch {
-        throw new HttpError(
-          "A Groq API retornou uma resposta inválida.",
-          502,
-        );
-      }
-
-      const groqChoices = groqData.choices as Array<Record<string, unknown>> | undefined;
-      const groqFirstChoice = groqChoices?.[0];
-      const groqMessage = groqFirstChoice?.message as Record<string, unknown> | undefined;
-      const groqText = typeof groqMessage?.content === "string"
-        ? groqMessage.content.trim()
-        : "";
-
-      if (!groqText && groqFirstChoice?.finish_reason !== "length") {
-        throw new HttpError(
-          groqFirstChoice?.finish_reason === "length"
-            ? "A Groq atingiu o orçamento de saída/raciocínio antes de gerar texto. Solicite uma análise mais específica."
-            : "A Groq API não retornou uma resposta textual válida.",
-          502,
-        );
-      }
-
-      const groqUsage = (groqData.usage as Record<string, number> | undefined) ?? {};
-
-      return jsonResponse(req, {
-        success: true,
-        provider: "groq",
-        model: groqData.model ?? groqModel,
-        prompt,
-        response: composeResponse(groqFirstChoice?.finish_reason === "length" ? "" : groqText),
-        ...reportFields(),
-        technicalDetails,
-        meta: {
-          ...reportMeta(),
-          promptTokens: groqUsage.prompt_tokens ?? 0,
-          inputEstimatedTokens: compact.estimatedTokens,
-          inputBytes: compact.bytes,
-          requestBytes: groqRequestBytes,
-          sentIndicators: compact.sent,
-          contextBuild: "groq-compact-bytes-v2",
-          omittedIndicators: compact.omitted,
-          summarizedSeries: compact.summarized,
-          candidatesTokens: groqUsage.completion_tokens ?? 0,
-          finishReason: groqFirstChoice?.finish_reason ?? null,
-          totalTokens: groqUsage.total_tokens ?? 0,
-          timestamp: new Date().toISOString(),
-        },
-      });
+      }finally{groqGuard.finish(admission.ticket,observedUsage);}
     }
 
     // 7. Obtém a chave Gemini exclusivamente dos Secrets do servidor.

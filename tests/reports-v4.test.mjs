@@ -1,6 +1,7 @@
 import {readFileSync,writeFileSync} from 'node:fs';
 import {buildReport,buildReportManagement,compactReportContext} from '../supabase/functions/seguranca-viaria-ia/reports.js';
-import {GROQ_INPUT_BUDGET,GROQ_MARGIN,GROQ_OUTPUT_BUDGET,GROQ_MAX_BODY_BYTES} from '../supabase/functions/seguranca-viaria-ia/groq-context.js';
+import {GROQ_INPUT_BUDGET,GROQ_MARGIN,GROQ_MAX_BODY_BYTES} from '../supabase/functions/seguranca-viaria-ia/groq-context.js';
+import {groqProfile} from '../supabase/functions/seguranca-viaria-ia/groq-policy.js';
 const assert=(v,m)=>{if(!v)throw Error(m);},clone=v=>JSON.parse(JSON.stringify(v));
 const stored={mesesLabels:['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'],indicadores:[
  {indicador:'Acidentes com culpa',setor:'Sinistros',und:'Qtd',meta:0,direcaoDesempenho:'menor_melhor',valores:[9,null,0,12,10,8,7,9,8,11,13,14]},
@@ -31,7 +32,8 @@ const noData=buildReport(stored,{...selection,ids:['indice:3']});assert(noData.m
 const empty=buildReport(stored,{...selection,type:'critico',ids:['indice:4']});assert(!empty.indicators.length&&!empty.management.actionPlan.length,'Recorte crítico vazio');
 const many={...stored,indicadores:Array.from({length:40},(_,n)=>({...clone(stored.indicadores[n%3]),indicador:`${stored.indicadores[n%3].indicador} ${n}`}))};
 const long=buildReport(many,{...selection,type:'anual',ids:many.indicadores.map((_,n)=>`indice:${n}`)}),compact=compactReportContext(long);
-const body=JSON.stringify({model:'openai/gpt-oss-120b',messages:compact.messages,temperature:.3,max_completion_tokens:GROQ_OUTPUT_BUDGET,response_format:{type:'json_object'},reasoning_effort:'low'});
+const profile=groqProfile(true,'openai/gpt-oss-120b');
+const body=JSON.stringify({model:'openai/gpt-oss-120b',messages:compact.messages,temperature:.3,max_completion_tokens:profile.maxCompletionTokens,response_format:{type:'json_object'},reasoning_effort:profile.reasoningEffort});
 assert(new TextEncoder().encode(body).length<=GROQ_MAX_BODY_BYTES&&compact.estimatedTokens<=GROQ_INPUT_BUDGET-GROQ_MARGIN&&compact.omitted>0,'Orçamento completo');
 assert(JSON.parse(compact.messages[1].content).partial&&buildReportManagement(long,JSON.stringify(proposal),compact.sentIds).limitations.some(s=>s.includes('parcial')),'Parcialidade explícita');
 const m={exports:{}};new Function('module','exports',readFileSync('public/vendor/jspdf-4.2.1.umd.min.js','utf8'))(m,m.exports);const table={exports:{}};new Function('module','exports','require',readFileSync('public/vendor/jspdf-autotable-5.0.8.min.js','utf8'))(table,table.exports,()=>m.exports);table.exports.applyPlugin(m.exports.jsPDF);window.jspdf=m.exports;
@@ -50,4 +52,4 @@ const front=readFileSync('public/reports.js','utf8'),pdf=readFileSync('public/re
 assert(!/IA \$\{|IA utilizada|IA não utilizada|utilizada como apoio interpretativo|não utilizada; análise determinística/.test(front+pdf),'Indicação visual de execução');
 console.log('PASS V4 seis tipos, números preservados, meta zero/nulos/neutro, JSON válido/inválido, referências/causalidade, ausência de ações/dados, comunicação segura e contrato compartilhado');
 console.log('PASS PDF dezenas e recomendações extensas, continuação, cabeçalhos e progresso real. Páginas:',doc.getNumberOfPages(),extended.getNumberOfPages());
-console.log('PASS orçamento V4',JSON.stringify({requestBytes:new TextEncoder().encode(body).length,inputEstimatedTokens:compact.estimatedTokens,sent:compact.sent,omitted:compact.omitted,outputBudget:GROQ_OUTPUT_BUDGET}));
+console.log('PASS orçamento V4 / perfil V5.1',JSON.stringify({requestBytes:new TextEncoder().encode(body).length,inputEstimatedTokens:compact.estimatedTokens,sent:compact.sent,omitted:compact.omitted,outputBudget:profile.maxCompletionTokens,reasoningEffort:profile.reasoningEffort}));
