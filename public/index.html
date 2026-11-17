@@ -21,7 +21,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=reports-v4">
+        <link rel="stylesheet" href="style.css?v=reports-v4.1">
     <link rel="stylesheet" href="workspace-v3.css?v=settings-footer-1">
     <link rel="stylesheet" href="motion-v3-1.css?v=3.1">
     <link rel="stylesheet" href="pending-changes.css?v=1">
@@ -369,12 +369,19 @@
                 </div>
                 <div class="report-filters"><label for="reportIndicators">Indicadores — use Ctrl/Cmd para seleção múltipla</label><select id="reportIndicators" multiple size="7" class="w-full"></select><button id="reportAll" class="mt-2 text-sm text-amber-400 underline">Selecionar todos do setor</button></div>
                 <div class="flex flex-wrap items-center gap-3">
-                    <button id="reportGenerate" class="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950">Gerar / atualizar prévia</button>
+                    <button id="reportGenerate" class="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950">Gerar prévia</button>
                     <button id="reportRefresh" class="rounded-xl border border-slate-600 px-4 py-3 text-sm">Atualizar filtros</button>
-                    <button id="reportExport" disabled class="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white">Exportar PDF</button>
                 </div>
-                <div class="report-filters flex flex-wrap items-end gap-3 border-t border-slate-700 pt-4"><label>Provedor de análise complementar<select id="reportProvider"><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label><button id="reportAI" disabled class="rounded-xl border border-amber-500/50 px-4 py-3 text-sm text-amber-400">Aprofundar diagnóstico e plano de ação</button><span class="text-xs text-slate-400">Consulta opcional: pode consumir a cota do provedor. Todas as propostas dependem de avaliação da empresa.</span></div>
-                <p id="reportStatus" role="status" aria-live="polite" class="text-sm text-slate-400">Escolha os filtros e gere uma prévia.</p>
+            </section>
+            <section id="reportActions" class="report-actions" aria-labelledby="reportActionsTitle" aria-busy="false">
+                <h2 id="reportActionsTitle" class="font-bold">Ações do relatório</h2>
+                <div class="report-actions-buttons">
+                    <button id="reportAI" disabled class="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950">Aplicar análise Groq</button>
+                    <button id="reportExport" disabled class="rounded-xl border border-amber-500/50 px-5 py-3 text-sm font-bold text-amber-400">Exportar PDF</button>
+                    <details class="report-provider-menu"><summary>Outros provedores</summary><label for="reportProvider">Provedor da análise complementar</label><select id="reportProvider"><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></details>
+                </div>
+                <div class="report-actions-status"><span id="reportProcessing" hidden aria-hidden="true">⟳ Processando…</span><p id="reportStatus" role="status" aria-live="polite" class="text-sm text-slate-400">Escolha os filtros e gere uma prévia.</p></div>
+                <p class="text-xs text-slate-400">A análise é opcional e pode consumir a cota do provedor. Todas as propostas dependem de avaliação da empresa.</p>
             </section>
             <section id="reportPreview" aria-label="Prévia do relatório" class="glass-card rounded-2xl p-5 sm:p-7 space-y-5"></section>
         </div>
@@ -710,8 +717,8 @@
         <script src="main.js?v=pending-1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=4"></script>
-        <script src="reports.js?v=4"></script>
-    <script src="workspace-v3.js?v=settings-footer-1"></script>
+        <script src="reports.js?v=4.1"></script>
+    <script src="workspace-v3.js?v=reports-v4.1"></script>
     <script src="motion-v3-1.js?v=3.1"></script>
     <script src="pending-changes.js?v=1"></script>
 </body>

@@ -123,8 +123,7 @@
         setupModalAccessibility();
         $('reportType').closest('.report-filters').before(element('h3','1. Configuração','v3-report-heading'));
         $('reportIndicators').parentElement.before(element('h3','2. Seleção de indicadores','v3-report-heading'));
-        const preview=$('reportPreview'),step=element('section','','v3-report-step');preview.before(step);step.append(element('h2','3. Prévia para revisão'),preview);
-        const finalStep=element('section','','v3-report-step v3-export-actions');step.after(finalStep);finalStep.append(element('h2','4. Interpretação opcional'),$('reportAI').parentElement,element('h2','5. Exportação'),$('reportExport'));
+        const preview=$('reportPreview'),step=element('section','','v3-report-step');preview.before(step);step.append(element('h2','Prévia do relatório'),preview);
         new MutationObserver(()=>window.refreshOperationalUI()).observe($('lastSavedTag'),{childList:true,characterData:true,subtree:true});
     });
 })();

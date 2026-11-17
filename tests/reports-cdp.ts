@@ -11,7 +11,7 @@ try {
     ws.onmessage=e=>{const m=JSON.parse(e.data);if(waiting.has(m.id)){const {resolve,reject}=waiting.get(m.id);waiting.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}};
     const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;waiting.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});
     const extra=await Deno.readTextFile(new URL('tests/workspace-v3-browser.js',root));
-    const cases=Deno.args.includes('--v3')||Deno.args.includes('--pending')||Deno.args.includes('--reports-v4')?[["320",320,1000,'dark'],['360',360,1000,'light'],['mobile',390,1000,'light'],['768',768,1100,'dark'],['1024',1024,1100,'light'],['desktop',1440,1100,'dark'],['1920',1920,1100,'light']]:[['desktop',1440,1100,'dark'],['mobile',390,1000,'light']];
+    const cases=Deno.args.includes('--v3')||Deno.args.includes('--pending')||Deno.args.includes('--reports-v4')||Deno.args.includes('--reports-v41')?[["320",320,1000,'dark'],['360',360,1000,'light'],['mobile',390,1000,'light'],['768',768,1100,'dark'],['1024',1024,1100,'light'],['desktop',1440,1100,'dark'],['1920',1920,1100,'light']]:[['desktop',1440,1100,'dark'],['mobile',390,1000,'light']];
     for(const [name,width,height,theme] of cases){
         const {targetId}=await call('Target.createTarget',{url:'about:blank'});
         const {sessionId}=await call('Target.attachToTarget',{targetId,flatten:true});
@@ -23,6 +23,19 @@ try {
             status=r.result.value;if(status.startsWith('PASS')||status.startsWith('FAIL'))break;await new Promise(r=>setTimeout(r,100));
         }
         if(!status.startsWith('PASS'))throw Error(name+': '+status);
+        if(Deno.args.includes('--reports-v41')){
+            const fixtures=await Deno.readTextFile(new URL('.validation-tools/reports-v41-fixtures.json',root));
+            const check=await call('Runtime.evaluate',{expression:(await Deno.readTextFile(new URL('tests/reports-v41-browser.js',root)))+`\nrunReportV41Checks(${fixtures})`,awaitPromise:true,returnByValue:true},sessionId);
+            if(check.exceptionDetails)throw Error(JSON.stringify(check.exceptionDetails));console.log(name,check.result.value);
+            const key=async(name,code)=>{for(const type of ['keyDown','keyUp'])await call('Input.dispatchKeyEvent',{type,key:name,code:name,windowsVirtualKeyCode:code,...(type==='keyDown'&&name==='Enter'?{text:'\r'}:{})},sessionId);};
+            await key('Enter',13);
+            const expanded=await call('Runtime.evaluate',{expression:"document.getElementById('reportPreviewToggle').getAttribute('aria-expanded')==='true'",returnByValue:true},sessionId);if(!expanded.result.value)throw Error('Expansão por teclado');
+            await key('Enter',13);
+            await call('Runtime.evaluate',{expression:"document.getElementById('reportActions').scrollIntoView({block:'start'});",returnByValue:true},sessionId);
+            await new Promise(r=>setTimeout(r,200));
+            const geometry=await call('Runtime.evaluate',{expression:"JSON.stringify({header:document.querySelector('header').getBoundingClientRect().bottom,bar:document.getElementById('reportActions').getBoundingClientRect().top,overflow:document.documentElement.scrollWidth>innerWidth+1})",returnByValue:true},sessionId);const g=JSON.parse(geometry.result.value);if(g.overflow||g.bar<g.header)throw Error('Barra sobrepõe navegação '+geometry.result.value);
+            const shot=await call('Page.captureScreenshot',{format:'png'},sessionId);await Deno.writeFile(new URL(`.validation-tools/reports-v41-${name}.png`,root),Uint8Array.from(atob(shot.data),c=>c.charCodeAt(0)));console.log('PASS teclado e barra sem sobreposição');
+        }
         if(Deno.args.includes('--reports-v4')){
             const v4=await call('Runtime.evaluate',{expression:(await Deno.readTextFile(new URL('tests/reports-v4-browser.js',root)))+'\nrunReportV4Checks()',awaitPromise:true,returnByValue:true},sessionId);
             if(v4.exceptionDetails)throw Error(JSON.stringify(v4.exceptionDetails));console.log(name,v4.result.value);

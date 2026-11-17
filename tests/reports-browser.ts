@@ -16,7 +16,9 @@ addEventListener('load',async()=>{
   document.body.classList.add('authenticated');switchTab('reports');document.getElementById('reportType').value='comparativo';
   await generateManagementReport();
   if(hasUnsavedChanges)throw Error('Relatório gerou pendências');
-  if(!managementReport||managementCharts.length!==report.indicators.length||document.getElementById('reportExport').disabled)throw Error('Prévia/gráficos');
+  if(!managementReport||managementCharts.length!==0||document.getElementById('reportExport').disabled||!document.getElementById('reportPreviewDetails').hidden)throw Error('Prévia compacta');
+  setManagementPreviewExpanded(true);
+  if(managementCharts.length!==report.indicators.length)throw Error('Gráficos sob demanda');
   await interpretManagementReport();if(!managementReport||managementReport.aiUsed||!document.getElementById('reportStatus').textContent.includes('preservado'))throw Error('Falha IA apagou relatório');
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   const doc=window.buildManagementPdf(managementReport,managementChartImages());
