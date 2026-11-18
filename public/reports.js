@@ -4,12 +4,54 @@ let managementSignature = '';
 let managementCharts = [];
 let managementBusy = false;
 let managementEnrichmentKey='';
-window.resetManagementReport = function(){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
+window.resetManagementReport = function(){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
 const reportEl = id => document.getElementById(id);
 const reportValue = value => value === null || value === undefined ? 'Ausente' : new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(value);
+const REPORT_CONTEXT_FIELDS=['actionsTaken','difficulties','achievements','priorities','goals','observations'];
+let reportContextScope='',reportContextDetached=false,reportContextOwner=null;
+function clearReportContext(notify=true){
+    REPORT_CONTEXT_FIELDS.forEach(k=>{if(reportEl('reportContext-'+k))reportEl('reportContext-'+k).value='';});
+    for(const id of ['reportContextApproval','reportContextShare'])if(reportEl(id))reportEl(id).checked=false;
+    if(reportEl('reportContextGoalKind'))reportEl('reportContextGoalKind').value='suggested';
+    if(reportEl('reportContextActionStatus'))reportEl('reportContextActionStatus').value='pending_validation';
+    reportContextScope='';reportContextDetached=false;reportContextOwner=null;
+    if(notify){updateReportContextUI();reportInvalidate();}
+}
+function reportContextValue(){
+    if(reportContextOwner&&reportContextOwner!==currentSession?.user?.id){clearReportContext(false);return null;}
+    if(reportContextDetached||reportContextScope&&reportContextScope!==JSON.stringify(reportSelection()))return null;
+    const fields=Object.fromEntries(REPORT_CONTEXT_FIELDS.map(k=>[k,(reportEl('reportContext-'+k)?.value??'').replace(/\r\n?/g,'\n').trim()]));
+    if(!Object.values(fields).some(Boolean))return null;
+    return {version:1,...fields,goalKind:reportEl('reportContextGoalKind').value,approvalConfirmed:reportEl('reportContextGoalKind').value==='approved'&&reportEl('reportContextApproval').checked,actionStatus:reportEl('reportContextActionStatus').value,shareWithAI:reportEl('reportContextShare').checked};
+}
+function reportSignature(){return JSON.stringify({selection:reportSelection(),managementContext:reportContextValue()});}
+function updateReportContextUI(){
+    const selection=JSON.stringify(reportSelection());if(reportContextScope&&reportContextScope!==selection)reportContextDetached=true;
+    let total=0;REPORT_CONTEXT_FIELDS.forEach(k=>{const n=reportEl('reportContext-'+k)?.value.length??0;total+=n;if(reportEl('reportContextCount-'+k))reportEl('reportContextCount-'+k).textContent=n+'/320';});
+    if(reportEl('reportContextTotal')){reportEl('reportContextTotal').textContent=total+'/1200 caracteres no total';reportEl('reportContextTotal').dataset.overLimit=String(total>1200);}
+    if(reportEl('reportContextFields'))reportEl('reportContextFields').disabled=managementBusy||reportContextDetached;
+    if(reportEl('reportContextRebind')){reportEl('reportContextRebind').hidden=!reportContextDetached;reportEl('reportContextRebind').disabled=managementBusy;}
+    if(reportEl('reportContextClear'))reportEl('reportContextClear').disabled=managementBusy;
+    if(reportEl('reportContextApproval'))reportEl('reportContextApproval').disabled=managementBusy||reportEl('reportContextGoalKind').value!=='approved';
+    if(reportEl('reportContextScope'))reportEl('reportContextScope').textContent=reportContextDetached?'Contexto de outro recorte: preservado para revisão, mas não será incluído. Vincule explicitamente ou limpe os campos.':total?'Contexto vinculado a esta seleção. Alterações exigem gerar nova prévia.':'Sem contexto complementar. Nenhum texto será enviado ao provedor.';
+}
+function validateReportContext(context){
+    if(!context)return;
+    if(REPORT_CONTEXT_FIELDS.some(k=>context[k].length>320)||REPORT_CONTEXT_FIELDS.reduce((n,k)=>n+context[k].length,0)>1200)throw Error('O contexto admite 320 caracteres por campo e 1200 no total.');
+    if(context.goals&&context.goalKind==='approved'&&!context.approvalConfirmed)throw Error('Confirme explicitamente a aprovação informada ou selecione outro tipo de objetivo.');
+}
+function initReportContext(){
+    const changed=()=>{if(!reportContextScope){reportContextScope=JSON.stringify(reportSelection());reportContextOwner=currentSession?.user?.id??null;}updateReportContextUI();reportInvalidate();};
+    REPORT_CONTEXT_FIELDS.forEach(k=>reportEl('reportContext-'+k)?.addEventListener('input',changed));
+    ['reportContextGoalKind','reportContextActionStatus','reportContextApproval','reportContextShare'].forEach(id=>reportEl(id)?.addEventListener('change',changed));
+    reportEl('reportContextClear')?.addEventListener('click',()=>clearReportContext());
+    reportEl('reportContextRebind')?.addEventListener('click',()=>{reportContextScope=JSON.stringify(reportSelection());reportContextDetached=false;reportContextOwner=currentSession?.user?.id??null;updateReportContextUI();reportInvalidate();});
+    updateReportContextUI();
+}
+
 function reportMessage(text) { reportEl('reportStatus').textContent = text;reportUpdateActions(); }
 function reportUpdateActions(){
-    const consistent=Boolean(managementReport&&managementSignature===JSON.stringify(reportSelection()));
+    const consistent=Boolean(managementReport&&managementSignature===reportSignature());
     const ready=consistent&&supabaseStateLoaded&&supabaseReady&&currentSession&&!hasUnsavedChanges;
     for(const id of ['reportGenerate','reportRefresh','reportProvider'])if(reportEl(id))reportEl(id).disabled=managementBusy;
     if(reportEl('reportAI')){reportEl('reportAI').disabled=managementBusy||!ready||!managementReport?.indicators.length;const provider=reportEl('reportProvider').value;reportEl('reportAI').textContent=`Aplicar análise ${{groq:'Groq',gemini:'Gemini',openai:'OpenAI'}[provider]||'Groq'}`;}
@@ -18,7 +60,7 @@ function reportUpdateActions(){
     if(reportEl('reportActions'))reportEl('reportActions').dataset.state=managementBusy?'processing':managementReport&&!consistent?'stale':consistent?'ready':'empty';
     if(reportEl('reportProcessing'))reportEl('reportProcessing').hidden=!managementBusy;
 }
-function reportSetBusy(value){managementBusy=value;reportUpdateActions();}
+function reportSetBusy(value){managementBusy=value;updateReportContextUI();reportUpdateActions();}
 function reportReady() {
     if (!supabaseStateLoaded || !supabaseReady || !currentSession) throw Error('Carregue os indicadores reais do Supabase antes de gerar ou exportar.');
     if (hasUnsavedChanges) throw Error('Salve as alterações pendentes antes de gerar o relatório oficial.');
@@ -30,7 +72,8 @@ function reportSelection() {
         start:reportEl('reportStart').value,end:reportEl('reportEnd').value};
 }
 function reportInvalidate() {
-    const stale=managementReport&&managementSignature!==JSON.stringify(reportSelection());
+    updateReportContextUI();
+    const stale=managementReport&&managementSignature!==reportSignature();
     reportMessage(stale?'Filtros alterados. Gere ou atualize a prévia para continuar.':managementReport?'A prévia corresponde aos filtros atuais.':'Escolha os filtros e gere uma prévia.');
 }
 function reportIndicatorOptions() {
@@ -58,13 +101,15 @@ window.refreshReportFilters = function() {
 };
 async function requestManagementReport(interpret=false) {
     reportReady();
+    const managementContext=reportContextValue();validateReportContext(managementContext);
     const selection=reportSelection(),provider=reportEl('reportProvider').value;
     const {data,error}=await supabaseClient.auth.getSession();
     if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
     const response=await fetch(SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({action:'report',selection,interpret,provider,...(interpret?{expectedUpdatedAt:managementReport.snapshotUpdatedAt,expectedReportBasis:managementReport.basis}:{})})});
+        body:JSON.stringify({action:'report',selection,interpret,provider,managementContext,...(interpret?{expectedUpdatedAt:managementReport.snapshotUpdatedAt,expectedReportBasis:managementReport.basis}:{})})});
     const body=await response.json().catch(()=>null);
     if(!response.ok||!body?.success)throw Error(body?.error||`Relatório indisponível (HTTP ${response.status}).`);
+    if(managementContext&&!interpret&&body.report?.intelligence?.version!==6)throw Error('Atualize a Edge Function para usar o contexto gerencial V6.');
     return body;
 }
 function reportNode(tag,text,className='') { const node=document.createElement(tag);node.textContent=text;node.className=className;return node; }
@@ -72,10 +117,18 @@ function renderManagementReport(expanded=reportEl('reportPreviewToggle')?.getAtt
     managementCharts.forEach(c=>c.destroy());managementCharts=[];
     const r=managementReport,preview=reportEl('reportPreview');preview.replaceChildren();
     preview.append(reportNode('h2',`Relatório ${r.type}`,'text-lg font-bold'),reportNode('p',`${r.indicators.length} indicadores no relatório · ${r.selectedCount} selecionados · ${r.criticalCount} pontos de atenção`),reportNode('p',`${r.competencias[0]} a ${r.competencias.at(-1)} · ${r.sector==='TODOS'?'Todos os setores':r.sector??'Setor selecionado'}`,'text-sm text-slate-400'));
+    if(window.ReportContent.validIntelligence(r.intelligence,r)){
+        const v=r.intelligence,grid=reportNode('div','','report-v6-summary');
+        for(const [title,ids] of [['Avanços',v.achievements],['Desafios',v.challenges]]){const area=reportNode('section');area.append(reportNode('h3',title,'font-bold'));area.append(reportNode('p',ids.length?`${ids.length} indicadores · ${v.dimensions.find(d=>d.indicatorId===ids[0]).name}`:'Sem situação comprovável pelos critérios disponíveis.','text-sm'));grid.append(area);}preview.append(grid);
+        preview.append(reportNode('p','Prioridades: '+v.priorityIds.slice(0,2).map(id=>v.dimensions.find(d=>d.indicatorId===id).name).join('; '),'text-sm'));
+        if(v.evolutionPlan.length)preview.append(reportNode('p',`Plano de evolução: 30 / 60 / 90 dias · ${v.actions.length} iniciativas sugeridas.`,'text-sm'));
+        preview.append(reportNode('p',v.context?`Contexto da gestão incluído como relato não verificado; ${v.context.shareWithAI?'envio à IA permitido quando solicitado':'fora da solicitação à IA'}.`:'Sem contexto gerencial. Criticidade operacional depende de critérios validados.','text-xs'));
+    }else{
     const attention=r.indicators.filter(i=>i.critical);const list=reportNode('ul','','report-preview-attention');
     attention.slice(0,3).forEach(i=>list.append(reportNode('li',`${i.indicador}: ${i.criticalReason}`)));
     if(!attention.length)list.append(reportNode('li','Sem pontos de atenção pelos critérios configurados. Consulte as limitações no conteúdo completo.'));
     if(attention.length>3)list.append(reportNode('li',`${attention.length-3} outros pontos de atenção no conteúdo completo.`));preview.append(list);
+    }
     const toggle=reportNode('button','Ver prévia completa','v3-button');toggle.id='reportPreviewToggle';toggle.type='button';toggle.setAttribute('aria-controls','reportPreviewDetails');toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>setManagementPreviewExpanded(toggle.getAttribute('aria-expanded')!=='true');
     const details=reportNode('div','','report-preview-details space-y-5');details.id='reportPreviewDetails';details.hidden=true;details.setAttribute('role','region');details.setAttribute('aria-label','Conteúdo completo do relatório');preview.append(toggle,details);
     if(expanded)setManagementPreviewExpanded(true);
@@ -89,7 +142,43 @@ function setManagementPreviewExpanded(expanded){
     }else{managementCharts.forEach(c=>c.destroy());managementCharts=[];details.replaceChildren();delete details.dataset.rendered;}
 }
 function managementChartSource(i,r=managementReport){return {data:{labels:[...r.competencias],datasets:[{label:i.unidade??'Valor',data:[...i.valores],borderColor:'#d38b00',backgroundColor:'#d38b0022',spanGaps:false,tension:0.15,pointRadius:3}]}};}
+function renderIndicatorTechnicalCards(preview,r){
+    r.indicators.forEach(i=>{
+        const card=reportNode('article','','glass-card rounded-2xl border border-slate-700 p-5 space-y-3');
+        card.append(reportNode('h3',i.indicador,'font-bold'),reportNode('p',`${i.setor} • Unidade ${i.unidade??'não informada'} • Meta ${i.meta===null?'não cadastrada':reportValue(i.meta)} • Direção ${i.direcaoDesempenho??'indefinida'}`,'text-xs text-slate-400'));
+        const s=i.estatisticas;
+        card.append(reportNode('p',`Média ${reportValue(s.media)} • Soma ${s.somaAplicavel?reportValue(s.soma):'não aplicável'} • Ausências ${s.ausentes} • ${i.criticalReason??'Sem classificação crítica pelo critério configurado'}`));
+        const hasChart=window.ReportContent.chartIds(r).includes(i.id);
+        const box=document.createElement('div');box.className='h-56 relative';const canvas=document.createElement('canvas');canvas.setAttribute('aria-label',`Evolução de ${i.indicador}`);canvas.setAttribute('role','img');if(hasChart){box.append(canvas);card.append(box);}else card.append(reportNode('p','Gráfico dispensado: série constante ou histórico insuficiente. Consulte a tabela integral.','text-xs'));
+        const details=document.createElement('details');details.append(reportNode('summary','Série e cálculos detalhados','cursor-pointer text-amber-400'));
+        const table=document.createElement('table');table.className='w-full text-sm';const head=document.createElement('tr');['Competência','Valor','Variação absoluta','Variação %'].forEach(t=>head.append(reportNode('th',t)));table.append(head);
+        s.mensais.forEach(p=>{const row=document.createElement('tr');[p.competencia,reportValue(p.valor),reportValue(p.variacaoAnterior?.absoluta),reportValue(p.variacaoAnterior?.percentual)].forEach(t=>row.append(reportNode('td',t,'p-2 border-b border-slate-700')));table.append(row);});
+        const scroll=document.createElement('div');scroll.className='overflow-x-auto';scroll.append(table);details.append(scroll);card.append(details);preview.append(card);
+        const light=document.body.classList.contains('light-theme');
+        if(hasChart)managementCharts.push(new Chart(canvas,{type:'line',data:{labels:r.competencias,datasets:[{label:i.unidade??'Valor',data:i.valores,borderColor:'#d38b00',backgroundColor:'#d38b0022',spanGaps:false,tension:0.15,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:light?'#334155':'#cbd5e1'}},y:{beginAtZero:true,ticks:{color:light?'#334155':'#cbd5e1'}}}}}));
+    });
+}
+function renderManagementReportV6Details(){
+    managementCharts.forEach(c=>c.destroy());managementCharts=[];const r=managementReport,v=r.intelligence,root=reportEl('reportPreviewDetails');root.replaceChildren();
+    let number=0;
+    const paragraph=(area,line)=>area.append(reportNode('p',line,'text-sm'));
+    const table=(area,head,rows)=>{const scroll=reportNode('div','','overflow-x-auto');scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',head.join(', '));const t=reportNode('table','','w-full text-sm'),thead=reportNode('thead'),tr=reportNode('tr');head.forEach(label=>{const th=reportNode('th',label,'p-2 text-left');th.scope='col';tr.append(th);});thead.append(tr);t.append(thead);const body=reportNode('tbody');rows.forEach(values=>{const row=reportNode('tr');values.forEach(text=>row.append(reportNode('td',text,'p-2 border-b border-slate-700')));body.append(row);});t.append(body);scroll.append(t);area.append(scroll);};
+    for(const section of window.ReportContent.v6Sections(r)){
+        if(section.key==='priorities'&&!section.blocks.length||section.key==='panorama'&&!r.indicators.length)continue;
+        const area=reportNode('section','','report-management-section space-y-3');area.dataset.reportSection=section.key;area.append(reportNode('h3',`${++number} ${section.title}`,'font-bold text-lg'));
+        if(section.key==='panorama')table(area,['Indicador / unidade','Resultado / meta atual','Desempenho / tendência','Criticidade operacional'],ReportContent.v6Overview(r,reportValue));
+        if(section.key==='actions')v.actions.forEach(a=>{const card=reportNode('article','','glass-card p-4 rounded-xl space-y-2');card.append(reportNode('h4',a.ref+' · '+a.title,'font-bold'));[a.priority+' · '+a.status,a.problem,a.objective,...a.tasks,'Área sugerida: '+a.owner,'Prazo sugerido: '+a.timeline,'Monitorar: '+a.monitoring,a.criterion].forEach(line=>paragraph(card,line));area.append(card);});
+        if(section.key==='evolution'){paragraph(area,'Horizontes sugeridos após a decisão de iniciar; não representam compromissos aprovados.');v.evolutionPlan.forEach(h=>{const block=reportNode('article','','glass-card p-4 rounded-xl');block.append(reportNode('h4',`Até ${h.days} dias`,'font-bold'));h.items.forEach(a=>paragraph(block,`${a.ref}: ${a.task} · ${a.goal}`));area.append(block);});}
+        section.blocks.forEach(b=>{const article=reportNode('article','','space-y-2');article.append(reportNode('h4',b.title,'font-bold'));[...new Set(b.lines)].forEach(line=>paragraph(article,line));area.append(article);});
+        if(section.note)paragraph(area,section.note);root.append(area);
+    }
+    const methodology=reportNode('section','','report-management-section');methodology.append(reportNode('h3','Metodologia e limitações','font-bold text-lg'));v.limitations.forEach(l=>paragraph(methodology,l));root.append(methodology);
+    root.append(reportNode('h3','Apêndices técnicos — dados completos','font-bold text-lg'));renderIndicatorTechnicalCards(root,r);
+    const omitted=v.charts.excluded;if(omitted.length)paragraph(root,`${omitted.length} gráficos constantes ou sem histórico suficiente foram dispensados; os dados permanecem nas tabelas.`);
+}
+
 function renderManagementReportDetails() {
+    if(window.ReportContent.validIntelligence(managementReport.intelligence,managementReport)){renderManagementReportV6Details();return;}
     managementCharts.forEach(c=>c.destroy());managementCharts=[];
     const preview=reportEl('reportPreviewDetails');preview.replaceChildren();const r=managementReport;
     preview.append(reportNode('h2',`D'Granel • Relatório ${r.type}`,'text-xl font-bold'),
@@ -122,19 +211,7 @@ function renderManagementReportDetails() {
     section('7 Metodologia e limitações',editorial.limitations);
     section('Apêndices técnicos — cadastro, estatísticas e histórico completo',['Todos os indicadores do recorte permanecem disponíveis abaixo e no PDF, inclusive quando a prévia está recolhida.']);
     if(!r.indicators.length)preview.append(reportNode('p','Nenhum indicador corresponde aos critérios críticos no período.'));
-    r.indicators.forEach(i=>{
-        const card=reportNode('article','','glass-card rounded-2xl border border-slate-700 p-5 space-y-3');
-        card.append(reportNode('h3',i.indicador,'font-bold'),reportNode('p',`${i.setor} • Unidade ${i.unidade??'não informada'} • Meta ${i.meta===null?'não cadastrada':reportValue(i.meta)} • Direção ${i.direcaoDesempenho??'indefinida'}`,'text-xs text-slate-400'));
-        const s=i.estatisticas;
-        card.append(reportNode('p',`Média ${reportValue(s.media)} • Soma ${s.somaAplicavel?reportValue(s.soma):'não aplicável'} • Ausências ${s.ausentes} • ${i.criticalReason??'Sem classificação crítica pelo critério configurado'}`));
-        const box=document.createElement('div');box.className='h-56 relative';const canvas=document.createElement('canvas');canvas.setAttribute('aria-label',`Evolução de ${i.indicador}`);canvas.setAttribute('role','img');box.append(canvas);card.append(box);
-        const details=document.createElement('details');details.append(reportNode('summary','Série e cálculos detalhados','cursor-pointer text-amber-400'));
-        const table=document.createElement('table');table.className='w-full text-sm';const head=document.createElement('tr');['Competência','Valor','Variação absoluta','Variação %'].forEach(t=>head.append(reportNode('th',t)));table.append(head);
-        s.mensais.forEach(p=>{const row=document.createElement('tr');[p.competencia,reportValue(p.valor),reportValue(p.variacaoAnterior?.absoluta),reportValue(p.variacaoAnterior?.percentual)].forEach(t=>row.append(reportNode('td',t,'p-2 border-b border-slate-700')));table.append(row);});
-        const scroll=document.createElement('div');scroll.className='overflow-x-auto';scroll.append(table);details.append(scroll);card.append(details);preview.append(card);
-        const light=document.body.classList.contains('light-theme');
-        managementCharts.push(new Chart(canvas,{type:'line',data:{labels:r.competencias,datasets:[{label:i.unidade??'Valor',data:i.valores,borderColor:'#d38b00',backgroundColor:'#d38b0022',spanGaps:false,tension:0.15,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:light?'#334155':'#cbd5e1'}},y:{ticks:{color:light?'#334155':'#cbd5e1'}}}}}));
-    });
+    renderIndicatorTechnicalCards(preview,r);
     renderSections(sections.diagnosis);
     renderSections(sections.final.slice(0,1));
     preview.append(reportNode('h3','Metodologia e limitações','font-bold'),reportNode('p',r.limitations.join(' '),'text-xs text-slate-400'));
@@ -143,9 +220,9 @@ async function generateManagementReport() {
     if(managementBusy)return;reportSetBusy(true);
     reportMessage('Lendo snapshot autorizado e calculando o relatório…');
     try {
-        const selection=JSON.stringify(reportSelection());const body=await requestManagementReport();
+        const selection=reportSignature();const body=await requestManagementReport();
         reportReady();
-        if(selection!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram durante a leitura. Gere novamente.');
+        if(selection!==reportSignature())throw Error('Os filtros mudaram durante a leitura. Gere novamente.');
         managementReport=body.report;managementSignature=selection;managementEnrichmentKey='';renderManagementReport(false);
         reportMessage('Prévia pronta. O relatório completo está em memória; aplique a análise ou exporte o PDF.');
         reportEl('reportActions').scrollIntoView({block:'nearest'});
@@ -155,20 +232,21 @@ async function generateManagementReport() {
 async function interpretManagementReport() {
     if(managementBusy||!managementReport)return;reportSetBusy(true);reportMessage('Processando análise complementar…');
     try {
-        if(managementSignature!==JSON.stringify(reportSelection()))throw Error('Atualize a prévia.');
+        if(managementSignature!==reportSignature())throw Error('Atualize a prévia.');
         const source=managementReport,key=JSON.stringify([managementSignature,source.basis,source.snapshotUpdatedAt,reportEl('reportProvider').value]);
         if(managementEnrichmentKey===key){reportMessage('O diagnóstico e o plano de ação já estão atualizados para esta seleção.');return;}
         const body=await requestManagementReport(true);
-        if(source!==managementReport||managementSignature!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram. Atualize a prévia.');
+        if(source!==managementReport||managementSignature!==reportSignature())throw Error('Os filtros mudaram. Atualize a prévia.');
         if((source.basis&&body.reportBasis!==source.basis)||!window.ReportContent.valid(body.management,source))throw Error('Conteúdo complementar incompatível. Atualize a geração do relatório.');
-        managementReport.management=body.management;managementReport.aiUsed=body.meta?.deterministicOnly!==true;managementReport.interpretation=body.response;
+        if(source.intelligence?.version===6&&!window.ReportContent.validIntelligence(body.intelligence,source))throw Error('Resposta V6 incompatível; relatório preservado.');
+        managementReport.intelligence=body.intelligence??source.intelligence;managementReport.management=body.management;managementReport.aiUsed=body.meta?.deterministicOnly!==true;managementReport.interpretation=body.response;
         managementEnrichmentKey=key;renderManagementReport();reportMessage('Diagnóstico e propostas atualizados. Os resultados numéricos foram preservados.');
     }catch(e){reportMessage(`Relatório e propostas preservados. Análise complementar indisponível: ${e.message}`);}
     finally{reportSetBusy(false);}
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=5');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=6');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
@@ -179,13 +257,13 @@ async function exportManagementReport(){
         if(!source)throw Error('Gere uma prévia atualizada.');
         PdfProgress.open(`Relatório ${source.type}`,source.indicators.length);await reportPaint();
         reportReady();const {data,error}=await supabaseClient.auth.getSession();if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
-        if(signature!==JSON.stringify(reportSelection()))throw Error('Os filtros mudaram. Atualize a prévia.');
+        if(signature!==reportSignature())throw Error('Os filtros mudaram. Atualize a prévia.');
         if(source.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(source.snapshotUpdatedAt))throw Error('Os dados foram atualizados. Gere uma nova prévia.');
         PdfProgress.update('Carregando bibliotecas locais',5);await reportPaint();await loadReportPdfLibraries();
         PdfProgress.update('Bibliotecas carregadas',10);await reportPaint();
-        const report=JSON.parse(JSON.stringify(source)),charts=report.indicators.map(i=>managementChartSource(i,report)),images=[];
+        const report=JSON.parse(JSON.stringify(source)),chartIds=window.ReportContent.chartIds(report),selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report)),images=Array(report.indicators.length).fill(null);
         for(let n=0;n<charts.length;n++){
-            images.push(managementChartImages([charts[n]])[0]);
+            images[selected[n].index]=managementChartImages([charts[n]])[0];
             PdfProgress.update('Preparando gráficos',10+35*(n+1)/Math.max(1,charts.length),n+1,charts.length);await reportPaint();
         }
         PdfProgress.update('Compondo páginas do PDF',45,0,report.indicators.length);await reportPaint();
@@ -200,7 +278,7 @@ async function exportManagementReport(){
         const blob=doc.output('blob');
         if(!(blob instanceof Blob)||!blob.size)throw Error('O documento gerado está vazio.');
         PdfProgress.update('Preparando download',97);await reportPaint();
-        reportReady();if(managementReport!==source||managementSignature!==signature||signature!==JSON.stringify(reportSelection()))throw Error('A prévia mudou durante a geração. Gere novamente.');
+        reportReady();if(managementReport!==source||managementSignature!==signature||signature!==reportSignature())throw Error('A prévia mudou durante a geração. Gere novamente.');
         const name=`DGranel-${report.type}-${new Date(report.generatedAt).toISOString().slice(0,10)}.pdf`;
         reportDownloadBlob(blob,name);PdfProgress.finish(name);reportMessage('Download iniciado. A confirmação de gravação depende do navegador.');
     }catch(e){if(window.PdfProgress?.dialog?.open)PdfProgress.error(e.message);reportMessage(`PDF não gerado: ${e.message}`);}
@@ -208,7 +286,7 @@ async function exportManagementReport(){
 }
 function managementChartImages(charts=managementReport?.indicators.map(i=>managementChartSource(i))??[]){return charts.map(chart=>{
     const canvas=document.createElement('canvas');canvas.width=1400;canvas.height=500;
-    const renderer=new Chart(canvas,{type:'line',data:{labels:[...chart.data.labels],datasets:chart.data.datasets.map(d=>({...d,data:[...d.data],pointRadius:3,borderWidth:2}))},options:{responsive:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:'#334155',font:{size:28},maxTicksLimit:12,maxRotation:0}},y:{ticks:{color:'#334155',font:{size:28}}}}}});
+    const renderer=new Chart(canvas,{type:'line',data:{labels:[...chart.data.labels],datasets:chart.data.datasets.map(d=>({...d,data:[...d.data],pointRadius:3,borderWidth:2}))},options:{responsive:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:'#334155',font:{size:28},maxTicksLimit:12,maxRotation:0}},y:{beginAtZero:true,ticks:{color:'#334155',font:{size:28}}}}}});
     try {
         const image=document.createElement('canvas');image.width=canvas.width;image.height=canvas.height;
         const ctx=image.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,image.width,image.height);ctx.drawImage(canvas,0,0);
@@ -216,6 +294,7 @@ function managementChartImages(charts=managementReport?.indicators.map(i=>manage
     }finally{renderer.destroy();}
 });}
 document.addEventListener('DOMContentLoaded',()=>{
+    initReportContext();
     reportEl('reportSector').addEventListener('change',reportIndicatorOptions);
     for(const id of ['reportType','reportStart','reportEnd','reportIndicators'])reportEl(id).addEventListener('change',reportInvalidate);
     reportEl('reportAll').addEventListener('click',()=>{[...reportEl('reportIndicators').options].forEach(o=>o.selected=true);reportInvalidate();});

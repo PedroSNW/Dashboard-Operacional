@@ -1,7 +1,11 @@
+import {normalizeManagementContext,buildReportIntelligence,operationalAssessment} from './report-intelligence.js';
+export {buildReportIntelligence} from './report-intelligence.js';
 import {analyzeIndicator} from './analytics.js';
 import {buildReportManagement} from './report-management.js';
 export {buildReportManagement,compactReportContext} from './report-management.js';
-export function buildReport(stored, selection, updatedAt = null) {
+/** @param {any} stored @param {any} selection @param {any} updatedAt @param {any} managementContext */
+export function buildReport(stored, selection, updatedAt = null, managementContext = null) {
+    const reportContext=normalizeManagementContext(managementContext);
     if(!stored||!Array.isArray(stored.indicadores)||!Array.isArray(stored.mesesLabels))throw Error('REPORT: Estado remoto indisponível.');
     const labels=stored.mesesLabels;
     if(labels.some(l=>typeof l!=='string')||new Set(labels).size!==labels.length)throw Error('REPORT: Rótulos de competências inválidos ou duplicados.');
@@ -32,7 +36,8 @@ export function buildReport(stored, selection, updatedAt = null) {
         const worse=d!==null&&d!==undefined&&(stats.direcao==='menor_melhor'?d>0:stats.direcao==='maior_melhor'?d<0:false);
         return {...item,estatisticas:stats,critical:Boolean(off||worse),criticalReason:off?'Último valor válido fora da meta':worse?'Piora descritiva entre primeiro e último valor válido':null};
     });
-    const report={type,sector,competencias:competencies,generatedAt:new Date().toISOString(),snapshotUpdatedAt:updatedAt,selectedCount:items.length,indicators:type==='critico'?indicators.filter(i=>i.critical):indicators,criticalCount:indicators.filter(i=>i.critical).length,
+    const report={type,sector,competencias:competencies,generatedAt:new Date().toISOString(),snapshotUpdatedAt:updatedAt,selectedCount:items.length,indicators:type==='critico'?indicators.filter(i=>i.critical||operationalAssessment(i).level==='Alta'):indicators,criticalCount:indicators.filter(i=>i.critical).length,
         limitations:['Dados agregados; competências permanentemente revisáveis.','Valores ausentes não são zero. Taxas não são somadas; médias de taxas não são ponderadas sem denominadores vinculados.','Tendência é descritiva, não causa comprovada. Direção neutra/indefinida não recebe julgamento.'],aiUsed:false,context};
-    return {...report,management:buildReportManagement(report)};
+    const result={...report,managementContext:reportContext,management:buildReportManagement(report)};
+    return {...result,intelligence:buildReportIntelligence(result)};
 }

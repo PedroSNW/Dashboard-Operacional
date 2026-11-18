@@ -6,7 +6,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentation, INTERPRETATION_CONTRACT } from "./analytics.js";
 import { compactGroqContext, groqFailure, GROQ_OUTPUT_BUDGET, GROQ_MAX_BODY_BYTES } from "./groq-context.js";
-import { buildReport, buildReportManagement, compactReportContext } from "./reports.js";
+import { buildReport, buildReportManagement, compactReportContext, buildReportIntelligence } from "./reports.js";
 import { groqProfile, groqUsage, safeFinishReason, createGroqGuard, GROQ_LIMITS } from "./groq-policy.js";
 
 const MAX_BODY_BYTES = 25 * 1024;
@@ -342,9 +342,9 @@ serve(async (req: Request) => {
     if (body.action === "report") {
       const { data: remote, error: reportError } = await supabaseClient.from("dashboard_state").select("data,updated_at").eq("id", 1).single();
       if (reportError || !remote?.data) throw new HttpError("Leitura autorizada do relatório indisponível. Tente atualizar os dados.", 403);
-      const report = buildReport(remote.data, body.selection, remote.updated_at);
+      const report = buildReport(remote.data, body.selection, remote.updated_at, body.managementContext);
       requestedReport = report;
-      requestedReportBasis=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([report.type,report.sector,report.competencias,report.indicators]))))).map(b=>b.toString(16).padStart(2,'0')).join('');
+      requestedReportBasis=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([report.type,report.sector,report.competencias,report.indicators,{version:6,managementContext:report.managementContext,policyVersion:report.intelligence.policyVersion}]))))).map(b=>b.toString(16).padStart(2,'0')).join('');
       if (body.expectedUpdatedAt && body.expectedUpdatedAt !== remote.updated_at) throw new HttpError("O snapshot mudou. Atualize a prévia antes de solicitar interpretação.", 409);
       if(body.expectedReportBasis&&body.expectedReportBasis!==requestedReportBasis)throw new HttpError("Os resultados do relatório mudaram. Atualize a prévia.",409);
       if (body.interpret !== true) {
@@ -466,11 +466,12 @@ serve(async (req: Request) => {
     let technicalDetails = "";
     const reportCompact=requestedReport?compactReportContext(requestedReport):null;
     let reportManagement=requestedReport?.management;
-    const reportFields=()=>requestedReport?{management:reportManagement,reportBasis:requestedReportBasis}:{};
-    const reportMeta=()=>requestedReport?{reportVersion:4,deterministicOnly:reportManagement?.audit.fallback,reportValidation:reportManagement?.audit}:{};
+    const reportFields=()=>requestedReport?{management:reportManagement,intelligence:requestedReport.intelligence,reportBasis:requestedReportBasis}:{};
+    const reportMeta=()=>requestedReport?{reportVersion:6,deterministicOnly:reportManagement?.audit.fallback,reportValidation:reportManagement?.audit}:{};
     const composeResponse = (text: string): string => {
       if(requestedReport){
         reportManagement=buildReportManagement(requestedReport,text,reportCompact?.sentIds);
+        requestedReport.intelligence=buildReportIntelligence(requestedReport,reportManagement);
         technicalDetails=JSON.stringify({reportVersion:4,validation:reportManagement.audit});
         return reportManagement.executiveDiagnosis.map((d:{title:string;situation:string;evidence:string[]})=>`${d.title}: ${d.situation} ${d.evidence[0]}`).join("\n");
       }

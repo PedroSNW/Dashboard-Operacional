@@ -674,3 +674,24 @@ body.light-theme .ai-primary-tag, body.light-theme .ai-active-tag { color: #6d28
 body.light-theme .ai-alternatives { border-color: #e2e8f0; }
 body.light-theme .ai-alternatives summary, body.light-theme .ai-secondary-test { color: #475569; }
 
+
+/* Contexto editorial V6: estado efêmero, sem integração com salvamento. */
+.report-context > summary { cursor:pointer; padding:.25rem 0; }
+.report-context[open] { display:grid; gap:1rem; }
+.report-context-fields { min-width:0; display:grid; gap:1rem; border:0; padding:0; }
+.report-context-grid { display:grid; gap:1rem; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.report-context-grid label { display:grid; gap:.4rem; min-width:0; font-size:.875rem; }
+.report-context textarea,.report-context select { width:100%; min-width:0; border:1px solid var(--v3-border,#34435a); border-radius:.65rem; padding:.65rem; background:var(--v3-surface,#111d2e); color:inherit; }
+.report-context textarea { resize:vertical; min-height:5rem; }
+.report-context-check { display:flex; align-items:flex-start; gap:.6rem; font-size:.85rem; line-height:1.5; }
+.report-context-check input { flex-shrink:0; margin-top:.3rem; accent-color:#d99923; }
+.report-context-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:.7rem; }
+.report-context [data-over-limit="true"] { color:#fca5a5; }
+.light-theme .report-context textarea,.light-theme .report-context select { background:#fff; border-color:#cbd5e1; }
+.light-theme .report-context [data-over-limit="true"] { color:#9f1239; }
+.report-context :focus-visible { outline:2px solid #d99923; outline-offset:3px; }
+.report-context fieldset:disabled { opacity:.65; }
+.report-v6-summary { display:grid; gap:.75rem; grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr)); }
+.report-v6-summary section { border-left:2px solid #b17e20; padding-left:.75rem; min-width:0; }
+.report-v6-summary p { margin:.3rem 0; }
+@media(max-width:600px) { .report-context-grid { grid-template-columns:minmax(0,1fr); } }

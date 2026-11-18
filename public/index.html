@@ -21,7 +21,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=reports-v4.1">
+        <link rel="stylesheet" href="style.css?v=reports-v6">
     <link rel="stylesheet" href="workspace-v3.css?v=settings-footer-1">
     <link rel="stylesheet" href="motion-v3-1.css?v=3.1">
     <link rel="stylesheet" href="pending-changes.css?v=1">
@@ -373,6 +373,24 @@
                     <button id="reportRefresh" class="rounded-xl border border-slate-600 px-4 py-3 text-sm">Atualizar filtros</button>
                 </div>
             </section>
+            <details id="reportContextPanel" class="report-context glass-card rounded-2xl p-5">
+                <summary class="font-bold">Contexto da Gestão <span class="text-sm font-normal">— opcional</span></summary>
+                <p class="text-sm">Informações complementares, declaradas pela gestão e sem verificação independente. Não alteram indicadores, metas oficiais ou o salvamento corporativo. Mantidas somente nesta elaboração.</p>
+                <p id="reportContextScope" role="status" class="text-sm"></p>
+                <button id="reportContextRebind" type="button" class="v3-button" hidden>Vincular este contexto ao recorte atual</button>
+                <fieldset id="reportContextFields" class="report-context-fields">
+                <legend class="sr-only">Informações da gestão para este relatório</legend>
+                <div class="report-context-grid"><label for="reportContext-actionsTaken">Ações realizadas no período<textarea id="reportContext-actionsTaken" rows="3" maxlength="320" placeholder="Quais ações foram realizadas pela equipe?" aria-describedby="reportContextCount-actionsTaken"></textarea><span id="reportContextCount-actionsTaken" class="text-xs">0/320</span></label><label for="reportContext-difficulties">Dificuldades encontradas<textarea id="reportContext-difficulties" rows="3" maxlength="320" placeholder="Quais foram os principais obstáculos?" aria-describedby="reportContextCount-difficulties"></textarea><span id="reportContextCount-difficulties" class="text-xs">0/320</span></label><label for="reportContext-achievements">Conquistas relevantes<textarea id="reportContext-achievements" rows="3" maxlength="320" placeholder="Quais resultados positivos merecem destaque?" aria-describedby="reportContextCount-achievements"></textarea><span id="reportContextCount-achievements" class="text-xs">0/320</span></label><label for="reportContext-priorities">Prioridades da gestão<textarea id="reportContext-priorities" rows="3" maxlength="320" placeholder="Quais resultados a equipe pretende priorizar?" aria-describedby="reportContextCount-priorities"></textarea><span id="reportContextCount-priorities" class="text-xs">0/320</span></label><label for="reportContext-goals">Metas propostas ou aprovadas<textarea id="reportContext-goals" rows="3" maxlength="320" placeholder="Informe objetivos gerenciais; as metas oficiais não serão alteradas." aria-describedby="reportContextCount-goals"></textarea><span id="reportContextCount-goals" class="text-xs">0/320</span></label><label for="reportContext-observations">Observações adicionais<textarea id="reportContext-observations" rows="3" maxlength="320" placeholder="Inclua apenas contexto necessário, sem informações identificáveis." aria-describedby="reportContextCount-observations"></textarea><span id="reportContextCount-observations" class="text-xs">0/320</span></label></div>
+                <div class="report-context-grid">
+                    <label for="reportContextActionStatus">Situação das ações informadas<select id="reportContextActionStatus"><option value="pending_validation">Pendente de validação</option><option value="reported_in_progress">Informadas como em execução</option><option value="reported_completed">Informadas como concluídas</option></select></label>
+                    <label for="reportContextGoalKind">Tipo do objetivo gerencial<select id="reportContextGoalKind"><option value="suggested">Objetivo sugerido</option><option value="management">Objetivo informado pela gestão</option><option value="approved">Objetivo informado como aprovado</option></select></label>
+                </div>
+                <label class="report-context-check"><input id="reportContextApproval" type="checkbox"> Confirmo explicitamente a aprovação informada dos objetivos. Esta declaração não é confirmação independente nem altera a meta oficial.</label>
+                <p class="text-sm">Evite nomes de motoristas, dados pessoais, detalhes identificáveis de sinistros e informações jurídicas ou financeiras sensíveis.</p>
+                <label class="report-context-check"><input id="reportContextShare" type="checkbox"> Permitir enviar este contexto ao provedor externo selecionado quando eu solicitar a análise. Sem esta opção, os textos ficam fora da solicitação à IA.</label>
+                </fieldset>
+                <div class="report-context-footer"><span id="reportContextTotal" role="status">0/1200 caracteres no total</span><button id="reportContextClear" type="button" class="v3-button">Limpar contexto</button></div>
+            </details>
             <section id="reportActions" class="report-actions" aria-labelledby="reportActionsTitle" aria-busy="false">
                 <h2 id="reportActionsTitle" class="font-bold">Ações do relatório</h2>
                 <div class="report-actions-buttons">
@@ -716,8 +734,8 @@
         <script src="pending-state.js?v=1"></script>
         <script src="main.js?v=pending-1"></script>
         <script src="pdf-progress.js?v=3"></script>
-        <script src="report-content.js?v=5"></script>
-        <script src="reports.js?v=5"></script>
+        <script src="report-content.js?v=6"></script>
+        <script src="reports.js?v=6"></script>
     <script src="workspace-v3.js?v=reports-v4.1"></script>
     <script src="motion-v3-1.js?v=3.1"></script>
     <script src="pending-changes.js?v=1"></script>

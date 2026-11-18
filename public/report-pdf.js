@@ -1,10 +1,10 @@
-﻿// Editorial V5: projeção do relatório validado, sem recalcular indicadores.
+// Editorial V5: projeção do relatório validado, sem recalcular indicadores.
 window.ReportPdf={
  theme:Object.freeze({navy:[10,23,43],gold:[177,126,32],ink:[0,0,0],margin:30,right:20,bodyTop:30,bodyBottom:277}),
  build(r,images=[],options={}){const it=this.compose(r,images,options);let s;do{s=it.next();}while(!s.done);return s.value;},
  async buildAsync(r,images=[],onProgress=()=>{},yieldUI=()=>new Promise(r=>setTimeout(r,0)),options={}){const it=this.compose(r,images,options);let s;do{s=it.next();if(!s.done){onProgress(s.value);await yieldUI();}}while(!s.done);return s.value;},
  *compose(r,images=[],options={}){
- const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true}),E=window.ReportContent.editorial(r),m=E.management,W=160;
+ const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true}),E=window.ReportContent.editorial(r),m=E.management,W=160,V=E.version===6?r.intelligence:null,chartIds=new Set(window.ReportContent.chartIds(r));
  const fmt=v=>v===null||v===undefined?'Indisp.':new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(v);
  const direction=i=>({menor_melhor:'Menor é melhor',maior_melhor:'Maior é melhor',neutro:'Neutra'}[i.direcaoDesempenho]??'Não definida');
  const period=`${r.competencias[0]??'Não informado'} a ${r.competencias.at(-1)??'Não informado'}`,date=new Date(r.generatedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'});
@@ -38,14 +38,14 @@ window.ReportPdf={
    didDrawCell:d=>{if(d.section==='body')layout.push({kind:'cell',page:page(),x:d.cell.x,y:d.cell.y,bottom:d.cell.y+d.cell.height,width:d.cell.width,table:number,row:d.row.index,column:d.column.index,text:d.cell.text.join('\n')});}
   });y=doc.lastAutoTable.finalY+2;doc.setDrawColor(0);doc.line(30,y,190,y);y+=1;text(source,10);y+=2;
  };
- const graph=(i,index)=>{if(!images[index])return;const caption=`Gráfico ${++figureNo} – ${i.indicador} (${i.unidade??'unidade não informada'})`;
+ const graph=(i,index)=>{if(!images[index]||!chartIds.has(i.id))return;const caption=`Gráfico ${++figureNo} – ${i.indicador} (${i.unidade??'unidade não informada'})`;
   font(10,true);ensure(doc.splitTextToSize(caption,W).length*4.1+78);text(caption,10,true);
   if(y+72>277){newPage();text(`Gráfico ${figureNo} – continuação da identificação anterior`,10,true);}
   figures.push({number:figureNo,id:i.id,page:page()});
   doc.addImage(images[index],'PNG',30,y,W,57);layout.push({kind:'graph',page:page(),x:30,y,bottom:y+57,width:W});y+=59;text(`${source} ${period}. Lacunas preservadas.`,10);
  };
  const unique=a=>[...new Set(a.filter(x=>typeof x==='string'&&x.trim()))];
- doc.setProperties({title:`D'Granel – Relatório ${r.type}`,subject:`${period} – ${r.sector}`,author:"D'Granel",creator:'Dashboard D’Granel V5'});
+ doc.setProperties({title:`D'Granel – Relatório ${r.type}`,subject:`${period} – ${r.sector}`,author:"D'Granel",creator:V?'Dashboard D’Granel V6':'Dashboard D’Granel V5'});
  if(options.logo){try{doc.addImage(options.logo,'PNG',30,y,18,18);y+=22;}catch{/* Identidade textual preservada. */}}
  heading("D'GRANEL",false,true);text('Dashboard operacional • Relatórios gerenciais',12,false,true);y+=8;
  heading(`Relatório gerencial ${r.type}`,false,true);text(E.focus,12,false,true);y+=8;
@@ -56,6 +56,36 @@ window.ReportPdf={
  text(`Este relatório apresenta ${E.scope} Seu objetivo é apoiar ${E.focus.toLowerCase()}. O método utiliza valores validados do snapshot do Supabase e estatísticas determinísticas, respeitando unidades, metas, direções e valores ausentes. Foram identificados ${r.criticalCount} indicadores com atenção pelos critérios configurados. O corpo executivo apresenta as prioridades e propostas de acompanhamento; os apêndices preservam o histórico do recorte e o conteúdo gerencial validado. As competências permanecem sujeitas a revisão. A análise é descritiva e não estabelece causalidade nem comprova ausência de risco quando não há sinalização. As iniciativas apresentadas são sugestões para avaliação, sem garantia de resultados. A leitura relaciona a situação observada às evidências disponíveis, à avaliação de desempenho e aos encaminhamentos sugeridos. O acompanhamento exige conferir a qualidade dos registros e pactuar responsáveis e prazos. A comparação temporal deve respeitar o escopo de cada indicador e as limitações documentadas.`);
  text('Palavras-chave: desempenho operacional; indicadores; gestão preventiva; acompanhamento.');
  newPage();const tocPage=page();heading('SUMÁRIO',false,true);newPage();
+ if(V){
+ let sectionNumber=0;
+ for(const section of window.ReportContent.v6Sections(r)){
+  if(section.key==='priorities'&&!section.blocks.length||section.key==='panorama'&&!r.indicators.length)continue;
+  heading(`${++sectionNumber} ${section.title}`,true);
+  if(section.key==='panorama'){
+   text('Meta cadastrada atual usada como referência; vigência histórica não verificada. Desempenho, evolução e criticidade operacional são dimensões distintas.',10);
+   if(r.indicators.length>15)text('Panorama executivo selecionado; tabela completa de todos os indicadores no Apêndice A.',10);
+   table('Panorama gerencial do recorte',['Indicador / setor / unidade','Recente / meta atual','Desempenho / tendência','Criticidade operacional'],window.ReportContent.v6Overview(r,fmt,true),[47,34,51,28]);
+  }
+  if(section.key==='actions'){
+   table('Iniciativas para avaliação',['Ref. / prioridade','Iniciativa / objetivo','Área / prazo sugeridos','Situação / verificação'],V.actions.map(a=>[a.ref+'\n'+a.priority,a.title+'\n'+a.objective,a.owner+'\n'+a.timeline,a.status+'\nCritério completo: '+a.ref+' no Apêndice D.']),[28,59,39,34],[],'Quadro');
+   const communications=m?.communicationSuggestions??[];
+   if(communications.length)table('Comunicação preventiva para avaliação',['Tema','Canal / formato','Orientação pública'],communications.map(c=>[c.theme,c.channel+' / '+c.format,c.message]),[55,40,65],[],'Quadro');
+  }
+  if(section.key==='evolution'){
+   text('Horizontes sugeridos após a decisão de iniciar; não representam compromissos aprovados. A referência A identifica cada iniciativa no plano e no Apêndice D.',10);
+   table('Plano de evolução — próximos 90 dias',['Horizonte','Atividades adaptadas às iniciativas','Acompanhamento'],V.evolutionPlan.map(h=>[`Até ${h.days} dias`,h.items.map(a=>a.ref+' · '+a.task).join('\n'),h.items.map(a=>a.ref).join(', ')+': verificar mesmos indicadores e critérios do Apêndice D.\n'+(V.goals?.label??'Objetivos sugeridos; pactuação necessária.')]),[24,94,42],[],'Quadro');
+  }
+  for(const [index,b] of section.blocks.entries()){
+   heading(b.title);unique(b.lines).forEach(line=>text(line,12));
+   if(section.key==='priorities'){const i=r.indicators.find(i=>i.id===b.id);if(i)graph(i,r.indicators.indexOf(i));yield {stage:'diagnosis',processed:index+1,total:section.blocks.length};}
+  }
+  if(section.note)text(section.note,10);
+ }
+ heading(`${++sectionNumber} Metodologia e limitações`,true);
+ unique([...V.limitations,...(m?.limitations??[]).filter(l=>l.startsWith('Síntese complementar parcial:')||l.startsWith('Plano priorizado:'))]).forEach(l=>text(l,10));
+ text('Médias usam somente valores válidos. Percentuais com base zero são indisponíveis. Não há consolidação entre unidades diferentes. A direção cadastrada orienta a comparação descritiva, não uma previsão.',10);
+ text(`Snapshot: ${r.snapshotUpdatedAt??'não informado'}; emissão ${date} (Brasília). Base: ${r.basis??'não informada'}.`,10);
+ }else{
  heading('1 Resumo executivo',true);text(E.focus);E.summary.forEach(l=>text(l));
  text(m?.actionPlan.length?`Decisões sugeridas: avaliar ${m.actionPlan.slice(0,2).map(a=>a.title).join('; ')}. Responsáveis, prazos e critérios são propostas descritas na seção 5.`:'Encaminhamento: validar a cobertura dos dados e pactuar o acompanhamento com as áreas responsáveis.');
  text('Atenção por meta/direção não comprova causalidade; ausência de sinalização não comprova ausência de risco.');
@@ -79,9 +109,12 @@ window.ReportPdf={
  heading('6 Conclusão executiva',true);text(`${r.criticalCount} indicadores requerem atenção pelos critérios configurados. Priorizar a revisão das evidências e a avaliação das iniciativas da seção 5, pactuando responsáveis e prazos antes da execução. Monitorar os indicadores relacionados nas competências seguintes, sem prometer redução de eventos ou atribuir causas a dados agregados.`);
  heading('7 Metodologia e limitações',true);text('Dados: snapshot validado do Supabase. Médias consideram apenas valores válidos. Percentuais com base zero são indisponíveis. A direção cadastrada orienta a comparação descritiva. Taxas não são somadas nem ponderadas sem denominadores compatíveis. Metas nulas e zero têm significados distintos.');
  unique(E.limitations).forEach(l=>text(l));text(E.selection);text(`Snapshot: ${r.snapshotUpdatedAt??'não informado'}; emissão ${date} (Brasília). Base: ${r.basis??'não informada'}.`,10);
+ }
  heading('REFERÊNCIAS',true,true);text(`D’GRANEL. Dashboard operacional: snapshot de indicadores. Dados internos; atualização ${r.snapshotUpdatedAt??'não informada'}; consulta na emissão ${date}.`);
  text('Sem fontes externas para inferências operacionais. Referências de normalização e adaptações editoriais: RELATORIOS-V5-ABNT-EXECUTIVO.md.');
  heading('APÊNDICE A – Cadastro e estatísticas',true,true);text('Indisp. = indisponível; N/A = soma não aplicável. As tabelas preservam o cadastro e as estatísticas exibidas na versão anterior.');
+ if(V&&r.indicators.length>15)table('Panorama gerencial completo',['Indicador / setor / unidade','Recente / meta atual','Desempenho / tendência','Criticidade operacional'],window.ReportContent.v6Overview(r,fmt),[47,34,51,28]);
+ if(V&&V.charts.excluded.length){for(const reason of new Set(V.charts.excluded.map(x=>x.reason)))text(reason+' — IDs: '+V.charts.excluded.filter(x=>x.reason===reason).map(x=>String(x.id)).join('; ')+'. Dados integrais nas tabelas.',10);}
  table('Cadastro dos indicadores',['Indicador / identificação','Setor / unidade','Meta / direção','Atualização'],r.indicators.map(i=>[`${i.indicador}\nID: ${i.id}`,`${i.setor}\n${i.unidade??'Não informada'}`,`${fmt(i.meta)}\n${direction(i)}`,i.ultimaAtualizacao??'Não informada']),[57,32,36,35]);
  const statsRows=[];for(const [n,i] of r.indicators.entries()){const s=i.estatisticas;statsRows.push([i.indicador,fmt(s.media),s.somaAplicavel?fmt(s.soma):'N/A',fmt(s.minimo),fmt(s.maximo),String(s.ausentes)]);yield {stage:'compose',processed:n+1,total:r.indicators.length};}
  table('Estatísticas determinísticas por indicador',['Indicador','Média','Soma','Mínimo','Máximo','Ausências'],statsRows,[55,21,21,21,21,21],[1,2,3,4,5]);
@@ -91,11 +124,13 @@ window.ReportPdf={
  for(let offset=0;offset<r.competencias.length;offset+=historyColumns){const months=r.competencias.slice(offset,offset+historyColumns),width=(W-48)/months.length;
   table(`Histórico – ${months[0]} a ${months.at(-1)}`,['Indicador',...months],r.indicators.map(i=>[i.indicador,...months.map(c=>{const p=i.estatisticas.mensais.find(p=>p.competencia===c);return `${p?.valor===null||p?.valor===undefined?'Ausente':fmt(p.valor)}\n${fmt(p?.variacaoAnterior?.absoluta)}\n${fmt(p?.variacaoAnterior?.percentual)}%`;})]),[48,...months.map(()=>width)],months.map((_,n)=>n+1));
  }
- heading('APÊNDICE C – Gráficos complementares',true,true);text('Gráficos prioritários: seção 3. Os demais gráficos disponíveis aparecem abaixo, sem duplicação. A série numérica integral consta do Apêndice B.');
- const complementary=r.indicators.map((i,n)=>({i,n})).filter(({i,n})=>!E.priority.includes(i)&&images[n]);
+ const complementary=r.indicators.map((i,n)=>({i,n})).filter(({i,n})=>!E.priority.includes(i)&&images[n]&&chartIds.has(i.id));
+ if(!V||complementary.length){
+ heading('APÊNDICE C – Gráficos complementares',true,true);text('Gráficos prioritários junto à análise executiva. Séries numéricas integrais no Apêndice B.');
  for(const [index,{i,n}] of complementary.entries()){graph(i,n);yield {stage:'figures',processed:index+1,total:complementary.length};}
  if(!images.some(Boolean))text('Gráficos não fornecidos ao compositor nesta execução. Consulte o histórico numérico integral.');
- heading('APÊNDICE D – Evidências e propostas completas',true,true);text('Conteúdo gerencial validado. Frases idênticas dentro de um mesmo bloco aparecem uma única vez, sem suprimir propostas distintas.');
+ }
+ heading('APÊNDICE D – Evidências e propostas completas',true,true);text('Evidências e iniciativas do catálogo validado. Ressalvas gerais centralizadas na metodologia; condições específicas permanecem junto ao indicador.',10);
  const sections=window.ReportContent.sections(r),communicationBlocks=sections.final[2]?.blocks??[];
  const blocks=[...(sections.final[1]?.blocks??[]),...new Map(communicationBlocks.map(b=>[JSON.stringify({title:b.title,lines:unique(b.lines)}),b])).values()];
  if(m){
@@ -103,7 +138,7 @@ window.ReportPdf={
   // mantendo a associação por ID. Não remove fatos por similaridade ou por palavras-chave.
   const evidenceRows=r.indicators.map(i=>{
    const diagnoses=m.executiveDiagnosis.filter(d=>d.indicatorId===i.id),risks=m.priorityRisks.filter(p=>p.indicatorId===i.id);
-   const evidence=unique([...diagnoses.flatMap(d=>[d.situation,...d.evidence,...d.limitations]),...risks.flatMap(p=>[p.description,p.evidence,`Prioridade: ${p.priority??'não informada'}`]),...m.actionPlan.flatMap(a=>a.evidence.filter(e=>e.indicatorId===i.id).map(e=>e.text))]);
+   const evidence=unique([...diagnoses.flatMap(d=>[d.situation,...d.evidence,...d.limitations]),...risks.flatMap(p=>[p.description,p.evidence,...(V?[]:[`Prioridade: ${p.priority??'não informada'}`])]),...m.actionPlan.flatMap(a=>a.evidence.filter(e=>e.indicatorId===i.id).map(e=>e.text))]);
    return [i.indicador,evidence.join('\n')||'Sem interpretação complementar.'];
   });
   table('Diagnóstico e evidências por indicador',['Indicador','Evidências e ressalvas'],evidenceRows,[42,118],[],'Quadro');
@@ -111,15 +146,18 @@ window.ReportPdf={
  for(const [n,b] of blocks.entries()){
   const action=n<(m?.actionPlan.length??0)?m.actionPlan[n]:null;
   heading(action?`A${n+1} – ${b.title}`:b.title);
-  unique(b.lines).filter(line=>!action||!line.startsWith('Evidência: ')).forEach(line=>{
-   if(action&&line===`Monitorar: ${action.relatedIndicators.map(i=>i.name).join('; ')}`)text('Monitorar: os mesmos indicadores relacionados acima.',10);
+  unique(b.lines).filter(line=>(!action||!line.startsWith('Evidência: '))&&(!V||!['A associação ao indicador não confirma causas individuais.','Responsável e prazo são sugestões, sujeitos à avaliação e aprovação da empresa.'].includes(line))).forEach(line=>{
+   if(action&&V&&line.startsWith('Prioridade:'))text('Prioridade de acompanhamento: '+V.actions[n].priority+'. Criticidade operacional conforme panorama validado.',10);
+   else if(action&&line===`Monitorar: ${action.relatedIndicators.map(i=>i.name).join('; ')}`)text('Monitorar: os mesmos indicadores relacionados acima.',10);
    else text(line,10);
   });
+  if(action&&V)text('Situação: Sugerida. Objetivos e responsáveis por área dependem de pactuação.',10);
   if(action)text('Evidências: quadro de diagnóstico deste apêndice, associadas aos indicadores relacionados.',10);
   yield {stage:'management',processed:n+1,total:blocks.length};
  }
  if(!m&&r.interpretation){heading('Interpretação gerencial');text(r.interpretation);}if(!blocks.length&&!r.interpretation)text('Conteúdo complementar indisponível. Dados determinísticos preservados nos apêndices anteriores.');
- heading('FORMULÁRIO DE IDENTIFICAÇÃO',true,true);text(`Título: Relatório gerencial ${r.type}. Autor-entidade e instituição executora: D’Granel. Projeto: Dashboard operacional. Classificação: uso interno. Data: ${date}. Edição editorial: V5. Período: ${period}.`);
+ if(V)ensure(65); // Manter o formulário curto inteiro, sem uma última linha isolada.
+ heading('FORMULÁRIO DE IDENTIFICAÇÃO',true,true);text(`Título: Relatório gerencial ${r.type}. Autor-entidade e instituição executora: D’Granel. Projeto: Dashboard operacional. Classificação: uso interno. Data: ${date}. Edição editorial: ${V?'V6':'V5'}. Período: ${period}.`);
  text('Endereço institucional, local de publicação, instituição patrocinadora e identificadores bibliográficos: não informados no cadastro. Não foram inferidos.');text('Resumo e palavras-chave: elementos iniciais. Distribuição interna eletrônica.');
  // Não criar uma página apenas para repetir a contagem já conhecida pelo leitor de PDF.
  const pages=doc.getNumberOfPages();
@@ -127,6 +165,6 @@ window.ReportPdf={
  for(const entry of toc){font(12,true);const lines=doc.splitTextToSize(entry.title,W-16),h=lines.length*4.87+3;if(y+h>277)throw Error('Sumário excedeu a página reservada.');const top=y;text(entry.title,12,true);font(12);doc.text(String(entry.page),190,top+4.23,{align:'right'});doc.link(30,top,W,h,{pageNumber:entry.page});}
  doc.setPage(lastPage);y=lastY;
  for(let p=1;p<=pages;p++){doc.setPage(p);font(10,true);doc.text("D'GRANEL",30,18);doc.setDrawColor(177,126,32);doc.line(30,23,190,23);if(p>tocPage){font(10);doc.text(String(p),190,18,{align:'right'});}doc.setDrawColor(205,210,216);doc.line(30,282,190,282);font(10);doc.text('D’Granel • Uso interno',30,288);yield {stage:'finalize',processed:p,total:pages};}
- doc.reportLayout={version:5,pages,toc,tocPage,tables,figures,historyColumns,blocks:layout,coverage:r.indicators.map(i=>({id:i.id,months:i.estatisticas.mensais.length})),margins:{left:30,right:20,top:30,bottom:20}};return doc;
+ doc.reportLayout={version:V?6:5,pages,toc,tocPage,tables,figures,historyColumns,blocks:layout,coverage:r.indicators.map(i=>({id:i.id,months:i.estatisticas.mensais.length})),margins:{left:30,right:20,top:30,bottom:20}};return doc;
  }
 };

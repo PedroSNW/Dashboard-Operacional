@@ -84,9 +84,9 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 1. Acesse o projeto no painel do Supabase.
 2. Navegue até **Edge Functions**.
 3. Selecione a função `seguranca-viaria-ia` (ou crie-a caso ainda não exista).
-4. Envie o conjunto completo da pasta: `index.ts`, `analytics.js`, `groq-context.js`, **`groq-policy.js`**, `reports.js` e `report-management.js`, com esses nomes e no mesmo nível. Publicar apenas `index.ts` causa erro de módulo ausente.
+4. Envie o conjunto completo da pasta: `index.ts`, `analytics.js`, `groq-context.js`, **`groq-policy.js`**, `reports.js`, `report-management.js` e **`report-intelligence.js`**, com esses nomes e no mesmo nível. Publicar apenas `index.ts` causa erro de módulo ausente.
 5. Revise a versão e publique manualmente somente quando autorizado. Preserve as opções de autenticação da implantação atual.
-6. Na atualização V5.1, mantenha os Secrets existentes; não é necessário criar ou alterar credenciais.
+6. Na atualização V6, mantenha os Secrets existentes; não é necessário criar ou alterar credenciais.
 
 ### Relatórios V5.1
 
