@@ -4,7 +4,8 @@ let managementSignature = '';
 let managementCharts = [];
 let managementBusy = false;
 let managementEnrichmentKey='';
-window.resetManagementReport = function(){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
+const reportChosenIds=new Set();let reportSelectionInitialized=false;
+window.resetManagementReport = function(){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';reportChosenIds.clear();reportSelectionInitialized=false;reportEl('reportIndicators')?.replaceChildren();clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
 const reportEl = id => document.getElementById(id);
 const reportValue = value => value === null || value === undefined ? 'Ausente' : new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(value);
 const reportExportFormat=()=>window.ReportExecutive?.format(reportEl('reportFormat')?.value)??'complete';
@@ -53,7 +54,8 @@ function initReportContext(){
 
 function reportMessage(text) { reportEl('reportStatus').textContent = text;reportUpdateActions(); }
 function reportUpdateActions(){
-    const consistent=Boolean(managementReport&&managementSignature===reportSignature());
+    const snapshotChanged=managementReport?.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(managementReport.snapshotUpdatedAt);
+    const consistent=Boolean(managementReport&&managementSignature===reportSignature()&&!snapshotChanged);
     const ready=consistent&&supabaseStateLoaded&&supabaseReady&&currentSession&&!hasUnsavedChanges;
     for(const id of ['reportGenerate','reportRefresh','reportProvider','reportFormat'])if(reportEl(id))reportEl(id).disabled=managementBusy;
     if(reportEl('reportAI')){reportEl('reportAI').disabled=managementBusy||!ready||!managementReport?.indicators.length;const provider=reportEl('reportProvider').value;reportEl('reportAI').textContent=`Aplicar análise ${{groq:'Groq',gemini:'Gemini',openai:'OpenAI'}[provider]||'Groq'}`;}
@@ -61,6 +63,7 @@ function reportUpdateActions(){
     reportEl('reportActions')?.setAttribute('aria-busy',String(managementBusy));
     if(reportEl('reportActions'))reportEl('reportActions').dataset.state=managementBusy?'processing':managementReport&&!consistent?'stale':consistent?'ready':'empty';
     if(reportEl('reportProcessing'))reportEl('reportProcessing').hidden=!managementBusy;
+    window.DGranelUX?.reportState({consistent,ready});
 }
 function reportSetBusy(value){managementBusy=value;updateReportContextUI();reportUpdateActions();}
 function reportReady() {
@@ -79,15 +82,18 @@ function reportInvalidate() {
     reportMessage(stale?'Filtros alterados. Gere ou atualize a prévia para continuar.':managementReport?'A prévia corresponde aos filtros atuais.':'Escolha os filtros e gere uma prévia.');
 }
 function reportIndicatorOptions() {
-    const previous = new Set([...reportEl('reportIndicators').selectedOptions].map(o=>o.value));
+    if(reportEl('reportIndicators').options.length)captureReportIndicatorSelection();
+    if(!reportSelectionInitialized&&currentData.length){currentData.forEach((i,n)=>reportChosenIds.add(JSON.stringify(i.id??`indice:${n}`)));reportSelectionInitialized=true;}
     reportEl('reportIndicators').replaceChildren();
     currentData.forEach((i,n)=>{
         if(reportEl('reportSector').value!=='TODOS'&&i.setor!==reportEl('reportSector').value)return;
         const o=new Option(`${i.setor} — ${i.indicador}`,JSON.stringify(i.id??`indice:${n}`));
-        o.selected=previous.size?previous.has(o.value):true;reportEl('reportIndicators').add(o);
+        o.selected=reportChosenIds.has(o.value);reportEl('reportIndicators').add(o);
     });
     reportInvalidate();
 }
+function captureReportIndicatorSelection(){reportSelectionInitialized=true;for(const option of reportEl('reportIndicators').options){if(option.selected)reportChosenIds.add(option.value);else reportChosenIds.delete(option.value);}}
+window.clearReportIndicatorSelection=()=>{reportChosenIds.clear();reportSelectionInitialized=true;[...reportEl('reportIndicators').options].forEach(o=>o.selected=false);reportEl('reportIndicators').dispatchEvent(new Event('change',{bubbles:true}));};
 window.refreshReportFilters = function() {
     const sector=reportEl('reportSector').value;
     reportEl('reportSector').replaceChildren(new Option('Todos os setores','TODOS'));
@@ -313,6 +319,7 @@ function managementChartImages(charts=managementReport?.indicators.map(i=>manage
     }finally{renderer.destroy();}
 });}
 document.addEventListener('DOMContentLoaded',()=>{
+    reportEl('reportIndicators').addEventListener('change',captureReportIndicatorSelection);
     reportEl('reportFormat')?.addEventListener('change',()=>{reportEl('reportFormatHint').textContent=reportExportFormat()==='executive'?'Síntese para reunião, sem apêndices extensos. A base de dados é a mesma nos dois formatos.':'Histórico, tabelas, evidências e apêndices completos da mesma base.';if(managementReport)renderManagementReport();});
     initReportContext();
     reportEl('reportSector').addEventListener('change',reportIndicatorOptions);

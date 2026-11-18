@@ -10,6 +10,7 @@
         trigger.dataset.state=isSavingState?'loading':!ready?'error':count?'warning':'success';
         trigger.title=state.changes.length?state.changes.slice(0,3).map(c=>[c.category,c.indicator||c.subject,c.competency||c.field].filter(Boolean).join(' → ')).join('\n'):'Sem alterações pendentes';
         trigger.setAttribute('aria-label',`Prévia de salvamento: ${trigger.textContent}`);
+        window.DGranelUX?.pendingChanged(state);
         if(!dialog?.open)return;
         const list=$('pendingChangesList');list.replaceChildren();
         $('pendingChangesSummary').textContent=!ready?'Salvamento bloqueado: valide a leitura autorizada. Diferenças conhecidas continuam listadas abaixo.':count?`${count} ${count===1?'diferença efetiva':'diferenças efetivas'} em relação ao estado confirmado.`:'Sem alterações pendentes. Nada será enviado ao Supabase.';

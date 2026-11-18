@@ -8,7 +8,7 @@
     let sidebar,header,main,toggle,lastFocus,drawer=false;
     const mobile=()=>matchMedia('(max-width: 1023px)').matches;
     const resizeCharts=()=>requestAnimationFrame(()=>Object.values(Chart.instances||{}).forEach(chart=>chart.resize()));
-    function closeDrawer(){drawer=false;document.body.classList.remove('v3-drawer-open');if(main)main.inert=false;if(header)header.inert=false;sidebar?.removeAttribute('aria-modal');sidebar?.removeAttribute('role');toggle?.setAttribute('aria-expanded','false');if(mobile())sidebar.inert=true;lastFocus?.focus();}
+    function closeDrawer(){drawer=false;document.body.classList.remove('v3-drawer-open');if(main)main.inert=false;if(header)header.inert=false;sidebar?.removeAttribute('aria-modal');sidebar?.removeAttribute('role');toggle?.setAttribute('aria-expanded',String(!mobile()&&!document.body.classList.contains('v3-sidebar-collapsed')));if(mobile())sidebar.inert=true;lastFocus?.focus();}
     function menu(){if(mobile()){lastFocus=toggle;drawer=true;sidebar.inert=false;sidebar.setAttribute('role','dialog');sidebar.setAttribute('aria-modal','true');document.body.classList.add('v3-drawer-open');main.inert=true;header.inert=true;toggle.setAttribute('aria-expanded','true');sidebar.querySelector('button').focus();}else{const previousLeft=main.getBoundingClientRect().left;document.body.classList.toggle('v3-sidebar-collapsed');window.DGranelMotion?.shellChanged(previousLeft);toggle.setAttribute('aria-expanded',String(!document.body.classList.contains('v3-sidebar-collapsed')));resizeCharts();}}
     window.onWorkspaceNavigation=tab=>{
         if(!$('v3Title'))return;$('v3Title').textContent=modules[tab]||'Visão geral';$('v3Title').title=modules[tab]||tab;$('v3Breadcrumb').textContent=`Operação / ${modules[tab]||tab}`;
@@ -17,6 +17,7 @@
         if(drawer)closeDrawer();window.refreshOperationalUI();resizeCharts();
     };
     window.refreshOperationalUI=()=>{
+        if(window.DGranelUX?.refreshOperational){window.DGranelUX.refreshOperational();return;}
         if(!$('v3Sync'))return;
         const loaded=supabaseStateLoaded&&supabaseReady;
         const saveFailed=$('lastSavedTag')?.textContent==='Falha ao salvar';
@@ -41,13 +42,16 @@
     };
     function setupReportsSelection(){
         const select=$('reportIndicators');select.hidden=true;select.style.display='none';
-        const label=document.querySelector('label[for="reportIndicators"]');if(label)label.textContent='Indicadores • marque as opções desejadas';
-        const box=element('div','','v3-indicator-picker');const search=element('input');search.type='search';search.placeholder='Pesquisar indicadores ou setor';search.setAttribute('aria-label','Pesquisar seleção de indicadores');
-        const count=element('p','','v3-picker-count');const list=element('div','','v3-picker-list');
-        const clear=element('button','Limpar seleção','v3-button');clear.type='button';
-        const render=()=>{list.replaceChildren();let group='';for(const option of select.options){if(!option.textContent.toLocaleLowerCase().includes(search.value.toLocaleLowerCase()))continue;const sector=option.textContent.split(' — ')[0];if(sector!==group){list.append(element('h4',sector));group=sector;}const label=element('label','','v3-picker-option'),check=element('input');check.type='checkbox';check.checked=option.selected;check.onchange=()=>{option.selected=check.checked;select.dispatchEvent(new Event('change',{bubbles:true}));};label.append(check,element('span',option.textContent));list.append(label);}count.textContent=`${select.selectedOptions.length} de ${select.options.length} selecionados`;};
-        search.oninput=render;clear.onclick=()=>{[...select.options].forEach(o=>o.selected=false);select.dispatchEvent(new Event('change',{bubbles:true}));};
-        select.addEventListener('change',render);$('reportAll').addEventListener('click',render);new MutationObserver(render).observe(select,{childList:true});
+        const label=document.querySelector('label[for="reportIndicators"]');if(label){label.textContent='Indicadores';label.id='reportIndicatorsLabel';}
+        const box=element('div','','v3-indicator-picker');box.id='reportIndicatorPicker';box.setAttribute('role','group');box.setAttribute('aria-labelledby','reportIndicatorsLabel');
+        const search=element('input');search.id='reportIndicatorSearch';search.type='search';search.placeholder='Pesquisar por indicador ou setor';search.setAttribute('aria-label','Pesquisar seleção de indicadores');
+        const count=element('p','','v3-picker-count');count.id='reportIndicatorCount';count.setAttribute('role','status');
+        const list=element('div','','v3-picker-list');list.id='reportIndicatorOptions';list.setAttribute('role','group');list.setAttribute('aria-label','Opções de indicadores');
+        const clear=element('button','Limpar seleção','v3-button');clear.id='reportIndicatorClear';clear.type='button';
+        const checks=new Map(),normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
+        const sync=()=>{for(const option of select.options){const input=checks.get(option.value);if(input)input.checked=option.selected;}count.textContent=select.selectedOptions.length+' de '+select.options.length+' selecionados no setor atual';};
+        const render=()=>{list.replaceChildren();checks.clear();let group='',visible=0;for(const option of [...select.options].sort((a,b)=>a.textContent.localeCompare(b.textContent,'pt-BR'))){if(!normalize(option.textContent).includes(normalize(search.value)))continue;const sector=option.textContent.split(' — ')[0];if(sector!==group){list.append(element('h4',sector));group=sector;}const row=element('label','','v3-picker-option'),check=element('input');check.type='checkbox';check.checked=option.selected;check.dataset.indicatorValue=option.value;check.setAttribute('aria-label',option.textContent);check.onchange=()=>{option.selected=check.checked;select.dispatchEvent(new Event('change',{bubbles:true}));};row.append(check,element('span',option.textContent.slice(option.textContent.indexOf(' — ')+3)));list.append(row);checks.set(option.value,check);visible++;}if(!visible)list.append(element('p',select.options.length?'Nenhum indicador corresponde à pesquisa.':'Nenhum indicador disponível neste setor.','ux-empty'));sync();};
+        search.oninput=render;clear.onclick=()=>window.clearReportIndicatorSelection();select.addEventListener('change',sync);$('reportAll').addEventListener('click',sync);new MutationObserver(render).observe(select,{childList:true});
         box.append(search,count,clear,list);select.after(box);render();
     }
     function setupModalAccessibility(){
@@ -57,11 +61,11 @@
         for(const modal of document.querySelectorAll('div.fixed[id^="modal"]')){
             modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');const heading=modal.querySelector('h2[id],h3[id]');if(heading)modal.setAttribute('aria-labelledby',heading.id);
             let visible=!modal.classList.contains('hidden');
-            new MutationObserver(()=>{const next=!modal.classList.contains('hidden');if(next&&!visible){origins.set(modal,outsideFocus);requestAnimationFrame(()=>{if(!modal.classList.contains('hidden'))modal.querySelector('button,input:not([type=hidden]),select,textarea')?.focus();});}if(!next&&visible)origins.get(modal)?.focus();visible=next;}).observe(modal,{attributes:true,attributeFilter:['class']});
+            new MutationObserver(()=>{const next=!modal.classList.contains('hidden');if(next&&!visible){origins.set(modal,outsideFocus);requestAnimationFrame(()=>{if(modal.classList.contains('hidden'))return;const target=modal.querySelector('input:not([type=hidden]):not([disabled]),select:not([disabled]),textarea:not([disabled])')||modal.querySelector('button');target?.focus();});}if(!next&&visible)origins.get(modal)?.focus();visible=next;}).observe(modal,{attributes:true,attributeFilter:['class']});
         }
         document.addEventListener('keydown',e=>{
             if(drawer||document.querySelector('dialog[open]'))return;const modal=[...document.querySelectorAll('div.fixed[id^="modal"]')].find(m=>!m.classList.contains('hidden'));if(!modal)return;
-            if(e.key==='Escape'){e.preventDefault();closeModal(modal.id);}
+            if(e.key==='Escape'){e.preventDefault();if(window.DGranelUX?.requestModalClose)window.DGranelUX.requestModalClose(modal.id);else closeModal(modal.id);}
             if(e.key==='Tab'){const items=[...modal.querySelectorAll('button:not([disabled]),input:not([type=hidden]),select,textarea,summary,a[href]')].filter(e=>e.getClientRects().length);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}
         });
     }
@@ -114,15 +118,15 @@
         const home=$('view-home');const institutional=element('details','','v3-institutional');institutional.append(element('summary',"Sobre a operação D'Granel e setores monitorados"));while(home.firstChild)institutional.append(home.firstChild);home.append(institutional);
         const overview=element('section','','v3-overview');overview.id='v3Overview';overview.innerHTML='<div class="v3-section-heading"><div><p class="v3-eyebrow">SEGURANÇA VIÁRIA</p><h2>Operação em perspectiva</h2><p id="v3OverviewStatus"></p></div></div><div class="v3-metric-grid"><article><span>Indicadores disponíveis</span><strong id="v3Count">—</strong></article><article><span>Fora da meta</span><strong id="v3Attention">—</strong></article><article><span>Alertas gerados · não ocorrências</span><strong id="v3Alerts">—</strong></article><article><span>Direção não configurada</span><strong id="v3Directions">—</strong></article></div><div id="v3QuickActions" class="v3-quick-actions"></div><div class="v3-home-columns"><section><h2>Indicadores em foco</h2><div id="v3Priority"></div></section><section><h2>Alertas recentes</h2><div id="v3RecentAlerts"></div></section></div>';
         home.prepend(overview);
-        for(const [title,action] of [['Abrir dashboards',()=>switchTab('dashboard')],['Consultar indicadores',()=>switchTab('datagrid')],['Gerar relatório',()=>switchTab('reports')],['Ver alertas',()=>navigateToAlerts()],['Acessar Groq',()=>{switchTab('intelligence');switchIntelligenceSubtab('pilot');setAiProvider('groq');}]]){const b=element('button',title,'v3-button');b.onclick=action;$('v3QuickActions').append(b);}
+        for(const [title,action] of [['Consultar indicadores',()=>switchTab('datagrid')],['Gerar relatório',()=>switchTab('reports')],['Ver alertas',()=>navigateToAlerts()]]){const b=element('button',title,'v3-button');b.onclick=action;$('v3QuickActions').append(b);}
         const filters=element('div','','v3-filter-status');const active=element('span');active.id='v3ActiveFilters';const clear=element('button','Limpar filtros','v3-button');clear.onclick=()=>{$('searchInput').value='';for(const id of ['setorFilter','statusFilter','unitFilter'])$(id).value='TODOS';renderTable();window.refreshOperationalUI();};filters.append(active,clear);$('searchInput').closest('section').append(filters);
         ['searchInput','setorFilter','statusFilter','unitFilter'].forEach(id=>$(id).addEventListener('input',()=>window.refreshOperationalUI()));
         const suggestions=element('div','','v3-query-suggestions');['Qual foi a média de acidentes com culpa?','Analise acidentes e acidentes com culpa','Analise todos os indicadores'].forEach(q=>{const b=element('button',q,'v3-button');b.onclick=()=>{$('aiPromptInput').value=q;$('aiPromptInput').focus();};suggestions.append(b);});$('aiPromptInput').parentElement.before(suggestions);
         $('aiPromptInput').setAttribute('aria-describedby','v3AIDisclaimer');const disclaimer=element('p','A interpretação usa indicadores agregados autorizados; não consulta registros individuais.','v3-help');disclaimer.id='v3AIDisclaimer';$('aiPromptInput').parentElement.after(disclaimer);
         setupReportsSelection();window.onWorkspaceNavigation('home');
         setupModalAccessibility();
-        $('reportType').closest('.report-filters').before(element('h3','1. Configuração','v3-report-heading'));
-        $('reportIndicators').parentElement.before(element('h3','2. Seleção de indicadores','v3-report-heading'));
+        $('reportType').closest('.report-filters').before(element('h3','1. Configurar','v3-report-heading'));
+
         const preview=$('reportPreview'),step=element('section','','v3-report-step');preview.before(step);step.append(element('h2','Prévia do relatório'),preview);
         new MutationObserver(()=>window.refreshOperationalUI()).observe($('lastSavedTag'),{childList:true,characterData:true,subtree:true});
     });

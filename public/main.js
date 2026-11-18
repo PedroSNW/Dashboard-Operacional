@@ -2344,16 +2344,18 @@ async function renderIntelligenceDashboard() {
             appendIntelligenceText(top, 'span', INTELLIGENCE_CATEGORY_LABELS[analysis.category] || 'Análise', 'text-[10px] font-semibold text-slate-400');
             card.appendChild(top);
 
-            appendIntelligenceText(card, 'h3', analysis.title, 'mt-3 text-sm font-bold text-white');
-            appendIntelligenceText(card, 'p', analysis.indicator, 'mt-1 text-xs font-semibold text-slate-200');
+            appendIntelligenceText(card, 'h3', analysis.indicator, 'mt-3 text-sm font-bold text-white');
+            appendIntelligenceText(card, 'p', analysis.title, 'mt-1 text-sm font-semibold text-slate-200');
             appendIntelligenceText(card, 'p', `${analysis.sector} · ${analysis.period}`, 'mt-1 text-[11px] text-slate-400');
-            appendIntelligenceText(card, 'p', analysis.explanation, 'mt-3 text-xs leading-relaxed text-slate-300');
+            const observed=currentData[analysis.indicatorIndex];
+            if(observed)appendIntelligenceText(card,'p',`Meta cadastrada atual: ${observed.meta===null||observed.meta===undefined||observed.meta===''?'não configurada':fmtVal(observed.meta,observed.und)}.`,'mt-2 text-xs text-slate-400');
 
             const details = document.createElement('details');
             details.className = 'mt-3 border-t border-slate-700/70 pt-3';
-            appendIntelligenceText(details, 'summary', 'Ver cálculo e recomendação', 'cursor-pointer text-xs font-semibold text-amber-400');
+            appendIntelligenceText(details, 'summary', 'Ver resultado, interpretação e encaminhamento', 'cursor-pointer text-xs font-semibold text-amber-400');
+            appendIntelligenceText(details,'p','Resultado observado: '+analysis.explanation,'mt-2 text-sm leading-relaxed text-slate-300');
             appendIntelligenceText(details, 'p', analysis.calculation, 'mt-2 text-[11px] leading-relaxed text-slate-400');
-            appendIntelligenceText(details, 'p', `Recomendação: ${analysis.recommendation}`, 'mt-2 text-xs leading-relaxed text-slate-300');
+            appendIntelligenceText(details, 'p', `Encaminhamento: ${analysis.recommendation}`, 'mt-2 text-xs leading-relaxed text-slate-300');
             if (analysis.direction) appendIntelligenceText(details, 'p', `Direção configurada: ${INTELLIGENCE_DIRECTION_LABELS[analysis.direction]}.`, 'mt-2 text-[11px] text-slate-400');
             card.appendChild(details);
 
@@ -2630,6 +2632,7 @@ function navigateToAlerts() {
 }
 
 function renderAlertsList() {
+    if(window.DGranelUX?.renderAlerts){window.DGranelUX.renderAlerts();return;}
     const container = document.getElementById('alertsContainer');
     if (!container) return;
 
@@ -3431,7 +3434,7 @@ function renderTableHeader() {
     html += `
         <th class="py-3 px-3 text-right bg-amber-950/20">Média</th>
         <th class="py-3 px-3 text-center bg-amber-950/20">Min / Max</th>
-        <th class="py-3 px-3 text-center">Tendência</th>
+        <th class="py-3 px-3 text-center" title="Mudança numérica, sem classificação de desempenho">Variação</th>
         <th class="py-3 px-3 text-center">Status</th>
     `;
 
@@ -3490,20 +3493,21 @@ function renderTable() {
 
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-800/50 transition border-b border-slate-800/40';
+        tr.dataset.indicatorIndex=String(origIndex);
 
         let trendIcon = '<i class="fa-solid fa-minus text-slate-500"></i>';
-        if (m.diff > 0) trendIcon = `<span class="text-emerald-400 font-bold"><i class="fa-solid fa-arrow-trend-up"></i> +${fmtVal(m.diff)}</span>`;
-        if (m.diff < 0) trendIcon = `<span class="text-rose-400 font-bold"><i class="fa-solid fa-arrow-trend-down"></i> ${fmtVal(m.diff)}</span>`;
+        if (m.diff > 0) trendIcon = `<span class="text-sky-400 font-bold"><i class="fa-solid fa-arrow-trend-up"></i> +${fmtVal(m.diff)}</span>`;
+        if (m.diff < 0) trendIcon = `<span class="text-sky-400 font-bold"><i class="fa-solid fa-arrow-trend-down"></i> ${fmtVal(m.diff)}</span>`;
 
         let badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">N/A</span>';
         if (m.status === 'OK') badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">OK</span>';
-        if (m.status === 'ACOMPANHAR') badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20 font-semibold">FORA DA META</span>';
+        if (m.status === 'ACOMPANHAR') badge = '<span class="px-2 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">FORA DA META</span>';
 
         let valoresTdHtml = '';
         monthly.labels.forEach((_, idx) => {
             const val = monthly.values[idx] !== undefined ? monthly.values[idx] : null;
             const isLast = idx === monthly.labels.length - 1;
-            valoresTdHtml += `<td class="py-2.5 px-2 text-right font-mono text-[11px] ${isLast ? 'font-bold text-amber-300' : ''}">${fmtVal(val)}</td>`;
+            valoresTdHtml += `<td data-competency-index="${idx}" class="py-2.5 px-2 text-right font-mono text-[11px] ${isLast ? 'font-bold text-amber-300' : ''}">${fmtVal(val)}</td>`;
         });
 
         tr.innerHTML = `
@@ -3515,8 +3519,8 @@ function renderTable() {
                 </div>
             </td>
             <td class="py-2.5 px-3 font-medium text-slate-400 text-[11px]">${escapeHtml(item.setor)}</td>
-            <td title="${escapeHtml(getIndicatorTooltip(item.indicador))}" class="py-2.5 px-3 font-semibold text-white text-[11px]">${escapeHtml(item.indicador)}</td>
-            <td class="py-2.5 px-2 text-center font-mono text-slate-400 text-[11px]">${item.meta !== null ? escapeHtml(fmtVal(item.meta, item.und)) : '-'}</td>
+            <td data-indicator-field="indicador" title="${escapeHtml(getIndicatorTooltip(item.indicador))}" class="py-2.5 px-3 font-semibold text-white text-[11px]">${escapeHtml(item.indicador)}</td>
+            <td data-indicator-field="meta" class="py-2.5 px-2 text-center font-mono text-slate-400 text-[11px]">${item.meta !== null ? escapeHtml(fmtVal(item.meta, item.und)) : '-'}</td>
             <td class="py-2.5 px-2 text-center text-slate-400 text-[11px]">${escapeHtml(item.und)}</td>
             ${valoresTdHtml}
             <td class="py-2.5 px-3 text-right font-mono font-semibold bg-amber-950/20 text-slate-200 text-[11px]">${fmtVal(m.avg, item.und)}</td>
@@ -3526,6 +3530,7 @@ function renderTable() {
         `;
         tbody.appendChild(tr);
     });
+    window.DGranelUX?.decorateTable();
 }
 
 // INSPEÇÃO DETALHADA
@@ -3727,7 +3732,7 @@ document.addEventListener('keydown', event => {
 
     ['modalDetail', 'modalEdit', 'modalChartConfig', 'modalKpiConfig'].forEach(id => {
         const modal = document.getElementById(id);
-        if (modal && !modal.classList.contains('hidden')) closeModal(id);
+        if (modal && !modal.classList.contains('hidden')) {if(window.DGranelUX?.requestModalClose)DGranelUX.requestModalClose(id);else closeModal(id);}
     });
     document.getElementById('headerToolsMenu')?.removeAttribute('open');
 });
