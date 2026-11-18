@@ -1,0 +1,32 @@
+// Executes the real handler; only remote imports, database and provider transport are mocked.
+import {fixture,authored} from './reports-v7-fixtures.mjs';
+const root=new URL('../',import.meta.url),g=globalThis as any,assert=(v:any,m:string)=>{if(!v)throw Error(m);};
+let handler:(req:Request)=>Promise<Response>,userId='author-test',denied=false,authDenied=false,status=200,calls=0,reads=0,captured:any;
+const savedFetch=fetch,savedLog=console.info,savedError=console.error,savedNow=Date.now,logs:string[]=[],envNames=['SUPABASE_URL','SUPABASE_ANON_KEY','GROQ_API_KEY','DASHBOARD_ALLOWED_ORIGINS'],savedEnv=envNames.map(k=>[k,Deno.env.get(k)]);
+let clock=savedNow();Date.now=()=>clock;console.info=(...a)=>logs.push(JSON.stringify(a));console.error=(...a)=>logs.push(JSON.stringify(a));
+for(const key of envNames)Deno.env.set(key,key==='SUPABASE_URL'?'https://mock.invalid':key==='DASHBOARD_ALLOWED_ORIGINS'?'https://dashboard.test':'SECRET_TEST_KEY');
+const sample=fixture(1),stored={mesesLabels:sample.competencias,indicadores:sample.indicators.map(i=>({id:i.id,indicador:i.indicador,setor:i.setor,und:i.unidade,meta:i.meta,direcaoDesempenho:i.direcaoDesempenho,valores:i.valores}))};
+g.__v7serve=(fn:any)=>handler=fn;g.__v7client=(_url:any,_key:any,options:any)=>{assert(options.global.headers.Authorization==='Bearer fake-test-jwt','JWT/RLS');const q={select:()=>q,eq:()=>q,single:async()=>{reads++;return denied?{error:{},data:null}:{error:null,data:{data:stored,updated_at:sample.snapshotUpdatedAt}};}};return {auth:{getUser:async()=>({data:{user:authDenied?null:{id:userId,email:'teste@dgranel.com.br'}},error:null})},from:(table:string)=>{assert(table==='dashboard_state','Tabela indevida');return q;}};};
+globalThis.fetch=async(_url,init)=>{calls++;captured=JSON.parse(String(init?.body));return Response.json(status===200?{choices:[{finish_reason:'stop',message:{content:JSON.stringify(authored(1))}}]}:{error:{code:'rate_limit_exceeded',message:'SECRET_ERROR'}},{status,headers:{'retry-after':'23'}});};
+const generated=new URL('.validation-tools/v7-handler.fixture.ts',root);
+const original=await Deno.readTextFile(new URL('supabase/functions/seguranca-viaria-ia/index.ts',root));
+const source=original.replace(/^import \{ serve \}.*;$/m,'const serve=(globalThis as any).__v7serve;').replace(/^import \{ createClient \}.*;$/m,'const createClient=(globalThis as any).__v7client;').replace(/from "(\.\/[^\"]+)"/g,(_,path)=>'from '+JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/'+path.slice(2),root).href));
+await Deno.writeTextFile(generated,source);await import(generated.href);
+const request=(body:any)=>{clock+=600001;return new Request('https://edge.test',{method:'POST',headers:{Origin:'https://dashboard.test',Authorization:'Bearer fake-test-jwt','Content-Type':'application/json'},body:JSON.stringify(body)});};
+const selection={type:'comparativo',sector:'TODOS',ids:['id-0'],start:'Jan',end:'Mar'},baseBody={action:'report',selection};
+try{
+ const base=await(await handler!(request(baseBody))).json(),body={...baseBody,author:true,provider:'groq',expectedReportBasis:base.report.basis,expectedUpdatedAt:base.report.snapshotUpdatedAt};
+ assert(base.success&&calls===0,'Base chamou provedor');
+ for(const extra of [{expectedReportBasis:'false'},{expectedUpdatedAt:'2000-01-01'},{expectedReportBasis:null},{selection:{...selection,ids:['external']}}]){const response=await handler!(request({...body,...extra}));assert([400,409].includes(response.status)&&calls===0,'Recorte/basis');}
+ const generatedResponse=await handler!(request({...body,evidence:{values:[999]}})),result=await generatedResponse.json();assert(result.success&&result.document&&result.evidence.facts['E0.latest'].value===12&&calls===1,'Snapshot vs frontend');assert(captured.response_format.json_schema.strict&&captured.reasoning_effort==='medium','Parâmetros');
+ // Cache is user-bound, and authorization is rechecked before looking up a cached result.
+ clock-=600001;const cached=await(await handler!(request(body))).json();assert(cached.meta.cacheHit&&calls===1,'Cache');
+ userId='another-test-user';const other=await(await handler!(request(body))).json();assert(other.success&&calls===2&&!other.meta.cacheHit,'Isolamento');
+ denied=true;assert((await handler!(request(body))).status===403&&calls===2,'RLS');denied=false;
+ authDenied=true;const beforeRead=reads;assert((await handler!(request(body))).status===401&&reads===beforeRead,'Sessão');authDenied=false;
+ const before=calls,reviewed=await(await handler!(request({...body,author:false,reviewDocument:authored(1)}))).json();assert(reviewed.success&&!reviewed.validation.reviewRequired&&calls===before,'Revisão chamou IA');
+ const bad=authored(1);bad.sections[0].text='Houve 999 acidentes.';assert((await handler!(request({...body,author:false,reviewDocument:bad}))).status===422,'Edição inválida');
+ status=429;const failed=await handler!(request(body)),failedBody=await failed.json();assert(failed.status===429&&failed.headers.get('retry-after')==='23'&&failedBody.retryAfter===23,'429');assert(!failedBody.error.includes('SECRET'),'Vazamento cliente');
+ assert(!logs.join('').includes('fake-test-jwt')&&!logs.join('').includes('SECRET_TEST_KEY')&&!logs.join('').includes('Acidentes com culpa'),'Logs');
+ console.log('PASS V7 handler real: base/recorte/snapshot, evidência remota, parâmetros, cache por usuário, RLS/sessão, revisão sem IA, edição inválida e 429 Retry-After; sem rede/escrita.');
+}finally{globalThis.fetch=savedFetch;console.info=savedLog;console.error=savedError;Date.now=savedNow;for(const [k,v] of savedEnv){if(v===undefined)Deno.env.delete(k!);else Deno.env.set(k!,v);}delete g.__v7serve;delete g.__v7client;await Deno.remove(generated);}

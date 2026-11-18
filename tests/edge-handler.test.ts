@@ -49,7 +49,8 @@ const source = original.replace(/^import \{ serve \}.*;$/m,'const serve = (globa
     .replace('"./analytics.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/analytics.js',root).href))
     .replace('"./groq-context.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/groq-context.js',root).href))
     .replace('"./groq-policy.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/groq-policy.js',root).href))
-    .replace('"./reports.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/reports.js',root).href));
+    .replace('"./reports.js"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/reports.js',root).href))
+    .replace('"./report-authoring.ts"', JSON.stringify(new URL('supabase/functions/seguranca-viaria-ia/report-authoring.ts',root).href));
 await Deno.writeTextFile(generated,source);
 await import(generated.href);
 const request = (body: unknown, headers: Record<string,string> = {}) => {if(!keepTime)testTime+=360000;return new Request('https://edge.test', {method:'POST',headers:{Origin:'https://dashboard.test',Authorization:'Bearer mock-jwt','Content-Type':'application/json',...headers},body:JSON.stringify(body)});};

@@ -5,11 +5,11 @@ let managementCharts = [];
 let managementBusy = false;
 let managementEnrichmentKey='';
 const reportChosenIds=new Set();let reportSelectionInitialized=false;
-window.resetManagementReport = function(){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';reportChosenIds.clear();reportSelectionInitialized=false;reportEl('reportIndicators')?.replaceChildren();clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
+window.resetManagementReport = function(){window.ReportAuthoring?.reset();managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';reportChosenIds.clear();reportSelectionInitialized=false;reportEl('reportIndicators')?.replaceChildren();clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
 const reportEl = id => document.getElementById(id);
 const reportValue = value => value === null || value === undefined ? 'Ausente' : new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(value);
 const reportExportFormat=()=>window.ReportExecutive?.format(reportEl('reportFormat')?.value)??'complete';
-const reportFormatChartIds=r=>reportExportFormat()==='executive'?window.ReportExecutive.build(r).chartIds:window.ReportContent.chartIds(r);
+const reportFormatChartIds=r=>{const allowed=reportExportFormat()==='executive'?window.ReportExecutive.build(r).chartIds:window.ReportContent.chartIds(r);if(!r.authored?.document.chartIds.length)return allowed;const pack=window.ReportAuthoredCore.evidence(r),requested=r.authored.document.chartIds.map(key=>pack.items.find(i=>i.key===key)?.id);return allowed.filter(id=>requested.includes(id));};
 const REPORT_CONTEXT_FIELDS=['actionsTaken','difficulties','achievements','priorities','goals','observations'];
 let reportContextScope='',reportContextDetached=false,reportContextOwner=null;
 function clearReportContext(notify=true){
@@ -64,6 +64,7 @@ function reportUpdateActions(){
     if(reportEl('reportActions'))reportEl('reportActions').dataset.state=managementBusy?'processing':managementReport&&!consistent?'stale':consistent?'ready':'empty';
     if(reportEl('reportProcessing'))reportEl('reportProcessing').hidden=!managementBusy;
     window.DGranelUX?.reportState({consistent,ready});
+    window.ReportAuthoring?.update({consistent,ready});
 }
 function reportSetBusy(value){managementBusy=value;updateReportContextUI();reportUpdateActions();}
 function reportReady() {
@@ -124,6 +125,7 @@ function reportNode(tag,text,className='') { const node=document.createElement(t
 function renderManagementReport(expanded=reportEl('reportPreviewToggle')?.getAttribute('aria-expanded')==='true'){
     managementCharts.forEach(c=>c.destroy());managementCharts=[];
     const r=managementReport,preview=reportEl('reportPreview');preview.replaceChildren();
+    if(window.ReportAuthoring?.renderCompact(preview,r,expanded))return;
     preview.append(reportNode('h2',`Relatório ${r.type}`,'text-lg font-bold'),reportNode('p',`${r.indicators.length} indicadores no relatório · ${r.selectedCount} selecionados · ${r.criticalCount} pontos de atenção`),reportNode('p',`${r.competencias[0]} a ${r.competencias.at(-1)} · ${r.sector==='TODOS'?'Todos os setores':r.sector??'Setor selecionado'}`,'text-sm text-slate-400'));
     if(reportExportFormat()==='executive'){
         const e=ReportExecutive.build(r);preview.append(reportNode('p','Formato Executivo · síntese para reunião','text-sm'),reportNode('p',e.paragraph,'text-sm'),reportNode('p',`${e.chartIds.length} séries selecionadas para gráficos. Todos os pontos de atenção aparecem na prévia; o histórico integral está no formato Completo.`,'text-xs'));
@@ -142,6 +144,7 @@ function renderManagementReport(expanded=reportEl('reportPreviewToggle')?.getAtt
     const toggle=reportNode('button','Ver prévia completa','v3-button');toggle.id='reportPreviewToggle';toggle.type='button';toggle.setAttribute('aria-controls','reportPreviewDetails');toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>setManagementPreviewExpanded(toggle.getAttribute('aria-expanded')!=='true');
     const details=reportNode('div','','report-preview-details space-y-5');details.id='reportPreviewDetails';details.hidden=true;details.setAttribute('role','region');details.setAttribute('aria-label','Conteúdo completo do relatório');preview.append(toggle,details);
     if(expanded)setManagementPreviewExpanded(true);
+    window.ReportAuthoring?.preview(preview);
 }
 function setManagementPreviewExpanded(expanded){
     const toggle=reportEl('reportPreviewToggle'),details=reportEl('reportPreviewDetails');if(!toggle||!details)return;
@@ -158,7 +161,7 @@ function renderIndicatorTechnicalCards(preview,r){
         card.append(reportNode('h3',i.indicador,'font-bold'),reportNode('p',`${i.setor} • Unidade ${i.unidade??'não informada'} • Meta ${i.meta===null?'não cadastrada':reportValue(i.meta)} • Direção ${i.direcaoDesempenho??'indefinida'}`,'text-xs text-slate-400'));
         const s=i.estatisticas;
         card.append(reportNode('p',`Média ${reportValue(s.media)} • Soma ${window.ReportExecutive?ReportExecutive.sum(r,i,reportValue):s.somaAplicavel?reportValue(s.soma):'não aplicável'} • Ausências ${s.ausentes} • ${r.intelligence?.dimensions.find(d=>d.indicatorId===i.id)?.measurement?.neutral?'Significado financeiro pendente de validação':i.criticalReason??'Sem classificação crítica pelo critério configurado'}`));
-        const hasChart=window.ReportContent.chartIds(r).includes(i.id);
+        const hasChart=(r.authored?reportFormatChartIds(r):window.ReportContent.chartIds(r)).includes(i.id);
         const box=document.createElement('div');box.className='h-56 relative';const canvas=document.createElement('canvas');canvas.setAttribute('aria-label',`Evolução de ${i.indicador}`);canvas.setAttribute('role','img');if(hasChart){box.append(canvas);card.append(box);}else card.append(reportNode('p','Gráfico dispensado: série constante ou histórico insuficiente. Consulte a tabela integral.','text-xs'));
         const details=document.createElement('details');details.append(reportNode('summary','Série e cálculos detalhados','cursor-pointer text-amber-400'));
         const table=document.createElement('table');table.className='w-full text-sm';const head=document.createElement('tr');['Competência','Valor','Variação absoluta','Variação %'].forEach(t=>head.append(reportNode('th',t)));table.append(head);
@@ -202,6 +205,7 @@ function renderManagementExecutiveDetails(){
     section('Base e limites da análise',[e.selection,...e.limitations,'Snapshot: '+(r.snapshotUpdatedAt??'não informado')+' · Base: '+(r.basis??'não informada')]);
 }
 function renderManagementReportDetails() {
+    if(window.ReportAuthoring?.renderDetails())return;
     if(reportExportFormat()==='executive'){renderManagementExecutiveDetails();return;}
     if(window.ReportContent.validIntelligence(managementReport.intelligence,managementReport)){renderManagementReportV6Details();return;}
     managementCharts.forEach(c=>c.destroy());managementCharts=[];
@@ -248,7 +252,7 @@ async function generateManagementReport() {
         const selection=reportSignature();const body=await requestManagementReport();
         reportReady();
         if(selection!==reportSignature())throw Error('Os filtros mudaram durante a leitura. Gere novamente.');
-        managementReport=body.report;managementSignature=selection;managementEnrichmentKey='';renderManagementReport(false);
+        window.ReportAuthoring?.reset();managementReport=body.report;managementSignature=selection;managementEnrichmentKey='';renderManagementReport(false);
         reportMessage('Prévia pronta. O relatório completo está em memória; aplique a análise ou exporte o PDF.');
         reportEl('reportActions').scrollIntoView({block:'nearest'});
     }catch(e){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;reportEl('reportPreview').replaceChildren();reportMessage(e.message);}
@@ -271,15 +275,16 @@ async function interpretManagementReport() {
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=6.1');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=7');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
 async function exportManagementReport(){
     if(managementBusy)return;
-    reportSetBusy(true);const source=managementReport;const signature=managementSignature;
+    reportSetBusy(true);const source=managementReport;const signature=managementSignature;const sourceOwner=currentSession?.user?.id;
     try{
         if(!source)throw Error('Gere uma prévia atualizada.');
+        window.ReportAuthoring?.assertExportable(source);
         PdfProgress.open(`Relatório ${source.type}`,source.indicators.length);await reportPaint();
         reportReady();const {data,error}=await supabaseClient.auth.getSession();if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
         if(signature!==reportSignature())throw Error('Os filtros mudaram. Atualize a prévia.');
@@ -303,7 +308,7 @@ async function exportManagementReport(){
         const blob=doc.output('blob');
         if(!(blob instanceof Blob)||!blob.size)throw Error('O documento gerado está vazio.');
         PdfProgress.update('Preparando download',97);await reportPaint();
-        reportReady();if(managementReport!==source||managementSignature!==signature||signature!==reportSignature())throw Error('A prévia mudou durante a geração. Gere novamente.');
+        reportReady();if(managementReport!==source||managementSignature!==signature||signature!==reportSignature()||currentSession?.user?.id!==sourceOwner)throw Error('A prévia ou sessão mudou durante a geração. Gere novamente.');
         const name=`DGranel-${report.type}-${report.exportFormat}-${new Date(report.generatedAt).toISOString().slice(0,10)}.pdf`;
         reportDownloadBlob(blob,name);PdfProgress.finish(name);reportMessage('Download iniciado. A confirmação de gravação depende do navegador.');
     }catch(e){if(window.PdfProgress?.dialog?.open)PdfProgress.error(e.message);reportMessage(`PDF não gerado: ${e.message}`);}
@@ -327,7 +332,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     reportEl('reportAll').addEventListener('click',()=>{[...reportEl('reportIndicators').options].forEach(o=>o.selected=true);reportInvalidate();});
     reportEl('reportGenerate').addEventListener('click',generateManagementReport);
     reportEl('reportRefresh').addEventListener('click',()=>{window.refreshReportFilters();reportMessage('Filtros atualizados a partir do Dashboard. Gere para reler o Supabase.');});
-    reportEl('reportAI').addEventListener('click',interpretManagementReport);
+    reportEl('reportAI').addEventListener('click',()=>window.ReportAuthoring?window.ReportAuthoring.generate():interpretManagementReport());
     reportEl('reportExport').addEventListener('click',exportManagementReport);
     reportEl('reportProvider').addEventListener('change',reportUpdateActions);
     const header=document.querySelector('header');

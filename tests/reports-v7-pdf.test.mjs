@@ -1,0 +1,22 @@
+import '../public/report-authored-core.js';
+import {fixture,authored} from './reports-v7-fixtures.mjs';
+const C=globalThis.ReportAuthoredCore,assert=(v,m)=>{if(!v)throw Error(m);};
+const mod={exports:{}};new Function('module','exports',await Deno.readTextFile('public/vendor/jspdf-4.2.1.umd.min.js'))(mod,mod.exports);const plugin={exports:{}};new Function('module','exports','require',await Deno.readTextFile('public/vendor/jspdf-autotable-5.0.8.min.js'))(plugin,plugin.exports,()=>mod.exports);plugin.exports.applyPlugin(mod.exports.jsPDF);
+const w={jspdf:mod.exports,ReportAuthoredCore:C};for(const file of ['report-content.js','report-executive.js','report-pdf.js'])new Function('window',await Deno.readTextFile('public/'+file))(w);
+const metrics=[];
+for(const n of [1,15,40])for(const format of ['executive','complete'])for(const mode of ['deterministic','authored','revised']){
+ const r=fixture(n);r.exportFormat=format;const original=JSON.stringify(r.indicators);
+ if(mode!=='deterministic'){const document=authored(n);if(mode==='revised'){document.title='Título revisado pela equipe';document.sections.reverse();document.sections.forEach((section,index)=>section.order=index+1);document.sections[0].title='Encaminhamentos para discussão';}r.authored={version:1,document,basis:r.basis,snapshotUpdatedAt:r.snapshotUpdatedAt,reviewed:true,coverage:{partial:false}};}
+ const pdf=w.ReportPdf.build(r),layout=pdf.reportLayout,allText=layout.blocks.map(b=>b.text??'').join('\n');
+ assert(layout.format===format&&layout.sourceIds.length===n&&layout.toc.every(t=>t.page>layout.tocPage&&t.page<=layout.pages),'Sumário/escopo');assert(layout.blocks.every(b=>b.x>=29.99&&b.x+b.width<=190.01&&b.y>=29.99&&b.bottom<=277.01),'Texto cortado');
+ assert(JSON.stringify(r.indicators)===original,'Dados modificados');assert(!/IA utilizada|IA não utilizada|não depende de IA|Seleção complementar de estratégias por IA/.test(allText),'Identificação pública de IA');
+ if(mode==='revised')assert(allText.includes('Título revisado')&&layout.editorialSectionIds[0]===r.authored.document.sections[0].id,'Revisão ignorada');
+ if(format==='complete'&&mode!=='deterministic')assert(allText.includes('Histórico')&&allText.includes('Estatísticas')&&allText.includes('E0.latest'),'Apêndices');
+ metrics.push({n,format,mode,pages:layout.pages,bytes:pdf.output('arraybuffer').byteLength});
+}
+const bad=fixture();bad.authored={document:authored(),basis:'wrong',snapshotUpdatedAt:bad.snapshotUpdatedAt,reviewed:true};let blocked=false;try{w.ReportPdf.build(bad);}catch{blocked=true;}assert(blocked,'Base incompatível exportada');
+const long=fixture(1);long.authored={document:authored(1),basis:long.basis,snapshotUpdatedAt:long.snapshotUpdatedAt,reviewed:true};long.authored.document.sections[0].text='A interpretação precisa de conferência humana antes da decisão gerencial. '.repeat(18);const checked=C.validate(long.authored.document,C.evidence(long));assert(checked.valid,'Texto longo');const doc=w.ReportPdf.build(long);assert(doc.reportLayout.blocks.every(b=>b.bottom<=277.01),'Texto longo cortado');
+const events=[];await w.ReportPdf.buildAsync(long,[],event=>events.push(event),()=>Promise.resolve());assert(events.filter(e=>e.stage==='finalize').length===doc.getNumberOfPages(),'Progresso');
+const contextReport=fixture(1);contextReport.managementContext={version:1,actionsTaken:'RELATO PRIVADO DE TESTE: orientação informada pela gestão.',difficulties:'Dificuldade informada.',achievements:'Conquista relatada.',priorities:'Prioridade gerencial relatada.',goals:'Objetivo sugerido pela equipe.',observations:'Observação gerencial fictícia.',shareWithAI:false};contextReport.authored={document:authored(1),basis:contextReport.basis,snapshotUpdatedAt:contextReport.snapshotUpdatedAt,reviewed:true};
+for(const format of ['executive','complete']){contextReport.exportFormat=format;const pdf=w.ReportPdf.build(contextReport),text=pdf.reportLayout.blocks.map(b=>b.text??'').join(' ');for(const field of ['actionsTaken','difficulties','achievements','priorities','goals','observations'])assert(text.includes(contextReport.managementContext[field]),'Contexto não compartilhado perdido no PDF: '+field);assert(text.includes('sem confirmação independente'),'Relato tratado como fato');}
+await Deno.writeTextFile('.validation-tools/v7-pdf-metrics.json',JSON.stringify(metrics,null,2));console.log('PASS V7 PDF 18 combinações 1/15/40 × Executivo/Completo × sem IA/autoral/revisado; sumário, paginação, apêndices, evidências, dados, texto longo e progresso.');

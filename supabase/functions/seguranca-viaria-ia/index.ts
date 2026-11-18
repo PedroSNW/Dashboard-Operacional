@@ -8,6 +8,7 @@ import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentati
 import { compactGroqContext, groqFailure, GROQ_OUTPUT_BUDGET, GROQ_MAX_BODY_BYTES } from "./groq-context.js";
 import { buildReport, buildReportManagement, compactReportContext, buildReportIntelligence } from "./reports.js";
 import { groqProfile, groqUsage, safeFinishReason, createGroqGuard, GROQ_LIMITS } from "./groq-policy.js";
+import { generateAuthoredReport, validateAuthoredReview, AuthoringError } from "./report-authoring.ts";
 
 const MAX_BODY_BYTES = 25 * 1024;
 const MAX_PROMPT_CHARS = 1000;
@@ -347,6 +348,18 @@ serve(async (req: Request) => {
       requestedReportBasis=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([report.type,report.sector,report.competencias,report.indicators,{version:"6.1",managementContext:report.managementContext,policyVersion:report.intelligence.policyVersion,measurementPolicyVersion:report.intelligence.measurementPolicyVersion}]))))).map(b=>b.toString(16).padStart(2,'0')).join('');
       if (body.expectedUpdatedAt && body.expectedUpdatedAt !== remote.updated_at) throw new HttpError("O snapshot mudou. Atualize a prévia antes de solicitar interpretação.", 409);
       if(body.expectedReportBasis&&body.expectedReportBasis!==requestedReportBasis)throw new HttpError("Os resultados do relatório mudaram. Atualize a prévia.",409);
+      if (body.author === true || body.reviewDocument !== undefined) {
+        if (!body.expectedUpdatedAt || !body.expectedReportBasis) throw new HttpError("Gere uma base validada antes da elaboração ou revisão autoral.", 409);
+        try {
+          const base = {...report, basis: requestedReportBasis};
+          return jsonResponse(req, body.reviewDocument !== undefined
+            ? validateAuthoredReview(base, body.reviewDocument)
+            : await generateAuthoredReport(base, typeof body.provider === 'string' ? body.provider : 'groq', groqGuard, Deno.env.get, fetch, user.id));
+        } catch (error) {
+          if (error instanceof AuthoringError) { const failure = new HttpError(error.message, error.status); failure.retryAfter = error.retryAfter; throw failure; }
+          throw error;
+        }
+      }
       if (body.interpret !== true) {
         const { context: _context, ...result } = report;
         return jsonResponse(req, { success: true, report: {...result,basis:requestedReportBasis} });
