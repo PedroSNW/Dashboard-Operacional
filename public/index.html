@@ -21,7 +21,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=reports-v6">
+        <link rel="stylesheet" href="style.css?v=reports-v6.1">
     <link rel="stylesheet" href="workspace-v3.css?v=settings-footer-1">
     <link rel="stylesheet" href="motion-v3-1.css?v=3.1">
     <link rel="stylesheet" href="pending-changes.css?v=1">
@@ -393,6 +393,7 @@
             </details>
             <section id="reportActions" class="report-actions" aria-labelledby="reportActionsTitle" aria-busy="false">
                 <h2 id="reportActionsTitle" class="font-bold">Ações do relatório</h2>
+                <label class="report-format" for="reportFormat">Formato da prévia e do PDF<select id="reportFormat"><option value="executive">Relatório Executivo — recomendado</option><option value="complete">Relatório Completo — técnico</option></select><span id="reportFormatHint" class="text-xs">Síntese para reunião, sem apêndices extensos. A base de dados é a mesma nos dois formatos.</span></label>
                 <div class="report-actions-buttons">
                     <button id="reportAI" disabled class="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950">Aplicar análise Groq</button>
                     <button id="reportExport" disabled class="rounded-xl border border-amber-500/50 px-5 py-3 text-sm font-bold text-amber-400">Exportar PDF</button>
@@ -734,8 +735,9 @@
         <script src="pending-state.js?v=1"></script>
         <script src="main.js?v=pending-1"></script>
         <script src="pdf-progress.js?v=3"></script>
-        <script src="report-content.js?v=6"></script>
-        <script src="reports.js?v=6"></script>
+        <script src="report-content.js?v=6.1"></script>
+        <script src="report-executive.js?v=6.1"></script>
+        <script src="reports.js?v=6.1"></script>
     <script src="workspace-v3.js?v=reports-v4.1"></script>
     <script src="motion-v3-1.js?v=3.1"></script>
     <script src="pending-changes.js?v=1"></script>

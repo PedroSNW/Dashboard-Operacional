@@ -4,7 +4,8 @@ window.ReportPdf={
  build(r,images=[],options={}){const it=this.compose(r,images,options);let s;do{s=it.next();}while(!s.done);return s.value;},
  async buildAsync(r,images=[],onProgress=()=>{},yieldUI=()=>new Promise(r=>setTimeout(r,0)),options={}){const it=this.compose(r,images,options);let s;do{s=it.next();if(!s.done){onProgress(s.value);await yieldUI();}}while(!s.done);return s.value;},
  *compose(r,images=[],options={}){
- const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true}),E=window.ReportContent.editorial(r),m=E.management,W=160,V=E.version===6?r.intelligence:null,chartIds=new Set(window.ReportContent.chartIds(r));
+ const executive=r.exportFormat==='executive'&&Boolean(window.ReportExecutive);
+ const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true}),E=window.ReportContent.editorial(r),m=E.management,W=160,V=E.version===6?r.intelligence:null,chartIds=new Set(executive?window.ReportExecutive.build(r).chartIds:window.ReportContent.chartIds(r));
  const fmt=v=>v===null||v===undefined?'Indisp.':new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(v);
  const direction=i=>({menor_melhor:'Menor é melhor',maior_melhor:'Maior é melhor',neutro:'Neutra'}[i.direcaoDesempenho]??'Não definida');
  const period=`${r.competencias[0]??'Não informado'} a ${r.competencias.at(-1)??'Não informado'}`,date=new Date(r.generatedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'});
@@ -45,8 +46,43 @@ window.ReportPdf={
   doc.addImage(images[index],'PNG',30,y,W,57);layout.push({kind:'graph',page:page(),x:30,y,bottom:y+57,width:W});y+=59;text(`${source} ${period}. Lacunas preservadas.`,10);
  };
  const unique=a=>[...new Set(a.filter(x=>typeof x==='string'&&x.trim()))];
- doc.setProperties({title:`D'Granel – Relatório ${r.type}`,subject:`${period} – ${r.sector}`,author:"D'Granel",creator:V?'Dashboard D’Granel V6':'Dashboard D’Granel V5'});
+ function* finishPdf(tocPage,historyColumns=null,tocY=43){
+ // Não criar uma página apenas para repetir a contagem já conhecida pelo leitor de PDF.
+ const pages=doc.getNumberOfPages();
+ const lastPage=page(),lastY=y;doc.setPage(tocPage);y=tocY;
+ for(const entry of toc){font(12,true);const lines=doc.splitTextToSize(entry.title,W-16),h=lines.length*4.87+3;if(y+h>277)throw Error('Sumário excedeu a página reservada.');const top=y;text(entry.title,12,true);font(12);doc.text(String(entry.page),190,top+4.23,{align:'right'});doc.link(30,top,W,h,{pageNumber:entry.page});}
+ doc.setPage(lastPage);y=lastY;
+ for(let p=1;p<=pages;p++){doc.setPage(p);font(10,true);doc.text("D'GRANEL",30,18);doc.setDrawColor(177,126,32);doc.line(30,23,190,23);if(p>tocPage){font(10);doc.text(String(p),190,18,{align:'right'});}doc.setDrawColor(205,210,216);doc.line(30,282,190,282);font(10);doc.text('D’Granel • Uso interno',30,288);yield {stage:'finalize',processed:p,total:pages};}
+ doc.reportLayout={version:executive?'6.1':V?6:5,format:executive?'executive':'complete',pages,toc,tocPage,tables,figures,historyColumns,blocks:layout,coverage:r.indicators.map(i=>({id:i.id,months:executive?0:i.estatisticas.mensais.length})),historyIncluded:!executive,sourceIds:r.indicators.map(i=>i.id),criticalCoverage:executive?window.ReportExecutive.build(r).criticalIds:null,margins:{left:30,right:20,top:30,bottom:20}};return doc;
+ }
+ doc.setProperties({title:`D'Granel – Relatório ${r.type}`,subject:`${period} – ${r.sector}`,author:"D'Granel",creator:executive?'Dashboard D’Granel V6.1':V?'Dashboard D’Granel V6':'Dashboard D’Granel V5'});
  if(options.logo){try{doc.addImage(options.logo,'PNG',30,y,18,18);y+=22;}catch{/* Identidade textual preservada. */}}
+ if(executive){
+  const e=window.ReportExecutive.build(r),byId=id=>r.indicators.find(i=>i.id===id),dimension=id=>V?.dimensions.find(d=>d.indicatorId===id),name=id=>byId(id)?.indicador??String(id);
+  heading('D’GRANEL — Relatório Executivo');text(`${e.scope} · ${r.sector==='TODOS'?'Todos os setores':r.sector}`,10);text(`Emissão: ${date} (Brasília) · Tipo: ${r.type} · Uso interno`,10);
+  heading('Síntese para decisão');text(e.paragraph);
+  for(const [label,ids] of [['Avanços',e.advances],['Pontos de atenção',e.challenges],['Prioridades sugeridas',e.priorities]])text(label+': '+(ids.length?ids.map(name).join('; '):'nenhum resultado identificado por esses critérios.')+'.',10);
+  ensure(75);heading('Conteúdo');const executiveTocY=y,executiveTocPage=page();newPage();
+  heading('1 Resultados para a reunião',true);
+  if(!e.detailIds.length)text('Não há dados suficientes no recorte. Conferir a seleção e os registros antes de avaliar resultados.');
+  for(const [n,id] of e.detailIds.entries()){const i=byId(id);text(window.ReportExecutive.narrative(i,dimension(id)));yield {stage:'diagnosis',processed:n+1,total:e.detailIds.length+e.chartIds.length};}
+  if(e.observations.length){heading('Leitura conjunta');e.observations.forEach(o=>text(o.text));}
+  text(e.selection,10);
+  if(e.criticalIds.length)table('Pontos que precisam de acompanhamento — cobertura integral',['Indicador / setor','Avaliação para decisão'],e.criticalIds.map(id=>{const i=byId(id),d=dimension(id),m=window.ReportExecutive.financial(i,d);return [i.indicador+'\n'+i.setor,d?.operational?.validated&&d.operational.level==='Alta'?'Avaliar o critério operacional aprovado: '+d.operational.reference+(m.neutral?' Confirmar também a natureza financeira.':''):m.neutral?'Confirmar a natureza financeira antes de julgar a variação.':d?.off?'Meta ainda não alcançada.':d?.worse?'Resultado piorou; avaliar as pendências.':'Validar os critérios e a cobertura disponível.'];}),[66,94]);
+  for(const [n,id] of e.chartIds.entries()){const i=byId(id);graph(i,r.indicators.indexOf(i));yield {stage:'diagnosis',processed:e.detailIds.length+n+1,total:e.detailIds.length+e.chartIds.length};}
+  heading('2 Plano de ação resumido',true);text('Iniciativas sugeridas. Áreas e prazos dependem de avaliação da gestão.',10);
+  table('Ações para discussão',['Problema / indicadores','Ação sugerida','Área sugerida','Prazo','Acompanhamento'],e.actions.map(a=>[a.problem+'\n'+a.indicatorIds.map(name).join('; '),a.ref+' · '+a.title+'\n'+(a.tasks[0]??a.objective),a.owner,a.timeline,a.monitoring]),[34,47,27,23,29],[],'Quadro');
+  yield {stage:'compose',processed:1,total:1};
+  heading('3 Próximos 90 dias',true);text('Horizontes sugeridos após a decisão de iniciar. Não representam objetivos aprovados.',10);
+  table('Plano de evolução',['Horizonte','Próximo passo'],e.horizons.map(h=>[`${h.days} dias\n${h.title}`,h.lines.join('\n')||'Conferir os dados e pactuar a próxima atividade.']),[35,125],[],'Quadro');
+  yield {stage:'management',processed:1,total:1};
+  const context=window.ReportContent.v6Sections(r).find(s=>s.key==='context');
+  if(context){heading('4 Contexto informado pela gestão',true);for(const b of context.blocks){heading(b.title);b.lines.forEach(l=>text(l));}text('Relato sem confirmação independente; não altera os indicadores nem suas metas.',10);}
+  const methodLines=[...e.limitations,'Criticidade operacional só é afirmada quando há critério aprovado; as demais classificações permanecem pendentes. Histórico e evidências integrais podem ser exportados no formato Completo.',`Fonte: snapshot autorizado do Supabase (${r.snapshotUpdatedAt??'data não informada'}). Base de conferência: ${r.basis??'não informada'}. ${r.aiUsed?'Seleção complementar de estratégias por IA, validada pelo catálogo.':'Síntese determinística; não depende de IA.'}`];
+  font(10);ensure(Math.min(247,18+methodLines.reduce((h,line)=>h+doc.splitTextToSize(line,W).length*4.056947+2,0)));
+  heading(`${context?5:4} Base e limites da análise`,true);methodLines.forEach(line=>text(line,10));
+  return yield* finishPdf(executiveTocPage,null,executiveTocY);
+ }
  heading("D'GRANEL",false,true);text('Dashboard operacional • Relatórios gerenciais',12,false,true);y+=8;
  heading(`Relatório gerencial ${r.type}`,false,true);text(E.focus,12,false,true);y+=8;
  text(`Período: ${period}`);text(`Setor: ${r.sector==='TODOS'?'Todos os setores':r.sector??'Não informado'}`);text(`Emissão: ${date} (Brasília)`);
@@ -116,7 +152,7 @@ window.ReportPdf={
  if(V&&r.indicators.length>15)table('Panorama gerencial completo',['Indicador / setor / unidade','Recente / meta atual','Desempenho / tendência','Criticidade operacional'],window.ReportContent.v6Overview(r,fmt),[47,34,51,28]);
  if(V&&V.charts.excluded.length){for(const reason of new Set(V.charts.excluded.map(x=>x.reason)))text(reason+' — IDs: '+V.charts.excluded.filter(x=>x.reason===reason).map(x=>String(x.id)).join('; ')+'. Dados integrais nas tabelas.',10);}
  table('Cadastro dos indicadores',['Indicador / identificação','Setor / unidade','Meta / direção','Atualização'],r.indicators.map(i=>[`${i.indicador}\nID: ${i.id}`,`${i.setor}\n${i.unidade??'Não informada'}`,`${fmt(i.meta)}\n${direction(i)}`,i.ultimaAtualizacao??'Não informada']),[57,32,36,35]);
- const statsRows=[];for(const [n,i] of r.indicators.entries()){const s=i.estatisticas;statsRows.push([i.indicador,fmt(s.media),s.somaAplicavel?fmt(s.soma):'N/A',fmt(s.minimo),fmt(s.maximo),String(s.ausentes)]);yield {stage:'compose',processed:n+1,total:r.indicators.length};}
+ const statsRows=[];for(const [n,i] of r.indicators.entries()){const s=i.estatisticas;statsRows.push([i.indicador,fmt(s.media),window.ReportExecutive?window.ReportExecutive.sum(r,i,fmt):s.somaAplicavel?fmt(s.soma):'N/A',fmt(s.minimo),fmt(s.maximo),String(s.ausentes)]);yield {stage:'compose',processed:n+1,total:r.indicators.length};}
  table('Estatísticas determinísticas por indicador',['Indicador','Média','Soma','Mínimo','Máximo','Ausências'],statsRows,[55,21,21,21,21,21],[1,2,3,4,5]);
  heading('APÊNDICE B – Histórico completo',true,true);text('Cada célula mensal contém, nesta ordem: resultado; variação absoluta; variação percentual em relação à competência anterior. Ausente = valor nulo; Indisp. = comparação indisponível. Unidade e meta: Apêndice A. Todos os resultados do recorte estão incluídos.');
  font(10);const fitsSix=[...r.competencias,...r.indicators.flatMap(i=>i.estatisticas.mensais.flatMap(p=>[p.valor===null?'Ausente':fmt(p.valor),fmt(p.variacaoAnterior?.absoluta),`${fmt(p.variacaoAnterior?.percentual)}%`]))].every(value=>doc.getTextWidth(String(value))<=(W-48)/6-3);
@@ -159,12 +195,6 @@ window.ReportPdf={
  if(V)ensure(65); // Manter o formulário curto inteiro, sem uma última linha isolada.
  heading('FORMULÁRIO DE IDENTIFICAÇÃO',true,true);text(`Título: Relatório gerencial ${r.type}. Autor-entidade e instituição executora: D’Granel. Projeto: Dashboard operacional. Classificação: uso interno. Data: ${date}. Edição editorial: ${V?'V6':'V5'}. Período: ${period}.`);
  text('Endereço institucional, local de publicação, instituição patrocinadora e identificadores bibliográficos: não informados no cadastro. Não foram inferidos.');text('Resumo e palavras-chave: elementos iniciais. Distribuição interna eletrônica.');
- // Não criar uma página apenas para repetir a contagem já conhecida pelo leitor de PDF.
- const pages=doc.getNumberOfPages();
- const lastPage=page(),lastY=y;doc.setPage(tocPage);y=43;
- for(const entry of toc){font(12,true);const lines=doc.splitTextToSize(entry.title,W-16),h=lines.length*4.87+3;if(y+h>277)throw Error('Sumário excedeu a página reservada.');const top=y;text(entry.title,12,true);font(12);doc.text(String(entry.page),190,top+4.23,{align:'right'});doc.link(30,top,W,h,{pageNumber:entry.page});}
- doc.setPage(lastPage);y=lastY;
- for(let p=1;p<=pages;p++){doc.setPage(p);font(10,true);doc.text("D'GRANEL",30,18);doc.setDrawColor(177,126,32);doc.line(30,23,190,23);if(p>tocPage){font(10);doc.text(String(p),190,18,{align:'right'});}doc.setDrawColor(205,210,216);doc.line(30,282,190,282);font(10);doc.text('D’Granel • Uso interno',30,288);yield {stage:'finalize',processed:p,total:pages};}
- doc.reportLayout={version:V?6:5,pages,toc,tocPage,tables,figures,historyColumns,blocks:layout,coverage:r.indicators.map(i=>({id:i.id,months:i.estatisticas.mensais.length})),margins:{left:30,right:20,top:30,bottom:20}};return doc;
+ return yield* finishPdf(tocPage,historyColumns);
  }
 };

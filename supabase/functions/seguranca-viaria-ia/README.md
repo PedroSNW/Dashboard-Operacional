@@ -84,7 +84,7 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 1. Acesse o projeto no painel do Supabase.
 2. Navegue até **Edge Functions**.
 3. Selecione a função `seguranca-viaria-ia` (ou crie-a caso ainda não exista).
-4. Envie o conjunto completo da pasta: `index.ts`, `analytics.js`, `groq-context.js`, **`groq-policy.js`**, `reports.js`, `report-management.js` e **`report-intelligence.js`**, com esses nomes e no mesmo nível. Publicar apenas `index.ts` causa erro de módulo ausente.
+4. Envie o conjunto completo da pasta: `index.ts`, `analytics.js`, `groq-context.js`, **`groq-policy.js`**, `reports.js`, `report-management.js`, **`report-intelligence.js`** e **`report-semantics.js`**, com esses nomes e no mesmo nível. Publicar apenas `index.ts` causa erro de módulo ausente.
 5. Revise a versão e publique manualmente somente quando autorizado. Preserve as opções de autenticação da implantação atual.
 6. Na atualização V6, mantenha os Secrets existentes; não é necessário criar ou alterar credenciais.
 
@@ -93,3 +93,8 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 Groq: `2048` tokens de conclusão e esforço `medium` nos modelos GPT-OSS; chat comum mantém `1200/low`. OpenAI/Gemini preservam seus parâmetros. Tetos, cache autorizado e controle de chamadas estão em `groq-policy.js`. O controle é por instância, não distribuído. A comparação real de qualidade ainda depende de homologação com a API.
 
 Auditoria, medições, testes e procedimento separado de publicação: [GROQ-V5-1-RELATORIOS.md](../../../GROQ-V5-1-RELATORIOS.md).
+
+
+## Relatórios V6.1
+
+Os formatos Executivo e Completo usam a mesma base. A V6.1 acrescenta o módulo local `report-semantics.js` e o campo opcional fechado `jointObservations` ao contrato gerencial V4, sem invalidar respostas anteriores. A classificação financeira inicia pendente; saldos não são tratados como fluxo. Consulte `RELATORIOS-V6-1-EXECUTIVO.md`. Publique os oito módulos da função juntos; não há migração nem novo Secret.

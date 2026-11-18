@@ -344,7 +344,7 @@ serve(async (req: Request) => {
       if (reportError || !remote?.data) throw new HttpError("Leitura autorizada do relatório indisponível. Tente atualizar os dados.", 403);
       const report = buildReport(remote.data, body.selection, remote.updated_at, body.managementContext);
       requestedReport = report;
-      requestedReportBasis=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([report.type,report.sector,report.competencias,report.indicators,{version:6,managementContext:report.managementContext,policyVersion:report.intelligence.policyVersion}]))))).map(b=>b.toString(16).padStart(2,'0')).join('');
+      requestedReportBasis=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([report.type,report.sector,report.competencias,report.indicators,{version:"6.1",managementContext:report.managementContext,policyVersion:report.intelligence.policyVersion,measurementPolicyVersion:report.intelligence.measurementPolicyVersion}]))))).map(b=>b.toString(16).padStart(2,'0')).join('');
       if (body.expectedUpdatedAt && body.expectedUpdatedAt !== remote.updated_at) throw new HttpError("O snapshot mudou. Atualize a prévia antes de solicitar interpretação.", 409);
       if(body.expectedReportBasis&&body.expectedReportBasis!==requestedReportBasis)throw new HttpError("Os resultados do relatório mudaram. Atualize a prévia.",409);
       if (body.interpret !== true) {

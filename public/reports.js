@@ -7,6 +7,8 @@ let managementEnrichmentKey='';
 window.resetManagementReport = function(){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
 const reportEl = id => document.getElementById(id);
 const reportValue = value => value === null || value === undefined ? 'Ausente' : new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(value);
+const reportExportFormat=()=>window.ReportExecutive?.format(reportEl('reportFormat')?.value)??'complete';
+const reportFormatChartIds=r=>reportExportFormat()==='executive'?window.ReportExecutive.build(r).chartIds:window.ReportContent.chartIds(r);
 const REPORT_CONTEXT_FIELDS=['actionsTaken','difficulties','achievements','priorities','goals','observations'];
 let reportContextScope='',reportContextDetached=false,reportContextOwner=null;
 function clearReportContext(notify=true){
@@ -53,7 +55,7 @@ function reportMessage(text) { reportEl('reportStatus').textContent = text;repor
 function reportUpdateActions(){
     const consistent=Boolean(managementReport&&managementSignature===reportSignature());
     const ready=consistent&&supabaseStateLoaded&&supabaseReady&&currentSession&&!hasUnsavedChanges;
-    for(const id of ['reportGenerate','reportRefresh','reportProvider'])if(reportEl(id))reportEl(id).disabled=managementBusy;
+    for(const id of ['reportGenerate','reportRefresh','reportProvider','reportFormat'])if(reportEl(id))reportEl(id).disabled=managementBusy;
     if(reportEl('reportAI')){reportEl('reportAI').disabled=managementBusy||!ready||!managementReport?.indicators.length;const provider=reportEl('reportProvider').value;reportEl('reportAI').textContent=`Aplicar análise ${{groq:'Groq',gemini:'Gemini',openai:'OpenAI'}[provider]||'Groq'}`;}
     if(reportEl('reportExport'))reportEl('reportExport').disabled=managementBusy||!ready;
     reportEl('reportActions')?.setAttribute('aria-busy',String(managementBusy));
@@ -117,7 +119,9 @@ function renderManagementReport(expanded=reportEl('reportPreviewToggle')?.getAtt
     managementCharts.forEach(c=>c.destroy());managementCharts=[];
     const r=managementReport,preview=reportEl('reportPreview');preview.replaceChildren();
     preview.append(reportNode('h2',`Relatório ${r.type}`,'text-lg font-bold'),reportNode('p',`${r.indicators.length} indicadores no relatório · ${r.selectedCount} selecionados · ${r.criticalCount} pontos de atenção`),reportNode('p',`${r.competencias[0]} a ${r.competencias.at(-1)} · ${r.sector==='TODOS'?'Todos os setores':r.sector??'Setor selecionado'}`,'text-sm text-slate-400'));
-    if(window.ReportContent.validIntelligence(r.intelligence,r)){
+    if(reportExportFormat()==='executive'){
+        const e=ReportExecutive.build(r);preview.append(reportNode('p','Formato Executivo · síntese para reunião','text-sm'),reportNode('p',e.paragraph,'text-sm'),reportNode('p',`${e.chartIds.length} séries selecionadas para gráficos. Todos os pontos de atenção aparecem na prévia; o histórico integral está no formato Completo.`,'text-xs'));
+    }else if(window.ReportContent.validIntelligence(r.intelligence,r)){
         const v=r.intelligence,grid=reportNode('div','','report-v6-summary');
         for(const [title,ids] of [['Avanços',v.achievements],['Desafios',v.challenges]]){const area=reportNode('section');area.append(reportNode('h3',title,'font-bold'));area.append(reportNode('p',ids.length?`${ids.length} indicadores · ${v.dimensions.find(d=>d.indicatorId===ids[0]).name}`:'Sem situação comprovável pelos critérios disponíveis.','text-sm'));grid.append(area);}preview.append(grid);
         preview.append(reportNode('p','Prioridades: '+v.priorityIds.slice(0,2).map(id=>v.dimensions.find(d=>d.indicatorId===id).name).join('; '),'text-sm'));
@@ -147,7 +151,7 @@ function renderIndicatorTechnicalCards(preview,r){
         const card=reportNode('article','','glass-card rounded-2xl border border-slate-700 p-5 space-y-3');
         card.append(reportNode('h3',i.indicador,'font-bold'),reportNode('p',`${i.setor} • Unidade ${i.unidade??'não informada'} • Meta ${i.meta===null?'não cadastrada':reportValue(i.meta)} • Direção ${i.direcaoDesempenho??'indefinida'}`,'text-xs text-slate-400'));
         const s=i.estatisticas;
-        card.append(reportNode('p',`Média ${reportValue(s.media)} • Soma ${s.somaAplicavel?reportValue(s.soma):'não aplicável'} • Ausências ${s.ausentes} • ${i.criticalReason??'Sem classificação crítica pelo critério configurado'}`));
+        card.append(reportNode('p',`Média ${reportValue(s.media)} • Soma ${window.ReportExecutive?ReportExecutive.sum(r,i,reportValue):s.somaAplicavel?reportValue(s.soma):'não aplicável'} • Ausências ${s.ausentes} • ${r.intelligence?.dimensions.find(d=>d.indicatorId===i.id)?.measurement?.neutral?'Significado financeiro pendente de validação':i.criticalReason??'Sem classificação crítica pelo critério configurado'}`));
         const hasChart=window.ReportContent.chartIds(r).includes(i.id);
         const box=document.createElement('div');box.className='h-56 relative';const canvas=document.createElement('canvas');canvas.setAttribute('aria-label',`Evolução de ${i.indicador}`);canvas.setAttribute('role','img');if(hasChart){box.append(canvas);card.append(box);}else card.append(reportNode('p','Gráfico dispensado: série constante ou histórico insuficiente. Consulte a tabela integral.','text-xs'));
         const details=document.createElement('details');details.append(reportNode('summary','Série e cálculos detalhados','cursor-pointer text-amber-400'));
@@ -177,7 +181,22 @@ function renderManagementReportV6Details(){
     const omitted=v.charts.excluded;if(omitted.length)paragraph(root,`${omitted.length} gráficos constantes ou sem histórico suficiente foram dispensados; os dados permanecem nas tabelas.`);
 }
 
+function renderManagementExecutiveDetails(){
+    managementCharts.forEach(c=>c.destroy());managementCharts=[];const r=managementReport,e=ReportExecutive.build(r),root=reportEl('reportPreviewDetails');root.replaceChildren();
+    const section=(title,lines)=>{const area=reportNode('section','','space-y-2');area.append(reportNode('h3',title,'font-bold text-lg'));lines.forEach(line=>area.append(reportNode('p',line,'text-sm')));root.append(area);return area;};
+    const name=id=>r.indicators.find(i=>i.id===id)?.indicador??String(id),dimension=id=>r.intelligence?.dimensions.find(d=>d.indicatorId===id);
+    section('Síntese para decisão',[e.paragraph,...e.advances.map(id=>'Avanço: '+name(id)),...e.challenges.map(id=>'Atenção: '+name(id)),...e.priorities.map(id=>'Prioridade sugerida: '+name(id))]);
+    section('Resultados que orientam a reunião',e.detailIds.map(id=>ReportExecutive.narrative(r.indicators.find(i=>i.id===id),dimension(id))));
+    if(e.observations.length)section('Leitura conjunta dos resultados',e.observations.map(o=>o.text));
+    section('Pontos de atenção do recorte',e.criticalIds.length?e.criticalIds.map(id=>{const d=dimension(id);return name(id)+': '+(d?.operational?.validated&&d.operational.level==='Alta'?'avaliar o critério operacional aprovado: '+d.operational.reference:ReportExecutive.financial(r.indicators.find(i=>i.id===id),d).neutral?'validar a natureza dos valores.':d?.off?'avaliar a distância da meta.':d?.worse?'avaliar a piora no período.':'critério operacional validado; consultar a área responsável.');}):['Sem pontos sinalizados pelos critérios disponíveis; isso não comprova ausência de risco.']);
+    for(const id of e.chartIds){const i=r.indicators.find(i=>i.id===id),area=section(i.indicador,[]),box=reportNode('div','','h-56 relative'),canvas=document.createElement('canvas');canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Evolução de '+i.indicador);box.append(canvas);area.append(box);managementCharts.push(new Chart(canvas,{type:'line',data:managementChartSource(i,r).data,options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},datalabels:{display:false}},scales:{y:{beginAtZero:true}}}}));}
+    section('Plano de ação — propostas para avaliação',e.actions.map(a=>`${a.ref} · ${a.title}. ${a.problem} ${a.tasks[0]??a.objective} Área sugerida: ${a.owner}. ${a.timeline} ${a.monitoring} Situação: ${a.status}.`));
+    e.horizons.forEach(h=>section(h.days+' dias — '+h.title,h.lines));
+    const context=ReportContent.v6Sections(r).find(s=>s.key==='context');if(context)section('Contexto informado pela gestão',context.blocks.flatMap(b=>[b.title+': '+b.lines.join(' ')]));
+    section('Base e limites da análise',[e.selection,...e.limitations,'Snapshot: '+(r.snapshotUpdatedAt??'não informado')+' · Base: '+(r.basis??'não informada')]);
+}
 function renderManagementReportDetails() {
+    if(reportExportFormat()==='executive'){renderManagementExecutiveDetails();return;}
     if(window.ReportContent.validIntelligence(managementReport.intelligence,managementReport)){renderManagementReportV6Details();return;}
     managementCharts.forEach(c=>c.destroy());managementCharts=[];
     const preview=reportEl('reportPreviewDetails');preview.replaceChildren();const r=managementReport;
@@ -246,7 +265,7 @@ async function interpretManagementReport() {
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=6');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=6.1');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
@@ -261,7 +280,7 @@ async function exportManagementReport(){
         if(source.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(source.snapshotUpdatedAt))throw Error('Os dados foram atualizados. Gere uma nova prévia.');
         PdfProgress.update('Carregando bibliotecas locais',5);await reportPaint();await loadReportPdfLibraries();
         PdfProgress.update('Bibliotecas carregadas',10);await reportPaint();
-        const report=JSON.parse(JSON.stringify(source)),chartIds=window.ReportContent.chartIds(report),selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report)),images=Array(report.indicators.length).fill(null);
+        const report=JSON.parse(JSON.stringify(source));report.exportFormat=reportExportFormat();const chartIds=reportFormatChartIds(report),selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report)),images=Array(report.indicators.length).fill(null);
         for(let n=0;n<charts.length;n++){
             images[selected[n].index]=managementChartImages([charts[n]])[0];
             PdfProgress.update('Preparando gráficos',10+35*(n+1)/Math.max(1,charts.length),n+1,charts.length);await reportPaint();
@@ -279,7 +298,7 @@ async function exportManagementReport(){
         if(!(blob instanceof Blob)||!blob.size)throw Error('O documento gerado está vazio.');
         PdfProgress.update('Preparando download',97);await reportPaint();
         reportReady();if(managementReport!==source||managementSignature!==signature||signature!==reportSignature())throw Error('A prévia mudou durante a geração. Gere novamente.');
-        const name=`DGranel-${report.type}-${new Date(report.generatedAt).toISOString().slice(0,10)}.pdf`;
+        const name=`DGranel-${report.type}-${report.exportFormat}-${new Date(report.generatedAt).toISOString().slice(0,10)}.pdf`;
         reportDownloadBlob(blob,name);PdfProgress.finish(name);reportMessage('Download iniciado. A confirmação de gravação depende do navegador.');
     }catch(e){if(window.PdfProgress?.dialog?.open)PdfProgress.error(e.message);reportMessage(`PDF não gerado: ${e.message}`);}
     finally{reportSetBusy(false);}
@@ -294,6 +313,7 @@ function managementChartImages(charts=managementReport?.indicators.map(i=>manage
     }finally{renderer.destroy();}
 });}
 document.addEventListener('DOMContentLoaded',()=>{
+    reportEl('reportFormat')?.addEventListener('change',()=>{reportEl('reportFormatHint').textContent=reportExportFormat()==='executive'?'Síntese para reunião, sem apêndices extensos. A base de dados é a mesma nos dois formatos.':'Histórico, tabelas, evidências e apêndices completos da mesma base.';if(managementReport)renderManagementReport();});
     initReportContext();
     reportEl('reportSector').addEventListener('change',reportIndicatorOptions);
     for(const id of ['reportType','reportStart','reportEnd','reportIndicators'])reportEl(id).addEventListener('change',reportInvalidate);
