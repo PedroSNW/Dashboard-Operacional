@@ -23,8 +23,19 @@ export function resetMs(value){
 export function createGroqGuard(now=()=>Date.now(),limits=GROQ_LIMITS){
     const events=[];let active=false,blockedUntil=0,tokenCeiling=limits.tokensPerMinute,requestCeiling=limits.requestsPerDay;
     let tokenRemaining=null,tokenReset=0,requestRemaining=null,requestReset=0;
+    const budget=(options={})=>{
+        const time=now();while(events.length&&events[0].at+86400000<=time)events.shift();
+        const minute=events.filter(e=>e.at+60000>time),sum=(list,key)=>list.reduce((n,e)=>n+(e[key]??e.tokens),0);
+        const minuteBudget=tokenCeiling-sum(minute,'tokens'),dailyBudget=limits.tokensPerDay-sum(events,'tokens'),remoteBudget=tokenReset>time&&tokenRemaining!==null?tokenRemaining:Infinity;
+        const availableTokenBudget=Math.max(0,Math.min(minuteBudget,dailyBudget,remoteBudget));
+        const reason=time<blockedUntil?'provider_cooldown':active?'concurrent_request':minute.length>=limits.requestsPerMinute?'minute_budget':events.length>=requestCeiling?'daily_budget':requestReset>time&&requestRemaining===0?'provider_requests':null;
+        const tokenUntil=dailyBudget<=minuteBudget&&dailyBudget<=remoteBudget?(events[0]?.at??time)+86400000:remoteBudget<minuteBudget?tokenReset:(minute[0]?.at??time)+60000;
+        const until=time<blockedUntil?blockedUntil:reason==='daily_budget'?(events[0]?.at??time)+86400000:reason==='provider_requests'?requestReset:reason==='concurrent_request'?time+1000:tokenUntil;
+        return {availableTokenBudget,availableInputTokenBudget:options.inputTpm==null?null:Math.max(0,options.inputTpm-sum(minute,'inputTokens')),availableOutputTokenBudget:options.outputTpm==null?null:Math.max(0,options.outputTpm-sum(minute,'outputTokens')),reason,retryAfter:Math.max(1,Math.ceil((until-time)/1000))};
+    };
     return {
-        reserve(tokens){
+        budget,
+        reserve(tokens,options={}){
             const time=now();while(events.length&&events[0].at+86400000<=time)events.shift();
             const deny=(reason,until)=>({allowed:false,reason,retryAfter:Math.max(1,Math.ceil((until-time)/1000)),ticket:null});
             if(time<blockedUntil)return deny('provider_cooldown',blockedUntil);
@@ -35,7 +46,10 @@ export function createGroqGuard(now=()=>Date.now(),limits=GROQ_LIMITS){
             const minute=events.filter(e=>e.at+60000>time),sum=list=>list.reduce((n,e)=>n+e.tokens,0);
             if(minute.length>=limits.requestsPerMinute||sum(minute)+tokens>tokenCeiling)return deny('minute_budget',(minute[0]?.at??time)+60000);
             if(events.length>=requestCeiling||sum(events)+tokens>limits.tokensPerDay)return deny('daily_budget',(events[0]?.at??time)+86400000);
-            const ticket={at:time,tokens};events.push(ticket);active=true;
+            const split=budget(options);
+            if(options.inputTpm!=null&&(count(options.inputTokens)===null||options.inputTokens+(options.margin??limits.margin)>split.availableInputTokenBudget))return deny('provider_input_budget',time+60000);
+            if(options.outputTpm!=null&&(count(options.outputTokens)===null||options.outputTokens+(options.margin??limits.margin)>split.availableOutputTokenBudget))return deny('provider_output_budget',time+60000);
+            const ticket={at:time,tokens,margin:options.margin??limits.margin,inputTokens:options.inputTokens??tokens,outputTokens:options.outputTokens??tokens};events.push(ticket);active=true;
             if(tokenReset>time&&tokenRemaining!==null)tokenRemaining=Math.max(0,tokenRemaining-tokens);
             if(requestReset>time&&requestRemaining!==null)requestRemaining=Math.max(0,requestRemaining-1);
             return {allowed:true,reason:null,retryAfter:0,ticket};
@@ -44,10 +58,10 @@ export function createGroqGuard(now=()=>Date.now(),limits=GROQ_LIMITS){
         finish(ticket,usage=null,rejectedBeforeGeneration=false){
             // Uso não informado / timeout / erro: reter a reserva inteira, sem crédito fictício.
             const total=count(usage?.totalTokens);
-            if(ticket&&total!==null)ticket.tokens=total+limits.margin;
+            if(ticket&&total!==null){ticket.tokens=total+(ticket.margin??limits.margin);ticket.inputTokens=count(usage?.promptTokens)??ticket.inputTokens;ticket.outputTokens=count(usage?.completionTokens)??ticket.outputTokens;}
             // Keep RPM/RPD events. Release token reservation only for explicit pre-generation rejection.
             // A generated JSON failure, timeout, or unknown error MUST retain its reservation.
-            else if(ticket&&rejectedBeforeGeneration)ticket.tokens=0;
+            else if(ticket&&rejectedBeforeGeneration){ticket.tokens=0;ticket.inputTokens=0;ticket.outputTokens=0;}
             active=false;
         },
         /** @param {Headers} headers @param {number} status @param {number|null} retryAfter */

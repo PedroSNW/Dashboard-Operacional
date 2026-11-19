@@ -59,4 +59,4 @@ async function main(){
         await Deno.writeTextFile(marker,JSON.stringify({revision:GROQ_AUTHORING_REVISION,project,maxCompletionTokens:4096,result},null,2));console.log(JSON.stringify(result,null,2));if(!result.validated)Deno.exitCode=1;
     }finally{lock.close();await Deno.remove(lockPath);}
 }
-if(import.meta.main)await main();
+if(import.meta.main){if(Deno.args.includes('--confirm-live'))throw Error('Roteiro4096 substituído por tests/groq-v7-homologation-dynamic.ts. Nenhuma chamada executada.');await main();}

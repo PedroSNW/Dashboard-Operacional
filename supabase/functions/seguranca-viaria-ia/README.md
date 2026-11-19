@@ -90,7 +90,9 @@ Configure no Supabase Dashboard (**Edge Functions > Secrets**):
 
 ### Relatórios V5.1
 
-Groq: `2048` tokens de conclusão e esforço `medium` nos modelos GPT-OSS; chat comum mantém `1200/low`. OpenAI/Gemini preservam seus parâmetros. Tetos, cache autorizado e controle de chamadas estão em `groq-policy.js`. O controle é por instância, não distribuído. A comparação real de qualidade ainda depende de homologação com a API.
+Groq V5.1: `2048` tokens de conclusão e esforço `medium` nos modelos GPT-OSS; chat comum mantém `1200/low`. OpenAI/Gemini preservam seus parâmetros. Tetos, cache autorizado e controle de chamadas estão em `groq-policy.js`. O controle é por instância, não distribuído. A comparação real de qualidade ainda depende de homologação com a API.
+
+Groq autoral V7 usa alvo `5120`, margem padrão `800` e limite efetivo dinâmico dentro de8000TPM. `REPORT_V7_COMPLETION_TOKENS` aceita inteiros4096–7168; valor presente inválido bloqueia a geração, sem fallback2048. `REPORT_V7_TOKEN_MARGIN` aceita400–1600. Limites separados reais podem ser configurados em `REPORT_V7_GROQ_INPUT_TPM`/`REPORT_V7_GROQ_OUTPUT_TPM`. Consultar [diagnóstico, publicação, homologação única e rollback](../../../GROQ-V7-ORCAMENTO-DINAMICO-5120.md); nenhuma alteração local publica código ou Secrets automaticamente.
 
 Auditoria, medições, testes e procedimento separado de publicação: [GROQ-V5-1-RELATORIOS.md](../../../GROQ-V5-1-RELATORIOS.md).
 

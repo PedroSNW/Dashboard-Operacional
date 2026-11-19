@@ -1,5 +1,7 @@
 # V7 — orçamento de conclusão e homologação controlada
 
+> Histórico: substituído por [orçamento dinâmico V7 de 5.120](GROQ-V7-ORCAMENTO-DINAMICO-5120.md). Os padrões e comandos abaixo documentam a versão anterior. Não usar o roteiro4096 para nova geração real.
+
 Implementação local em 19/11/2026. Revisão: `v7-groq-output-4096-3`. Sem deploy, sem chamadas reais, sem alteração de Secrets, banco, RLS, cálculos ou frontend.
 
 ## Diagnóstico e limites da conclusão

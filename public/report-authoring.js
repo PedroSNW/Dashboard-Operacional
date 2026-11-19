@@ -58,6 +58,7 @@
         root.replaceChildren(el('h2','Revisão do relatório','v3-report-heading'));
         const statusNode=el('p',phase);statusNode.id='reportEditorialState';statusNode.setAttribute('role','status');root.append(statusNode);
         root.append(el('p','O rascunho fica somente nesta sessão. Edite interpretações; números oficiais aparecem nas referências e não são editáveis. Propostas dependem de avaliação da gestão.','ux-meta'));
+        if(Number.isSafeInteger(state.meta?.requestedCompletionLimit)&&Number.isSafeInteger(state.meta?.effectiveCompletionLimit)&&state.meta.effectiveCompletionLimit<state.meta.requestedCompletionLimit)root.append(el('p',`Orçamento da geração ajustado de ${state.meta.requestedCompletionLimit} para ${state.meta.effectiveCompletionLimit} tokens para respeitar a disponibilidade da Groq.`,'ux-meta'));
         if(state.coverage?.partial)root.append(el('p',`Cobertura parcial da elaboração: ${state.coverage.sent} de ${state.coverage.selected} indicadores. Dados completos preservados no relatório sem IA e nos apêndices. Séries resumidas: ${state.coverage.summarizedSeries}.`,'ux-action-hint'));
         if(state.issues.length)root.append(el('p','Trechos inconsistentes foram removidos da resposta. Revise as seções preservadas.','ux-action-hint'));
         root.append(field('Título do documento',state.draft.title,value=>state.draft.title=value,false));

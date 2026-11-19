@@ -19,7 +19,7 @@ try{
  });
  await test('payload real preserva schema, medium, teto e separação de raciocínio',()=>{
   const built=authorPayload(r,'groq','openai/gpt-oss-120b'),p=JSON.parse(built.body);assert(p.response_format.type==='json_schema'&&p.response_format.json_schema.strict===true&&JSON.stringify(p.response_format.json_schema.schema)===JSON.stringify(GROQ_AUTHORING_WIRE_SCHEMA),'Strict removido');
-  assert(p.reasoning_effort==='medium'&&p.max_completion_tokens===2048&&p.include_reasoning===false&&!('reasoning_format' in p)&&!('max_tokens' in p),'Parâmetros');assert(built.bytes<=6000&&built.estimatedTokens<=3500,'Orçamento');
+  assert(p.reasoning_effort==='medium'&&p.max_completion_tokens===5120&&p.include_reasoning===false&&!('reasoning_format' in p)&&!('max_tokens' in p),'Parâmetros');assert(built.bytes<=6000&&built.estimatedTokens<=3500,'Orçamento');
  });
  await test('400 json_validate_failed é falha da geração; conteúdo privado não é logado nem recuperado',async()=>{
   let calls=0;const error=await failure(async()=>{calls++;return response(400,{code:'json_validate_failed',type:'invalid_request_error',message:"Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details. PRIVATE_CORPORATE",failed_generation:'{"PRIVATE_FIELD": "PRIVATE_DATA"}'});});
@@ -35,7 +35,7 @@ try{
  });
  await test('400 gerado com uso desconhecido conserva reserva e distingue o 429 LOCAL subsequente',async()=>{
   const guard=createGroqGuard();let calls=0;const mock:typeof fetch=async()=>{calls++;return response(400,{code:'json_validate_failed',message:'Failed to validate JSON'});};const first=await failure(mock,guard),second=await failure(mock,guard);
-  assert(first.status===400&&second.status===429&&calls===1,'Sequência não reproduzida');assert(second.diagnostic.origin==='local_guard'&&second.diagnostic.providerStatus===null&&second.diagnostic.code==='minute_budget'&&!second.message.includes('JSON gerado'),'429 local mascarado');
+  assert(first.status===400&&second.status===429&&calls===1,'Sequência não reproduzida');assert(second.diagnostic.origin==='local_guard'&&second.diagnostic.providerStatus===null&&second.diagnostic.code==='insufficient_json_budget'&&!second.message.includes('JSON gerado'),'429 local mascarado');
  });
  await test('429 real respeita Retry-After sem retry e não vira400',async()=>{
   let calls=0;const e=await failure(async()=>{calls++;return response(429,{code:'rate_limit_exceeded',message:'Token limit exceeded'});});assert(e.status===429&&e.retryAfter===19&&e.diagnostic.origin==='provider'&&e.diagnostic.providerStatus===429&&calls===1,'429');

@@ -366,7 +366,7 @@ serve(async (req: Request) => {
       }
       if (body.interpret !== true) {
         const { context: _context, ...result } = report;
-        return jsonResponse(req, { success: true, report: {...result,basis:requestedReportBasis},...(body.diagnostics===true?{authoringDiagnostics:prepareAuthoringDiagnostic({...report,basis:requestedReportBasis})}:{}) });
+        return jsonResponse(req, { success: true, report: {...result,basis:requestedReportBasis},...(body.diagnostics===true?{authoringDiagnostics:prepareAuthoringDiagnostic({...report,basis:requestedReportBasis},Deno.env.get,groqGuard)}:{}) });
       }
       // Usa o mesmo snapshot e as mesmas proteções do chat, sem escrita.
       body.context = report.context;

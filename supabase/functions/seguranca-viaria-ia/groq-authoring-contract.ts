@@ -1,6 +1,6 @@
 // Safe V7 contract diagnostics. Never log provider messages or failed_generation.
 import {groqUsage,safeFinishReason} from './groq-policy.js';
-export const GROQ_AUTHORING_REVISION='v7-groq-output-4096-3';
+export const GROQ_AUTHORING_REVISION='v7-groq-dynamic-5120-4';
 const knownCodes=new Set(['json_validate_failed','invalid_request_error','invalid_json_schema','invalid_schema','unsupported_schema','unsupported_parameter','invalid_parameter','context_length_exceeded','rate_limit_exceeded','insufficient_quota','generation_failed']);
 const knownTypes=new Set(['invalid_request_error','rate_limit_error','server_error','authentication_error']);
 const parameters=['response_format','reasoning_effort','include_reasoning','reasoning_format','max_completion_tokens','max_tokens','temperature','model','messages'];

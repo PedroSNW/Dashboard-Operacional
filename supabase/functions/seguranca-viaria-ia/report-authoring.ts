@@ -1,7 +1,7 @@
 // V7 read-only authoring, called only after authentication and authorized snapshot validation.
 import './report-authored-core.js';
 import {groqFailure, GROQ_MAX_BODY_BYTES} from './groq-context.js';
-import {groqUsage, safeFinishReason, GROQ_LIMITS} from './groq-policy.js';
+import {groqUsage, safeFinishReason, GROQ_LIMITS, createGroqGuard} from './groq-policy.js';
 import {auditAuthoringSchema, authoredProviderFailure, schemaFingerprint, completionEvidence, GROQ_AUTHORING_REVISION} from './groq-authoring-contract.ts';
 import {GROQ_AUTHORING_WIRE_SCHEMA, GROQ_WIRE_INSTRUCTION, expandGroqAuthoring} from './groq-authoring-wire.ts';
 export {GROQ_AUTHORING_REVISION} from './groq-authoring-contract.ts';
@@ -12,13 +12,36 @@ export const ANALYST_PROMPT = `Você é analista gerencial da D'Granel: seguran�
 Use o schema recebido. Até seis seções pertinentes, parágrafos curtos e sem repetição. Escolha avanços, desafios, relações e decisões úteis; catálogo é apoio, não restrição. Recomendações novas devem ter problema, objetivo, ações específicas, área sugerida, monitoramento e conclusão proposta. Horizontes sugeridos: trinta, sessenta e noventa dias, sem repetir ações. Não exponha raciocínio interno. Nunca HTML/código. Toda seção deve citar refs no formato E0.latest, E0.target, E0.mean, E0.delta ou E0.percent. Números no texto somente em placeholders {{E0.latest}}, nunca livres. Claims expressam observações verificáveis: increase/decrease/stable apenas delta; within_target/outside_target apenas latest; observed qualquer campo. Use refs apenas do pacote. chartIds usa chaves E0 etc. order segue o array a partir de um; priority é primary ou supporting, sem significar severidade. Relatos da gestão não são evidência auditada. Reconheça cobertura parcial. Retorne apenas JSON. Título sem números. Texto qualitativo é interpretação para revisão, não fato confirmado.`;
 
 export class AuthoringError extends Error {
-    diagnostic:{id:string;origin:string;providerStatus:number|null;code:string;revision:string;completion?:ReturnType<typeof groqUsage>&{limit:number;finishReason:string;latencyMs:number;completionLimitReached:boolean|null;truncationEvidence:string}}={id:crypto.randomUUID(),origin:'local_validation',providerStatus:null,code:'authoring_error',revision:GROQ_AUTHORING_REVISION};
+    diagnostic:{id:string;origin:string;providerStatus:number|null;code:string;revision:string;completion?:Record<string,unknown>}={id:crypto.randomUUID(),origin:'local_validation',providerStatus:null,code:'authoring_error',revision:GROQ_AUTHORING_REVISION};
     constructor(message:string, public status=502, public retryAfter?:number){super(message);this.name='AuthoringError';}
 }
 export function authorConfig(env:(key:string)=>string|undefined=Deno.env.get,provider='groq') {
     const bounded=(key:string,fallback:number,min:number,max:number)=>{const value=Number(env(key));return Number.isSafeInteger(value)&&value>=min&&value<=max?value:fallback;};
+    const integer=(key:string,fallback:number|null,min:number,max:number):number|null=>{
+        const raw=env(key);if(raw===undefined)return fallback;
+        const value=Number(raw);if(!/^\d+$/.test(raw)||!Number.isSafeInteger(value)||value<min||value>max){const error=new AuthoringError(`Configuração ${key} inválida: informe inteiro entre ${min} e ${max}. Nenhuma chamada executada; a base permanece disponível.`,503);error.diagnostic.origin='local_configuration';error.diagnostic.code='invalid_authoring_configuration';error.diagnostic.completion={configuredCompletionLimit:null,requestedCompletionLimit:null,effectiveCompletionLimit:null,estimatedPromptTokens:null,estimatedReservedTotal:null,availableTokenBudget:null,limit:null,deploymentRevision:GROQ_AUTHORING_REVISION,budgetAdjustmentReason:'invalid_configuration'};throw error;}return value;
+    };
+    if(provider==='groq')return {
+        maxBytes:integer('REPORT_V7_MAX_BYTES',GROQ_MAX_BODY_BYTES,3500,GROQ_MAX_BODY_BYTES)!,inputTokens:integer('REPORT_V7_INPUT_TOKENS',3500,2000,4000)!,
+        completion:integer('REPORT_V7_COMPLETION_TOKENS',5120,4096,7168)!,completionSource:env('REPORT_V7_COMPLETION_TOKENS')===undefined?'default_5120':'environment',
+        margin:integer('REPORT_V7_TOKEN_MARGIN',800,400,1600)!,inputTpm:integer('REPORT_V7_GROQ_INPUT_TPM',null,1,8000),outputTpm:integer('REPORT_V7_GROQ_OUTPUT_TPM',null,1,8000),timeoutMs:35000};
     return {maxBytes:bounded('REPORT_V7_MAX_BYTES',GROQ_MAX_BODY_BYTES,3500,GROQ_MAX_BODY_BYTES),inputTokens:bounded('REPORT_V7_INPUT_TOKENS',3500,2000,4000),
-        completion:bounded('REPORT_V7_COMPLETION_TOKENS',2048,1024,provider==='groq'?4096:3072),timeoutMs:35000};
+        completion:bounded('REPORT_V7_COMPLETION_TOKENS',2048,1024,3072),completionSource:'legacy_provider',margin:GROQ_LIMITS.margin,inputTpm:null,outputTpm:null,timeoutMs:35000};
+}
+
+// Read-only planning. reserve() repeats admission synchronously before sending; no retries.
+export function planAuthoringBudget(built:ReturnType<typeof authorPayload>,guard:any){
+    const config=built.config,state=guard.budget({inputTpm:config.inputTpm,outputTpm:config.outputTpm});
+    const combined=state.availableTokenBudget-built.estimatedTokens-config.margin;
+    const output=state.availableOutputTokenBudget===null?Infinity:state.availableOutputTokenBudget-config.margin;
+    const effective=Math.max(0,Math.min(config.completion,combined,output));
+    const inputBlocked=state.availableInputTokenBudget!==null&&built.estimatedTokens+config.margin>state.availableInputTokenBudget;
+    const reason=state.reason??(inputBlocked?'provider_input_budget':effective<4096?'insufficient_json_budget':effective<config.completion?(output<combined?'provider_output_budget':'available_token_budget'):'none');
+    return {configuredCompletionLimit:config.completion,requestedCompletionLimit:config.completion,effectiveCompletionLimit:effective,
+        estimatedPromptTokens:built.estimatedTokens,estimatedReservedTotal:built.estimatedTokens+effective+config.margin,availableTokenBudget:state.availableTokenBudget,
+        availableInputTokenBudget:state.availableInputTokenBudget,availableOutputTokenBudget:state.availableOutputTokenBudget,tokenMargin:config.margin,configuredInputTpm:config.inputTpm,configuredOutputTpm:config.outputTpm,
+        budgetAdjustmentReason:reason,deploymentRevision:GROQ_AUTHORING_REVISION,completionSource:config.completionSource,
+        canGenerate:!state.reason&&!inputBlocked&&effective>=4096,retryAfter:state.retryAfter};
 }
 
 export function authorPayload(report:any, provider:string, model:string, config=authorConfig(Deno.env.get,provider)) {
@@ -57,25 +80,28 @@ export async function generateAuthoredReport(report:any, provider:string, guard:
     const model=env(provider.toUpperCase()+'_MODEL')??({groq:'openai/gpt-oss-120b',openai:'gpt-4o-mini',gemini:'gemini-3.8-flash'}[provider]!);
     if(provider==='groq'&&!['openai/gpt-oss-120b','openai/gpt-oss-20b'].includes(model))throw new AuthoringError('O modelo Groq configurado não possui contrato autoral estrito habilitado. Use o relatório sem IA.',400);
     const key=env(provider.toUpperCase()+'_API_KEY');if(!key)throw new AuthoringError('O provedor escolhido não está configurado. Use o relatório sem IA.',503);
-    const built=authorPayload(report,provider,model,authorConfig(env,provider)),start=performance.now();
+    let built=authorPayload(report,provider,model,authorConfig(env,provider));const start=performance.now();
     if(expectedCompletionTokens!==undefined){
-        if(typeof expectedCompletionTokens!=='number'||!Number.isSafeInteger(expectedCompletionTokens)||expectedCompletionTokens<1024||expectedCompletionTokens>4096)throw new AuthoringError('Limite esperado de conclusão inválido.',400);
-        if(built.config.completion!==expectedCompletionTokens)throw new AuthoringError('O limite de conclusão publicado não corresponde ao teste autorizado. Nenhuma chamada executada.',409);
+        if(typeof expectedCompletionTokens!=='number'||!Number.isSafeInteger(expectedCompletionTokens)||expectedCompletionTokens<1024||expectedCompletionTokens>7168)throw new AuthoringError('Limite esperado de conclusão inválido.',400);
     }
     const diagnosticId=crypto.randomUUID(),schemaHash=await schemaFingerprint(built.schema),schemaAudit=auditAuthoringSchema(built.schema);
     const serialized=JSON.parse(built.body),serializedSchemaHash=provider==='groq'?await schemaFingerprint(serialized.response_format.json_schema.schema):null;
     if(provider==='groq'&&(serialized.response_format.json_schema.strict!==true||serializedSchemaHash!==schemaHash))throw new AuthoringError('A serialização do contrato estrito divergiu do schema local. Nenhuma chamada executada.',500);
-    const cacheKey=userId?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([userId,report.basis,report.snapshotUpdatedAt,provider,built.body]))))).map(b=>b.toString(16).padStart(2,'0')).join(''):null;
+    const cacheKey=userId?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([userId,report.basis,report.snapshotUpdatedAt,provider,built.body,built.config.margin,built.config.inputTpm,built.config.outputTpm,GROQ_AUTHORING_REVISION]))))).map(b=>b.toString(16).padStart(2,'0')).join(''):null;
     for(const [key,entry] of authoredCache)if(entry.expires<=Date.now())authoredCache.delete(key);
     const cached=cacheKey?authoredCache.get(cacheKey):null;
     if(cached){console.info('Authored report metrics',{provider,model,cacheHit:true,providerCall:false,totalTokens:0,latencyMs:Math.round(performance.now()-start)});return {...cached.result,meta:{...cached.result.meta,cacheHit:true,providerCall:false,currentRequestTokens:0,usageSource:'cached_original'}};}
-    const admission=provider==='groq'?guard.reserve(built.estimatedTokens+built.config.completion+GROQ_LIMITS.margin):null;
+    const budget=provider==='groq'?planAuthoringBudget(built,guard):null;
+    if(budget&&!budget.canGenerate){const error=new AuthoringError(`Proteção de orçamento: ${budget.budgetAdjustmentReason}. Disponíveis ${budget.availableTokenBudget} tokens; entrada estimada ${budget.estimatedPromptTokens}, margem ${budget.tokenMargin}, conclusão calculada ${budget.effectiveCompletionLimit}. O contrato autoral exige ao menos 4096 tokens de conclusão reservados. Aguarde a janela ou revise os limites configurados; a base e o PDF sem IA permanecem disponíveis.`,429,budget.retryAfter);error.diagnostic.origin='local_guard';error.diagnostic.code=budget.budgetAdjustmentReason;error.diagnostic.completion={...budget,limit:null,effectiveCompletionLimit:null,calculatedCompletionLimit:budget.effectiveCompletionLimit,providerCall:false};console.info('Authored report admission',{...error.diagnostic,httpStatus:429,providerCall:false});throw error;}
+    if(budget){const payload=JSON.parse(built.body);payload.max_completion_tokens=budget.effectiveCompletionLimit;const body=JSON.stringify(payload);built={...built,payload,body,bytes:new TextEncoder().encode(body).length,config:{...built.config,completion:budget.effectiveCompletionLimit}};}
+    if(expectedCompletionTokens!==undefined&&built.config.completion!==expectedCompletionTokens){const error=new AuthoringError('O limite efetivo divergiu da pré-verificação autorizada. Nenhuma chamada executada; gere uma nova pré-verificação sem repetir a geração.',409);error.diagnostic.completion={...budget,limit:null,effectiveCompletionLimit:null,calculatedCompletionLimit:built.config.completion,providerCall:false};throw error;}
+    const admission=provider==='groq'?guard.reserve(built.estimatedTokens+built.config.completion+built.config.margin,{margin:built.config.margin,inputTokens:built.estimatedTokens,outputTokens:built.config.completion,inputTpm:built.config.inputTpm,outputTpm:built.config.outputTpm}):null;
     if(admission&&!admission.allowed){const error=new AuthoringError('Proteção local: há uma análise em andamento ou reserva conservadora de consumo. Isso não confirma esgotamento da cota na Groq. Aguarde; a base foi preservada.',429,admission.retryAfter);error.diagnostic={id:diagnosticId,origin:'local_guard',providerStatus:null,code:admission.reason,revision:GROQ_AUTHORING_REVISION};console.info('Authored report admission',{...error.diagnostic,httpStatus:429,providerCall:false,retryAfter:admission.retryAfter});throw error;}
     const url=provider==='groq'?'https://api.groq.com/openai/v1/chat/completions':provider==='openai'?'https://api.openai.com/v1/chat/completions':`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     const headers:Record<string,string>={'Content-Type':'application/json',...(provider==='gemini'?{'x-goog-api-key':key}:{Authorization:'Bearer '+key})};
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),built.config.timeoutMs);
     let usage:any=null,status=0,finishReason='unknown',outcome='failed',diagnosticMetadata:any={},rejectedBeforeGeneration=false;
-    const attachCompletion=(error:AuthoringError)=>{error.diagnostic.completion={...(usage??groqUsage(null)),limit:built.config.completion,finishReason,latencyMs:Math.round(performance.now()-start),...completionEvidence(built.config.completion,usage,finishReason,diagnosticMetadata.failedStructure)};return error;};
+    const attachCompletion=(error:AuthoringError)=>{error.diagnostic.completion={...budget,...(usage??groqUsage(null)),limit:JSON.parse(built.body).max_completion_tokens??built.config.completion,finishReason,latencyMs:Math.round(performance.now()-start),...completionEvidence(built.config.completion,usage,finishReason,diagnosticMetadata.failedStructure)};return error;};
     try {
         const response=await transport(url,{method:'POST',headers,body:built.body,signal:controller.signal});status=response.status;
         if(provider==='groq')guard.observe(response.headers);
@@ -101,11 +127,11 @@ export async function generateAuthoredReport(report:any, provider:string, guard:
         if(!validated.document)throw new AuthoringError('A resposta não passou pela validação de estrutura/evidências. Base preservada.');
         outcome=validated.valid?'review_required':'partial_review_required';
         const authoredResult={success:true,authoredReportVersion:1,document:validated.document,evidence:built.pack,validation:{issues:validated.issues,reviewRequired:true},coverage:built.coverage,reportBasis:report.basis,snapshotUpdatedAt:report.snapshotUpdatedAt,
-            meta:{provider,model,...usage,finishReason,latencyMs:Math.round(performance.now()-start),inputEstimatedTokens:built.estimatedTokens,requestBytes:built.bytes,maxCompletionTokens:built.config.completion,reasoningEffort:provider==='groq'?'medium':null,estimation:'UTF-8 bytes/2 + 64; not a tokenizer',cacheHit:false,providerCall:true,completionLimit:built.config.completion,...completionEvidence(built.config.completion,usage,finishReason),contractRevision:GROQ_AUTHORING_REVISION,authoringTransport:provider==='groq'?'groq-wire-v2':'domain-v1',schemaHash,serializedSchemaHash}};
+            meta:{provider,model,...budget,...usage,finishReason,latencyMs:Math.round(performance.now()-start),inputEstimatedTokens:built.estimatedTokens,requestBytes:built.bytes,maxCompletionTokens:built.config.completion,reasoningEffort:provider==='groq'?'medium':null,estimation:'UTF-8 bytes/2 + 64; not a tokenizer',cacheHit:false,providerCall:true,completionLimit:built.config.completion,...completionEvidence(built.config.completion,usage,finishReason),contractRevision:GROQ_AUTHORING_REVISION,authoringTransport:provider==='groq'?'groq-wire-v2':'domain-v1',schemaHash,serializedSchemaHash}};
         if(cacheKey){if(authoredCache.size>=GROQ_LIMITS.cacheEntries)authoredCache.delete(authoredCache.keys().next().value!);authoredCache.set(cacheKey,{expires:Date.now()+GROQ_LIMITS.cacheMs,result:authoredResult});}
         return authoredResult;
     }catch(error){if(error instanceof AuthoringError){outcome='rejected';diagnosticMetadata.errorStatus=error.status;if(error.diagnostic.origin==='local_validation')error.diagnostic={id:diagnosticId,origin:'response_validation',providerStatus:status||null,code:'invalid_authoring_response',revision:GROQ_AUTHORING_REVISION};throw attachCompletion(error);}if(controller.signal.aborted||error instanceof DOMException&&error.name==='AbortError'){outcome='timeout';diagnosticMetadata.errorStatus=504;const failure=new AuthoringError('Tempo de elaboração excedido. A base foi preservada.',504);failure.diagnostic={id:diagnosticId,origin:'transport',providerStatus:status||null,code:'timeout',revision:GROQ_AUTHORING_REVISION};throw attachCompletion(failure);}const failure=new AuthoringError('Falha de comunicação ou resposta autoral inválida. Base preservada.');failure.diagnostic={id:diagnosticId,origin:'transport',providerStatus:status||null,code:'invalid_or_failed_response',revision:GROQ_AUTHORING_REVISION};throw attachCompletion(failure);}
-    finally{clearTimeout(timer);if(admission?.allowed)guard.finish(admission.ticket,usage,rejectedBeforeGeneration);console.info('Authored report metrics',{diagnosticId,revision:GROQ_AUTHORING_REVISION,provider,model,status,finishReason,outcome,...completionEvidence(built.config.completion,usage,finishReason),...diagnosticMetadata,schemaHash,serializedSchemaHash,schemaMatchesSerialized:provider!=='groq'||schemaHash===serializedSchemaHash,schemaObjects:schemaAudit.objects,schemaProperties:schemaAudit.properties,schemaObjectDepth:schemaAudit.maxObjectDepth,responseFormat:provider==='groq'?'json_schema':provider==='openai'?'json_object':'application/json',strict:provider==='groq',reasoningEffort:provider==='groq'?'medium':null,includeReasoning:provider==='groq'?false:null,requestBytes:built.bytes,inputEstimatedTokens:built.estimatedTokens,completionLimit:built.config.completion,reservationDisposition:rejectedBeforeGeneration?'pre_generation_rejection':usage?.totalTokens!==null&&usage?.totalTokens!==undefined?'reported_usage':'conservative_unknown',sentIndicators:built.coverage.sent,omittedIndicators:built.coverage.omittedIds.length,latencyMs:Math.round(performance.now()-start),...(usage??groqUsage(null))});}
+    finally{clearTimeout(timer);if(admission?.allowed)guard.finish(admission.ticket,usage,rejectedBeforeGeneration);console.info('Authored report metrics',{diagnosticId,revision:GROQ_AUTHORING_REVISION,provider,model,status,finishReason,outcome,...budget,...completionEvidence(built.config.completion,usage,finishReason),...diagnosticMetadata,schemaHash,serializedSchemaHash,schemaMatchesSerialized:provider!=='groq'||schemaHash===serializedSchemaHash,schemaObjects:schemaAudit.objects,schemaProperties:schemaAudit.properties,schemaObjectDepth:schemaAudit.maxObjectDepth,responseFormat:provider==='groq'?'json_schema':provider==='openai'?'json_object':'application/json',strict:provider==='groq',reasoningEffort:provider==='groq'?'medium':null,includeReasoning:provider==='groq'?false:null,requestBytes:built.bytes,inputEstimatedTokens:built.estimatedTokens,completionLimit:built.config.completion,reservationDisposition:rejectedBeforeGeneration?'pre_generation_rejection':usage?.totalTokens!==null&&usage?.totalTokens!==undefined?'reported_usage':'conservative_unknown',sentIndicators:built.coverage.sent,omittedIndicators:built.coverage.omittedIds.length,latencyMs:Math.round(performance.now()-start),...(usage??groqUsage(null))});}
 }
 
 export function validateAuthoredReview(report:any, document:any) {
@@ -114,13 +140,13 @@ export function validateAuthoredReview(report:any, document:any) {
     return {success:true,document:result.document,evidence:pack,reportBasis:report.basis,snapshotUpdatedAt:report.snapshotUpdatedAt,validation:{issues:[],reviewRequired:false}};
 }
 // Explicit read-only preflight for an operator's homologation test; no provider call or reservation.
-export function prepareAuthoringDiagnostic(report:any,env:(key:string)=>string|undefined=Deno.env.get){
+export function prepareAuthoringDiagnostic(report:any,env:(key:string)=>string|undefined=Deno.env.get,guard:any=createGroqGuard()){
     try{
         const model=env('GROQ_MODEL')??'openai/gpt-oss-120b';
         if(!['openai/gpt-oss-120b','openai/gpt-oss-20b'].includes(model))return {available:false,revision:GROQ_AUTHORING_REVISION,reason:'unsupported_model'};
-        const config=authorConfig(env,'groq'),built=authorPayload(report,'groq',model,config),raw=Number(env('REPORT_V7_COMPLETION_TOKENS'));
-        return {available:true,revision:GROQ_AUTHORING_REVISION,model,maxCompletionTokens:config.completion,completionSource:Number.isSafeInteger(raw)&&raw>=1024&&raw<=4096?'environment':'default',
-            strict:true,reasoningEffort:'medium',includeReasoning:false,inputEstimatedTokens:built.estimatedTokens,requestBytes:built.bytes,reservedTokens:built.estimatedTokens+config.completion+GROQ_LIMITS.margin,
+        const config=authorConfig(env,'groq'),built=authorPayload(report,'groq',model,config),budget=planAuthoringBudget(built,guard);
+        return {...budget,available:budget.canGenerate,revision:GROQ_AUTHORING_REVISION,model,maxCompletionTokens:budget.effectiveCompletionLimit,
+            strict:true,reasoningEffort:'medium',includeReasoning:false,inputEstimatedTokens:built.estimatedTokens,requestBytes:built.bytes,reservedTokens:budget.estimatedReservedTotal,
             localTpmCeiling:GROQ_LIMITS.tokensPerMinute,providerConfigured:Boolean(env('GROQ_API_KEY'))};
-    }catch{return {available:false,revision:GROQ_AUTHORING_REVISION,reason:'preparation_rejected'};}
+    }catch(error){return {available:false,revision:GROQ_AUTHORING_REVISION,deploymentRevision:GROQ_AUTHORING_REVISION,reason:error instanceof AuthoringError?error.diagnostic.code:'preparation_rejected',...(error instanceof AuthoringError?error.diagnostic.completion:{}),message:error instanceof AuthoringError?error.message:'Pré-verificação indisponível.'};}
 }
