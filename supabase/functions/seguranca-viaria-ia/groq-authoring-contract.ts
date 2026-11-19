@@ -1,5 +1,6 @@
 // Safe V7 contract diagnostics. Never log provider messages or failed_generation.
-export const GROQ_AUTHORING_REVISION='v7-groq-strict-wire-2';
+import {groqUsage,safeFinishReason} from './groq-policy.js';
+export const GROQ_AUTHORING_REVISION='v7-groq-output-4096-3';
 const knownCodes=new Set(['json_validate_failed','invalid_request_error','invalid_json_schema','invalid_schema','unsupported_schema','unsupported_parameter','invalid_parameter','context_length_exceeded','rate_limit_exceeded','insufficient_quota','generation_failed']);
 const knownTypes=new Set(['invalid_request_error','rate_limit_error','server_error','authentication_error']);
 const parameters=['response_format','reasoning_effort','include_reasoning','reasoning_format','max_completion_tokens','max_tokens','temperature','model','messages'];
@@ -54,9 +55,17 @@ export async function authoredProviderFailure(response:Response, schema:any, val
             }catch{failedJson='invalid';}
         }
     }
+    const usageSource=payload?.usage?'response_usage':error?.usage?'error_usage':'unavailable';
+    const usage=groqUsage({usage:payload?.usage??error?.usage});
+    const finishReason=safeFinishReason(payload?.choices?.[0]?.finish_reason??payload?.finish_reason??error?.finish_reason);
     return {status:response.status,code,type,category,parameter,keyword:keywords.find(k=>message.toLowerCase().includes(k.toLowerCase()))??null,
         requestId:safeId(response.headers.get('x-request-id'))??safeId(response.headers.get('x-groq-request-id'))??(typeof payload?.x_groq?.id==='string'&&payload.x_groq.id.startsWith('req_')?safeId(payload.x_groq.id):null),
-        retryAfter:response.status===429&&Number.isFinite(seconds)?seconds:null,failedJson,failedSchema,schemaIssues,failedStructure:structure,
+        retryAfter:response.status===429&&Number.isFinite(seconds)?seconds:null,failedJson,failedSchema,schemaIssues,failedStructure:structure,usage,usageSource,finishReason,
         // json_validate_failed can incur usage: NEVER assume that it consumed zero tokens.
-        preGenerationRejection:response.status===400&&!hasFailedGeneration&&![payload?.usage?.total_tokens,payload?.usage?.prompt_tokens,payload?.usage?.completion_tokens].some(v=>typeof v==='number'&&v>0)&&['invalid_schema','invalid_parameter','context_limit'].includes(category)};
+        preGenerationRejection:response.status===400&&!hasFailedGeneration&&![usage.totalTokens,usage.promptTokens,usage.completionTokens].some(v=>typeof v==='number'&&v>0)&&['invalid_schema','invalid_parameter','context_limit'].includes(category)};
+}
+export function completionEvidence(limit:number,usage:ReturnType<typeof groqUsage>|null,finishReason:string,structure?:{incompleteStructure:boolean}|null){
+    const completionLimitReached=usage?.completionTokens===null||usage?.completionTokens===undefined?null:usage.completionTokens>=limit;
+    const truncationEvidence=finishReason==='length'?'provider_reported_length':completionLimitReached&&structure?.incompleteStructure?'cap_and_incomplete_json':completionLimitReached?'cap_reached_unproven_cause':structure?.incompleteStructure?'incomplete_json_unknown_cause':'not_confirmed';
+    return {completionLimitReached,truncationEvidence};
 }

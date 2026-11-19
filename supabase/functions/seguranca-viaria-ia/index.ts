@@ -8,7 +8,7 @@ import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentati
 import { compactGroqContext, groqFailure, GROQ_OUTPUT_BUDGET, GROQ_MAX_BODY_BYTES } from "./groq-context.js";
 import { buildReport, buildReportManagement, compactReportContext, buildReportIntelligence } from "./reports.js";
 import { groqProfile, groqUsage, safeFinishReason, createGroqGuard, GROQ_LIMITS } from "./groq-policy.js";
-import { generateAuthoredReport, validateAuthoredReview, AuthoringError, GROQ_AUTHORING_REVISION } from "./report-authoring.ts";
+import { generateAuthoredReport, validateAuthoredReview, prepareAuthoringDiagnostic, AuthoringError, GROQ_AUTHORING_REVISION } from "./report-authoring.ts";
 
 const MAX_BODY_BYTES = 25 * 1024;
 const MAX_PROMPT_CHARS = 1000;
@@ -358,7 +358,7 @@ serve(async (req: Request) => {
           const base = {...report, basis: requestedReportBasis};
           return jsonResponse(req, body.reviewDocument !== undefined
             ? validateAuthoredReview(base, body.reviewDocument)
-            : await generateAuthoredReport(base, typeof body.provider === 'string' ? body.provider : 'groq', groqGuard, Deno.env.get, fetch, user.id));
+            : await generateAuthoredReport(base, typeof body.provider === 'string' ? body.provider : 'groq', groqGuard, Deno.env.get, fetch, user.id, body.expectedCompletionTokens));
         } catch (error) {
           if (error instanceof AuthoringError) { const failure = new HttpError(error.message, error.status); failure.retryAfter = error.retryAfter; failure.diagnostic=error.diagnostic; throw failure; }
           throw error;
@@ -366,7 +366,7 @@ serve(async (req: Request) => {
       }
       if (body.interpret !== true) {
         const { context: _context, ...result } = report;
-        return jsonResponse(req, { success: true, report: {...result,basis:requestedReportBasis} });
+        return jsonResponse(req, { success: true, report: {...result,basis:requestedReportBasis},...(body.diagnostics===true?{authoringDiagnostics:prepareAuthoringDiagnostic({...report,basis:requestedReportBasis})}:{}) });
       }
       // Usa o mesmo snapshot e as mesmas proteções do chat, sem escrita.
       body.context = report.context;
@@ -1071,7 +1071,7 @@ serve(async (req: Request) => {
         success: false,
         error: error.message,
         httpStatus:error.status,
-        ...(error.diagnostic?{diagnosticId:error.diagnostic.id,errorOrigin:error.diagnostic.origin,providerStatus:error.diagnostic.providerStatus,errorCode:error.diagnostic.code,contractRevision:error.diagnostic.revision}:{}),
+        ...(error.diagnostic?{diagnosticId:error.diagnostic.id,errorOrigin:error.diagnostic.origin,providerStatus:error.diagnostic.providerStatus,errorCode:error.diagnostic.code,contractRevision:error.diagnostic.revision,...(error.diagnostic.completion?{completionDiagnostics:error.diagnostic.completion}:{})}:{}),
         ...(error.retryAfter !== undefined ? { retryAfter: error.retryAfter } : {}),
       }, error.status);
     }
