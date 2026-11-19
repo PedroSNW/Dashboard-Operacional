@@ -32,17 +32,17 @@ try{
     assert(all.validation.acceptedSectionsCount===5&&!all.validation.partial,'Cinco seções válidas');
     const errors=[
         section(['E0']),section(['E0.invalidField']),section([omitted+'.latest']),
-        section(['E0.latest'],['E0.delta|decrease']),section(['E0.delta'],['E0.delta|inventada']),
+        section(['E1.latest'],['E0.delta|decrease']),section(['E0.delta'],['E0.delta|inventada']),
     ];
     const invalid=await reject(response(errors));
     const diagnostics=invalid.sectionEvidenceDiagnostics;
-    const expected=['invalid_ref_format','unknown_ref','ref_not_sent','claim_ref_mismatch','unsupported_relation'];
+    const expected=['invalid_ref_format','unknown_ref','ref_not_sent','claim_ref_not_in_section','claim_relation_unsupported'];
     assert(invalid.rejectedSectionsCount===5&&invalid.acceptedSectionsCount===0,'Descarte coletivo');
     assert(diagnostics.every((entry:any,index:number)=>entry.sectionIndex===index&&entry.sectionType==='summary'&&entry.codes[0]===expected[index]),'Classificação por seção');
     assert(diagnostics[0].malformedReferenceCount===1&&diagnostics[1].unknownReferenceCount===1&&diagnostics[2].outOfScopeReferenceCount===1&&diagnostics[3].invalidClaimsCount===1,'Contagens');
     const partial=await generate(response([good,...errors]));
     assert(partial.validation.partial&&partial.document.sections.length===1,'Mistura factual');
-    assert((await reject(response([section(['E0.delta'],['E0.delta|increase'])]))).validationCode==='incompatible_claim','Relação falsa');
+    assert((await reject(response([section(['E0.delta'],['E0.delta|increase'])]))).validationCode==='claim_relation_factually_false','Relação falsa');
     const without=await generate(response([section([],[],'Hipótese para avaliar a qualidade dos registros.','hypothesis')]));
     assert(without.validation.sectionEvidenceDiagnostics[0].codes[0]==='qualitative_section_without_ref','Hipótese sem referências');
     assert((await reject(response([section([],[],'Houve redução no resultado.','hypothesis')]))).validationCode==='missing_refs','Fato sem refs');

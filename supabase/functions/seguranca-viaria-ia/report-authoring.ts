@@ -132,7 +132,7 @@ export async function generateAuthoredReport(report:any, provider:string, guard:
         if(provider==='gemini'&&(!Array.isArray(candidate?.content?.parts)||candidate.content.parts.some((p:any)=>!p||typeof p.text!=='string')))reject('response_parse','provider_envelope_incompatible');
         const text=provider==='gemini'?candidate.content.parts.map((p:any)=>p.text).join(''):choice?.message?.content;
         let document;try{document=JSON.parse(text);}catch{reject('response_parse','content_invalid_json');}
-        const wireIssuesBySection:Record<number,string[]>={};
+        const wireIssuesBySection:Record<number,{claimIndex:number;code:string;ref:string|null}[]>={};
         if(provider==='groq'){
             currentValidationStage='wire_schema_validation';
             const wireIssues=core.checkSchema(document,built.schema);
@@ -155,7 +155,7 @@ export async function generateAuthoredReport(report:any, provider:string, guard:
             document=expandGroqAuthoring(document,(index,code)=>(wireIssuesBySection[index]??=[]).push(code));
         }
         currentValidationStage='internal_schema_validation';const internalIssues=core.checkSchema(document);if(internalIssues.length)reject('internal_schema_validation','internal_schema_incompatible',core.safePath(internalIssues[0]));
-        currentValidationStage='evidence_validation';const validated=core.validate(document,built.pack,built.allowedRefs,wireIssuesBySection);
+        currentValidationStage='evidence_validation';const validated=core.validate(document,built.pack,built.allowedRefs,wireIssuesBySection,provider==='groq');
         if(!validated.document){const d=validationDiagnostic(validated);reject(d.validationStage,d.validationCode,d.validationPath,validated);}
         currentValidationStage='editorial_validation';diagnosticMetadata={...diagnosticMetadata,...validationDiagnostic(validated)};
         outcome=validated.valid?'review_required':'partial_review_required';

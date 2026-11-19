@@ -47,29 +47,52 @@
         if(!item)return null;
         return `${item.name}: ${{latest:'resultado recente',target:'meta atual',mean:'média dos registros válidos',delta:'variação absoluta',percent:'variação percentual'}[f.field]} ${format(f.value)}${f.unit?' '+f.unit:''}${f.competency?' · '+f.competency:''}`;
     }
-    function checkClaim(claim, pack) {
-        if(!relations.includes(claim.relation))return false;
-        if(!Object.hasOwn(pack.facts,claim.ref))return false;const f=pack.facts[claim.ref];
-        if(claim.relation==='observed')return true;
-        if(f.value===null)return false;
-        if(['increase','decrease','stable'].includes(claim.relation))return f.field==='delta'&&(claim.relation==='increase'?f.value>0:claim.relation==='decrease'?f.value<0:f.value===0);
-        if(['improved','worsened'].includes(claim.relation))return f.field==='delta'&&!f.neutral&&f.value!==0&&((f.direction==='menor_melhor'?f.value<0:f.value>0)===(claim.relation==='improved'));
-        if(['above_mean','below_mean','equal_mean'].includes(claim.relation)){const mean=pack.facts[claim.ref.replace(/\.latest$/,'.mean')]?.value;return f.field==='latest'&&mean!==null&&mean!==undefined&&(claim.relation==='above_mean'?f.value>mean:claim.relation==='below_mean'?f.value<mean:f.value===mean);}
-        return f.field==='latest'&&f.outside!==null&&(claim.relation==='outside_target'?f.outside:!f.outside);
+    function claimIssue(claim, pack) {
+        const relation=claim.relation;
+        if(!relations.includes(relation))return 'claim_relation_unsupported';
+        if(!Object.hasOwn(pack.facts,claim.ref))return 'unknown_ref';
+        const fact=pack.facts[claim.ref];
+        if(relation==='observed')return null; // The deterministic projection may say “Ausente”.
+        const trend=['increase','decrease','stable','improved','worsened'].includes(relation);
+        if(fact.field!==(trend?'delta':'latest'))return 'claim_field_mismatch';
+        const target=relation==='outside_target'||relation==='within_target';
+        const performance=target||['improved','worsened'].includes(relation);
+        if(performance&&(fact.neutral||!['menor_melhor','maior_melhor'].includes(fact.direction)))return 'claim_direction_not_validated';
+        if(!Number.isFinite(fact.value))return 'claim_value_missing';
+        let matches;
+        if(trend){
+            const improved=fact.direction==='menor_melhor'?fact.value<0:fact.value>0;
+            matches={increase:fact.value>0,decrease:fact.value<0,stable:fact.value===0,improved,worsened:!improved}[relation];
+            if(performance&&fact.value===0)matches=false;
+        }else if(target){
+            if(typeof fact.outside!=='boolean')return 'claim_value_missing';
+            matches=relation==='outside_target'?fact.outside:!fact.outside;
+        }else{
+            const mean=pack.facts[claim.ref.replace(/\.latest$/,'.mean')]?.value;
+            if(!Number.isFinite(mean))return 'claim_value_missing';
+            matches={above_mean:fact.value>mean,below_mean:fact.value<mean,equal_mean:fact.value===mean}[relation];
+        }
+        return matches?null:'claim_relation_factually_false';
     }
+    const checkClaim=(claim,pack)=>claimIssue(claim,pack)===null;
     // Free prose is editorial interpretation, never promoted to a verified numerical fact.
     // Numerical facts are placeholders resolved by deterministic projection, plus typed claims.
-    function textIssues(text, refs, pack, kind='analysis') {
+    function textIssues(text, refs, pack, kind='analysis', days=null) {
         const issues=[],tokens=[...text.matchAll(/\{\{([^{}]+)\}\}/g)];
         for(const [,ref] of tokens)if(!refs.includes(ref)||!pack.facts[ref])issues.push('referencia_textual');
         let prose=text.replace(/\{\{[^{}]+\}\}/g,'');
-        if(['limitation','proposal'].includes(kind))prose=prose.replace(/\b(?:30|60|90|trinta|sessenta|noventa)\s+dias\b/gi,'prazo sugerido');
-        if(['hypothesis','proposal','limitation'].includes(kind))prose=prose.replace(/\b(?:dois|duas|três|tres)\s+(?:etapas|frentes|eixos|pilares)\b/gi,'etapas propostas');
+        if(kind==='limitation'||days!==null){
+            prose=prose.replace(/\b((?:prazo|horizonte)\s+(?:proposto|sugerido)\s*(?::|de)\s*(?:até\s+)?)(30|60|90|trinta|sessenta|noventa)\s+dias\b(?!\s+de\b)/gi,(full,label,duration)=>{
+                const number={trinta:30,sessenta:60,noventa:90}[duration.toLowerCase()]??Number(duration);
+                return kind==='limitation'||number===days?label+'prazo administrativo':full;
+            });
+        }
         if(/[\p{N}%]|\b(?:zero|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|noventa|cem|mil|por cento|metade|dobr\w*|triplic\w*)\b/iu.test(normalize(prose)))issues.push('numero_livre');
         if(/[<>]|https?:|javascript:|```/i.test(prose))issues.push('conteudo_nao_editorial');
         const n=normalize(prose);
         const causal=n.replace(/nao (?:e |ha )?(?:uma )?(?:causa|relacao causal|causalidade|efeito) comprovad[oa]/g,'limitação causal').replace(/nao (?:(?:e|sao|foi|foram) )?(?:comprova\w*|demonstra\w*|causad[oa])/g,'limitação causal');
-        if(/causad[oa]|devido a|decorre de|comprovad|demonstrou que|provocou|resultou em|acidentes (?:ficaram|mais) graves/.test(causal)&&kind!=='hypothesis')issues.push('causalidade_nao_comprovada');
+        const causalAssertion=causal.replace(/\b(?:pode|poderia)\s+(?:ter sido causad[oa]|decorrer|resultar)\b/g,'possibilidade');
+        if(/causad[oa]|devido a|decorre de|comprovad|demonstrou que|provocou|resultou em|causou|explica a|acidentes (?:ficaram|mais) graves/.test(causalAssertion))issues.push('causalidade_nao_comprovada');
         if(/punir|demitir|sancionar|aplicar sanc|determina-se|condenar|ajuizar/.test(n))issues.push('decisao_nao_autorizada');
         if(/ignore (?:as |todas)|system prompt|api.key|segredo|token de sessao/.test(n))issues.push('instrucao_invalida');
         return issues;
@@ -79,18 +102,29 @@
     const safePath=path=>String(path).split(':')[0].split('.').map(k=>pathKeys.has(k)?k:/^\d{1,4}$/.test(k)?k:'?').slice(0,12).join('.');
     const comparisons=[[/aument\w*|cresceu|crescimento/,'increase'],[/diminui\w*|reducao|reduziu|caiu|queda/,'decrease'],[/permaneceu estavel/,'stable'],[/fora da meta/,'outside_target'],[/dentro da meta/,'within_target'],[/acima da media/,'above_mean'],[/abaixo da media/,'below_mean'],[/melhorou/,'improved'],[/piorou/,'worsened']];
     const comparisonText=text=>normalize(text).replace(/\b(?:nao (?:(?:e possivel|se pode) )?(?:afirmar|concluir|comprova\w*|inferir|demonstra\w*)|sem comprovar)(?: que)?(?: houve)?(?: uma)?\s+(?:reducao|aumento|melhora|piora)\b/g,'limitação');
-    const tentative=text=>/propoe|propost|suger|recomend|objetiv|a fim de|poderia|hipotese|possibilidade|se aprov|para reduzir|para aumentar/.test(normalize(text))&&!/foi |houve |observad|registrou|apresentou/.test(normalize(text));
-    function referenceDiagnostic(section, index, pack, allowed, wireCodes=[]) {
+    // Remove prospective verbs, not the sentence around them. An observed result
+    // in the same sentence must still be checked.
+    const maskObjectives=text=>text.replace(/\b(?:para|a fim de|objetivo de|visando)\s+(?:reduzir|diminuir|aumentar|melhorar)\b/g,' para atuar')
+        .replace(/^(\s*(?:proposta de\s+)?)(?:reduzir|diminuir|aumentar|melhorar)\b/,'$1atuar')
+        .replace(/\b(?:avaliar|investigar|verificar) se (?:houve|ocorreu) (?:uma )?(?:reducao|aumento|queda|melhora|piora)\b/g,'investigar a evolução');
+    const tentative=text=>/^(?:\s*)(?:propoe-se|sugere-se|recomenda-se|se aprov)/.test(normalize(text))&&!/foi |houve |observad|registrou|apresentou/.test(normalize(text));
+    function referenceDiagnostic(section, index, pack, allowed, wireIssues=[]) {
         const diagnostic={sectionIndex:index,sectionType:types.includes(section.type)?section.type:null,
             referenceCount:section.refs.length,recognizedReferenceCount:0,unknownReferenceCount:0,
-            outOfScopeReferenceCount:0,malformedReferenceCount:0,invalidClaimsCount:wireCodes.length,
-            referenceState:section.refs.length?'present':'empty',codes:[...wireCodes]};
+            outOfScopeReferenceCount:0,malformedReferenceCount:0,invalidClaimsCount:wireIssues.length,
+            referenceState:section.refs.length?'present':'empty',codes:wireIssues.map(issue=>issue.code),claimIssues:[]};
         const classify=ref=>{
             if(!/^E(?:0|[1-9]\d*)\.[a-zA-Z][a-zA-Z0-9_]*$/.test(ref))return 'invalid_ref_format';
             if(!Object.hasOwn(pack.facts,ref))return 'unknown_ref';
             if(!allowed.has(ref))return 'ref_not_sent';
             return null;
         };
+        const addClaimIssue=(claimIndex,ref,codes)=>diagnostic.claimIssues.push({
+            claimIndex,referenceExists:ref!==null&&Object.hasOwn(pack.facts,ref),
+            referenceSent:ref!==null&&allowed.has(ref),inSection:ref!==null&&section.refs.includes(ref),codes
+        });
+        const invalidIndices=new Set(wireIssues.map(issue=>issue.claimIndex));
+        for(const issue of wireIssues)addClaimIssue(issue.claimIndex,issue.ref,[issue.code]);
         for(const ref of section.refs){
             const code=classify(ref);
             if(code==='invalid_ref_format')diagnostic.malformedReferenceCount++;
@@ -99,13 +133,24 @@
             else diagnostic.recognizedReferenceCount++;
             if(code)diagnostic.codes.push(code);
         }
+        let claimIndex=0;
         for(const claim of section.claims){
-            const code=classify(claim.ref)??(!section.refs.includes(claim.ref)?'claim_ref_mismatch':!checkClaim(claim,pack)?'incompatible_claim':null);
-            if(code){diagnostic.invalidClaimsCount++;diagnostic.codes.push(code);}
+            while(invalidIndices.has(claimIndex))claimIndex++;
+            const scopeIssue=classify(claim.ref);
+            const inSection=section.refs.includes(claim.ref);
+            const factualIssue=scopeIssue?null:claimIssue(claim,pack);
+            const codes=[scopeIssue,!inSection?'claim_ref_not_in_section':null,factualIssue].filter(Boolean);
+            if(codes.length){
+                diagnostic.invalidClaimsCount++;
+                diagnostic.codes.push(...codes);
+                addClaimIssue(claimIndex,claim.ref,codes);
+            }
+            claimIndex++;
         }
+        diagnostic.claimIssues.sort((a,b)=>a.claimIndex-b.claimIndex);
         return diagnostic;
     }
-    function validate(document, pack, allowedRefs=null, wireIssues={}) {
+    function validate(document, pack, allowedRefs=null, wireIssues={}, repairClaimRefs=false) {
         const structural=checkSchema(document),issues=[];
         const add=(section,codes,severity,path,stage)=>{if(codes.length)issues.push({section,codes:[...new Set(codes)],severity,path:safePath(path),stage});};
         if(structural.length){add(null,['schema_invalido'],'blocking',structural[0],'internal_schema_validation');return {valid:false,document:null,issues,structural:structural.map(safePath),acceptedSectionsCount:0,rejectedSectionsCount:Array.isArray(document?.sections)?document.sections.length:0,reviewableIssuesCount:0,fatalIssuesCount:1};}
@@ -121,24 +166,50 @@
             if(s.order!==index+1)editorial.push('ordem_invalida');
             if(!s.title.trim()||s.title.length>90){editorial.push('titulo_invalido');if(!s.title.trim())s.title='Seção para revisão';}
             if(!s.text.trim())codes.push('secao_vazia');
+            // The claim already names an exact fact. Attach it only when the same
+            // indicator is already cited and the independent claim check passes.
+            let repairedClaimRefs=0;
+            if(repairClaimRefs&&refs.length){
+                const citedKeys=new Set(refs.filter(ref=>allowed.has(ref)).map(ref=>ref.split('.')[0]));
+                for(const claim of s.claims){
+                    if(!refs.includes(claim.ref)&&refs.length<40&&allowed.has(claim.ref)&&citedKeys.has(claim.ref.split('.')[0])&&checkClaim(claim,pack)){
+                        refs.push(claim.ref);
+                        repairedClaimRefs++;
+                    }
+                }
+            }
+            if(repairedClaimRefs)editorial.push('claim_ref_attached');
             const evidenceDiagnostic=referenceDiagnostic(s,index,pack,allowed,wireIssues[index]);
             codes.push(...evidenceDiagnostic.codes);
             if(new Set(refs).size!==refs.length)editorial.push('referencia_repetida');
             const fields=[s.title,s.text,...(s.proposal?[s.proposal.problem,s.proposal.objective,...s.proposal.actions,s.proposal.owner,s.proposal.monitoring,s.proposal.completion]:[])];
-            fields.forEach((text,n)=>codes.push(...textIssues(text,refs,pack,n>1?'proposal':s.type)));
+            fields.forEach((text,n)=>codes.push(...textIssues(text,refs,pack,n>1?'proposal':s.type,s.proposal?.days??null)));
             if(fields.some(t=>t.length>1800))review.push('texto_longo');
-            const sentences=[s.title,s.text,...fields.slice(2)].flatMap(t=>t.replace(/\{\{[^{}]+\}\}/g,'').split(/[.!?\n]+/)).filter(Boolean);
+            if(s.type==='hypothesis'&&/\b(?:pode|poderia)\b.{0,45}\b(?:caus\w*|relacionad\w*|decorrer|resultar)\b/.test(normalize(s.text)))review.push('hipotese_causal_para_revisao');
+            const sentences=fields.flatMap(t=>t.replace(/\{\{([^{}]+)\}\}/g,(_,ref)=>' '+ref.replace('.','_')+' ').split(/[.!?;\n]+|\bcontrasta com\b|\benquanto\b/i)).filter(Boolean);
             let asserted=false;
-            for(const sentence of sentences){const narrative=comparisonText(sentence);if(tentative(sentence))continue;
-                for(const [pattern,relation] of comparisons)if(pattern.test(narrative)){asserted=true;if(!s.claims.some(c=>c.relation===relation&&checkClaim(c,pack)))codes.push('comparacao_sem_afirmacao_estruturada');}
+            for(const sentence of sentences){
+                const narrative=maskObjectives(comparisonText(sentence));
+                const names=pack.items.filter(item=>{
+                    const name=normalize(item.name);
+                    const index=narrative.indexOf(name);
+                    return (name.length>3&&index>=0&&!/\w/.test(narrative[index-1]??'')&&!/\w/.test(narrative[index+name.length]??''))||new RegExp('\\b'+item.key.toLowerCase()+'_[a-z]+\\b').test(narrative);
+                });
+                if(/\b(?:superou|ultrapassou|maior que|menor que|superior a|inferior a)\b/.test(narrative)&&names.length>1){asserted=true;codes.push('comparacao_entre_indicadores');}
+                for(const [pattern,relation] of comparisons)if(pattern.test(narrative)){
+                    asserted=true;
+                    const matching=s.claims.filter(c=>c.relation===relation&&checkClaim(c,pack));
+                    if(names.length?!names.every(item=>matching.some(c=>c.ref.startsWith(item.key+'.'))):!matching.length)codes.push('comparacao_sem_afirmacao_estruturada');
+                }
                 if(/(?:indicador|resultado|acidente|ocorrencia|registro|saldo|meta)/.test(narrative)&&/\b(?:houve|registrou|apresentou|ficou|atingiu|observad\w*|foi superior|foi inferior)\b/.test(narrative)){asserted=true;if(!s.claims.length)codes.push('afirmacao_sem_evidencia');}
                 if(refs.length&&refs.every(ref=>pack.facts[ref]?.neutral)&&/melhorou|piorou|favoravel|desfavoravel|recuperacao comprovada/.test(narrative))codes.push('julgamento_sem_direcao');
             }
             const qualitative=s.type==='hypothesis'||Boolean(s.proposal)||/hipotese|orientacao|propost|sugest|recomenda|para avaliacao/.test(normalize(s.text));
             const hasPlaceholder=fields.some(text=>/\{\{[^{}]+\}\}/.test(text));
             if(!refs.length&&(s.claims.length||asserted||!qualitative||hasPlaceholder))codes.unshift('missing_refs');
-            if(codes.length||!refs.length){
-                evidenceDiagnostic.codes=codes.length?[...new Set(codes)]:['qualitative_section_without_ref'];
+            if(codes.length||!refs.length||repairedClaimRefs){
+                evidenceDiagnostic.repairedClaimRefs=repairedClaimRefs;
+                evidenceDiagnostic.codes=codes.length?[...new Set(codes)]:[refs.length?'claim_ref_attached':'qualitative_section_without_ref'];
                 sectionEvidenceDiagnostics.push(evidenceDiagnostic);
             }
             if(s.proposal&&(!s.proposal.actions.length||!s.proposal.problem.trim()||!s.proposal.objective.trim()||!s.proposal.monitoring.trim()||!s.proposal.completion.trim()))review.push('proposta_incompleta');
@@ -163,5 +234,5 @@
         return [resolve(section.text,pack),...section.claims.map(c=>project(c.ref,pack)+' · '+({observed:'observação',increase:'aumento descritivo',decrease:'redução descritiva',stable:'estabilidade',within_target:'dentro da meta',outside_target:'fora da meta',above_mean:'acima da média',below_mean:'abaixo da média',equal_mean:'igual à média',improved:'melhora descritiva pela direção cadastrada',worsened:'piora descritiva pela direção cadastrada'}[c.relation])),
             ...(p?['Sugestão para avaliação: '+resolve(p.problem,pack),'Objetivo sugerido: '+resolve(p.objective,pack),...p.actions.map(a=>'Ação sugerida: '+resolve(a,pack)),'Área sugerida: '+resolve(p.owner,pack),p.days?'Horizonte sugerido: até '+p.days+' dias.':'Prazo a pactuar.','Monitoramento: '+resolve(p.monitoring,pack),'Conclusão proposta: '+resolve(p.completion,pack)]:[])];
     }
-    globalThis.ReportAuthoredCore={schema,types,relations,evidence,validate,checkSchema,checkClaim,textIssues,project,resolve,lines,clone,safePath,referenceDiagnostic};
+    globalThis.ReportAuthoredCore={schema,types,relations,evidence,validate,checkSchema,checkClaim,claimIssue,textIssues,project,resolve,lines,clone,safePath,referenceDiagnostic};
 })();
