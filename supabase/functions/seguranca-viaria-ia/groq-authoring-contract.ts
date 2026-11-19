@@ -1,6 +1,7 @@
 // Safe V7 contract diagnostics. Never log provider messages or failed_generation.
 import {groqUsage,safeFinishReason} from './groq-policy.js';
-export const GROQ_AUTHORING_REVISION='v7-claim-semantics-7';
+import {GROQ_PROPOSAL_TYPES} from './groq-authoring-wire.ts';
+export const GROQ_AUTHORING_REVISION='v7-proposal-enum-8';
 export function validationDiagnostic(result:any,stage?:string,code?:string,path?:string){
     const first=result?.issues?.find((i:any)=>i.severity==='blocking')??result?.issues?.[0];
     const safe=(globalThis as any).ReportAuthoredCore.safePath;
@@ -14,6 +15,24 @@ const knownTypes=new Set(['invalid_request_error','rate_limit_error','server_err
 const parameters=['response_format','reasoning_effort','include_reasoning','reasoning_format','max_completion_tokens','max_tokens','temperature','model','messages'];
 const keywords=['required','additionalProperties','anyOf','enum','type','properties','items','maxLength','maxItems'];
 const safeId=(value:unknown)=>typeof value==='string'&&/^(?!gsk_)[a-zA-Z0-9_-]{1,120}$/.test(value)?value:null;
+function proposalEnumDiagnostic(message:string, issues:string[], schema:any){
+    const values=schema?.properties?.recommendations?.items?.properties?.type?.enum;
+    if(!Array.isArray(values)||values.length!==GROQ_PROPOSAL_TYPES.length||!GROQ_PROPOSAL_TYPES.every(value=>values.includes(value)))return null;
+    // Compile the diagnostic from fixed paths only. Never forward an invalid value.
+    const reported=/['"]\/recommendations\/(\d{1,4})\/type['"] does not validate with \/properties\/recommendations\/items\/properties\/type\/enum:/.exec(message);
+    const structuralIndices=new Set(issues.flatMap(issue=>{
+        const match=/^\$\.recommendations\.(\d{1,4})\.type:enum$/.exec(issue);
+        return match?[Number(match[1])]:[];
+    }));
+    const index=reported?Number(reported[1]):structuralIndices.values().next().value;
+    if(index===undefined)return null;
+    return {
+        validationStage:'provider_schema_validation',validationCode:'recommendation_type_enum',
+        validationCategory:'enum_mismatch',validationPath:`$.recommendations.${index}.type`,
+        schemaField:'recommendations[].type',arrayIndex:index,enumName:'GROQ_PROPOSAL_TYPES',
+        confirmedInFailedGeneration:structuralIndices.has(index),reportedByProvider:Boolean(reported)
+    };
+}
 function failedStructure(text:string){
     const trimmed=text.trim();let quoted=false,escaped=false,open=0;
     for(const character of trimmed){if(quoted){if(escaped)escaped=false;else if(character==='\\')escaped=true;else if(character==='"')quoted=false;}else if(character==='"')quoted=true;else if(character==='{'||character==='[')open++;else if(character==='}'||character===']')open--;}
@@ -53,9 +72,10 @@ export async function authoredProviderFailure(response:Response, schema:any, val
     const requestedParam=typeof error.param==='string'?error.param:'';
     const parameter=parameters.find(p=>requestedParam===p||requestedParam.startsWith(p+'.'))??parameters.find(p=>message.toLowerCase().includes(p))??null;
     const failed=error.failed_generation??payload?.failed_generation;let failedJson='absent',failedSchema='not_checked',schemaIssues:string[]=[],structure:ReturnType<typeof failedStructure>|null=null;
+    let generatedIssues:string[]=[];
     if(typeof failed==='string'){
         if(failed.length===0)failedJson='empty';else if(failed.length>65536)failedJson='oversized';else{structure=failedStructure(failed);
-            try{const generated=JSON.parse(failed);failedJson='valid';const issues=validate(generated,schema);
+            try{const generated=JSON.parse(failed);failedJson='valid';const issues=validate(generated,schema);generatedIssues=issues;
                 // Runtime validator paths originate in untrusted JSON: retain only schema-owned names/indices.
                 const allowed=new Set<string>(['$', 'anyOf','properties','items']);const collect=(s:any)=>{if(!s||typeof s!=='object')return;Object.keys(s.properties??{}).forEach(k=>{allowed.add(k);collect(s.properties[k]);});if(s.items)collect(s.items);if(s.anyOf)s.anyOf.forEach(collect);};collect(schema);
                 const reasons=new Set(['tipo','enum','null','texto','inteiro','lista','objeto','ausente','extra','schema']);
@@ -67,6 +87,7 @@ export async function authoredProviderFailure(response:Response, schema:any, val
     const usage=groqUsage({usage:payload?.usage??error?.usage});
     const finishReason=safeFinishReason(payload?.choices?.[0]?.finish_reason??payload?.finish_reason??error?.finish_reason);
     return {status:response.status,code,type,category,parameter,keyword:keywords.find(k=>message.toLowerCase().includes(k.toLowerCase()))??null,
+        providerSchemaDiagnostic:response.status===400&&code==='json_validate_failed'?proposalEnumDiagnostic(message,generatedIssues,schema):null,
         requestId:safeId(response.headers.get('x-request-id'))??safeId(response.headers.get('x-groq-request-id'))??(typeof payload?.x_groq?.id==='string'&&payload.x_groq.id.startsWith('req_')?safeId(payload.x_groq.id):null),
         retryAfter:response.status===429&&Number.isFinite(seconds)?seconds:null,failedJson,failedSchema,schemaIssues,failedStructure:structure,usage,usageSource,finishReason,
         // json_validate_failed can incur usage: NEVER assume that it consumed zero tokens.
