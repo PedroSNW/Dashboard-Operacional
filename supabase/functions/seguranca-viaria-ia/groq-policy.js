@@ -41,10 +41,13 @@ export function createGroqGuard(now=()=>Date.now(),limits=GROQ_LIMITS){
             return {allowed:true,reason:null,retryAfter:0,ticket};
         },
         /** @param {any} ticket @param {ReturnType<typeof groqUsage>|null} usage */
-        finish(ticket,usage=null){
+        finish(ticket,usage=null,rejectedBeforeGeneration=false){
             // Uso não informado / timeout / erro: reter a reserva inteira, sem crédito fictício.
             const total=count(usage?.totalTokens);
             if(ticket&&total!==null)ticket.tokens=total+limits.margin;
+            // Keep RPM/RPD events. Release token reservation only for explicit pre-generation rejection.
+            // A generated JSON failure, timeout, or unknown error MUST retain its reservation.
+            else if(ticket&&rejectedBeforeGeneration)ticket.tokens=0;
             active=false;
         },
         /** @param {Headers} headers @param {number} status @param {number|null} retryAfter */

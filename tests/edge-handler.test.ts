@@ -143,7 +143,7 @@ try {
     await test('Groq 400 contexto, 413, timeout e parsing inválido',async()=>{
         providerStatus=400;
         let res=await handler(request({prompt:'Analise acidentes',context:context(),provider:'groq'}));
-        assert(res.status===502 && (await res.json()).error.includes('excesso de contexto'),'400 contexto');
+        assert(res.status===400 && (await res.json()).error.includes('excesso de contexto'),'400 contexto deve preservar status');
         providerStatus=413;const before413=calls;res=await handler(request({prompt:'Analise acidentes',context:context(),provider:'groq'}));
         const body413=await res.json();
         assert(res.status===413 && body413.error.includes('HTTP 413') && calls===before413+1,'413 específico sem retry');providerStatus=200;

@@ -8,7 +8,7 @@ import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentati
 import { compactGroqContext, groqFailure, GROQ_OUTPUT_BUDGET, GROQ_MAX_BODY_BYTES } from "./groq-context.js";
 import { buildReport, buildReportManagement, compactReportContext, buildReportIntelligence } from "./reports.js";
 import { groqProfile, groqUsage, safeFinishReason, createGroqGuard, GROQ_LIMITS } from "./groq-policy.js";
-import { generateAuthoredReport, validateAuthoredReview, AuthoringError } from "./report-authoring.ts";
+import { generateAuthoredReport, validateAuthoredReview, AuthoringError, GROQ_AUTHORING_REVISION } from "./report-authoring.ts";
 
 const MAX_BODY_BYTES = 25 * 1024;
 const MAX_PROMPT_CHARS = 1000;
@@ -33,6 +33,7 @@ const userRequestTimestamps = new Map<string, number[]>();
 class HttpError extends Error {
   status: number;
   retryAfter?: number;
+  diagnostic?: AuthoringError['diagnostic'];
 
   constructor(message: string, status: number) {
     super(message);
@@ -80,8 +81,11 @@ function jsonResponse(
       ...getCorsHeaders(req),
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      "X-DGranel-IA-Revision": GROQ_AUTHORING_REVISION,
+      "Access-Control-Expose-Headers": "Retry-After, X-DGranel-IA-Revision, X-DGranel-Diagnostic-Id",
+      ...(data && typeof data==='object' && 'diagnosticId' in data && typeof data.diagnosticId==='string' ? {'X-DGranel-Diagnostic-Id':data.diagnosticId} : {}),
       ...(data && typeof data === "object" && "retryAfter" in data && typeof data.retryAfter === "number"
-        ? { "Retry-After": String(data.retryAfter), "Access-Control-Expose-Headers": "Retry-After" } : {}),
+        ? { "Retry-After": String(data.retryAfter) } : {}),
     },
   });
 }
@@ -356,7 +360,7 @@ serve(async (req: Request) => {
             ? validateAuthoredReview(base, body.reviewDocument)
             : await generateAuthoredReport(base, typeof body.provider === 'string' ? body.provider : 'groq', groqGuard, Deno.env.get, fetch, user.id));
         } catch (error) {
-          if (error instanceof AuthoringError) { const failure = new HttpError(error.message, error.status); failure.retryAfter = error.retryAfter; throw failure; }
+          if (error instanceof AuthoringError) { const failure = new HttpError(error.message, error.status); failure.retryAfter = error.retryAfter; failure.diagnostic=error.diagnostic; throw failure; }
           throw error;
         }
       }
@@ -756,7 +760,7 @@ serve(async (req: Request) => {
             requestBytes: groqRequestBytes, sentIndicators: compact.sent, messageCount: compact.messages.length,
             systemBytes: new TextEncoder().encode(compact.messages[0].content).length });
           const error = new HttpError(diagnostic.message,
-            diagnostic.status === 429 ? 429 : diagnostic.status === 413 ? 413 : 502);
+            [400,413,429].includes(diagnostic.status) ? diagnostic.status : 502);
           if (diagnostic.status === 429) {
             error.retryAfter = diagnostic.retryAfter ?? (diagnostic.category==='quota'?86400:60);
             groqGuard.observe(groqResponse.headers,429,error.retryAfter);
@@ -1066,6 +1070,8 @@ serve(async (req: Request) => {
       return jsonResponse(req, {
         success: false,
         error: error.message,
+        httpStatus:error.status,
+        ...(error.diagnostic?{diagnosticId:error.diagnostic.id,errorOrigin:error.diagnostic.origin,providerStatus:error.diagnostic.providerStatus,errorCode:error.diagnostic.code,contractRevision:error.diagnostic.revision}:{}),
         ...(error.retryAfter !== undefined ? { retryAfter: error.retryAfter } : {}),
       }, error.status);
     }

@@ -1,7 +1,7 @@
 import '../public/report-authored-core.js';
 import {authorPayload,generateAuthoredReport,validateAuthoredReview,AuthoringError,authorConfig} from '../supabase/functions/seguranca-viaria-ia/report-authoring.ts';
 import {createGroqGuard} from '../supabase/functions/seguranca-viaria-ia/groq-policy.js';
-import {fixture,authored} from './reports-v7-fixtures.mjs';
+import {fixture,authored,wireDocument} from './reports-v7-fixtures.mjs';
 const C=(globalThis as any).ReportAuthoredCore,assert=(v:any,m:string)=>{if(!v)throw Error(m);},copy=(v:any)=>structuredClone(v);
 let passed=0;const results:any[]=[];
 async function test(name:string,fn:()=>any){await fn();passed++;results.push({name,status:'passed'});console.log('PASS V7',name);}
@@ -48,7 +48,7 @@ const env=(k:string)=>k.endsWith('_API_KEY')?'SECRET_TEST_KEY':undefined;
 const transport=(provider:string,document:any,status=200,finish='stop'):typeof fetch=>async(_url,init)=>{
  const body=JSON.parse(String(init?.body));assert(!body.tools&&!body.stream,'Ferramentas indevidas');
  if(status!==200)return Response.json({error:{message:'SECRET_INTERNAL_DETAILS',code:'rate_limit_exceeded'}},{status,headers:{'retry-after':'17'}});
- return Response.json(provider==='gemini'?{candidates:[{finishReason:finish==='stop'?'STOP':'MAX_TOKENS',content:{parts:[{text:typeof document==='string'?document:JSON.stringify(document)}]}}]}:{usage:{prompt_tokens:100,completion_tokens:200,total_tokens:300,completion_tokens_details:{reasoning_tokens:50}},choices:[{finish_reason:finish,message:{content:typeof document==='string'?document:JSON.stringify(document)}}]});
+ return Response.json(provider==='gemini'?{candidates:[{finishReason:finish==='stop'?'STOP':'MAX_TOKENS',content:{parts:[{text:typeof document==='string'?document:JSON.stringify(document)}]}}]}:{usage:{prompt_tokens:100,completion_tokens:200,total_tokens:300,completion_tokens_details:{reasoning_tokens:50}},choices:[{finish_reason:finish,message:{content:typeof document==='string'?document:JSON.stringify(provider==='groq'?wireDocument(document):document)}}]});
 };
 await test('Groq, OpenAI e Gemini: contrato, métricas e mesma evidência',async()=>{
  for(const provider of ['groq','openai','gemini']){const body=await generateAuthoredReport(r,provider,createGroqGuard(),env,transport(provider,doc));assert(body.document.title===doc.title&&body.reportBasis===r.basis&&body.validation.reviewRequired,'Contrato');assert(C.validate(body.document,body.evidence).valid,'Factual');}
