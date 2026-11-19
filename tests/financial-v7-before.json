@@ -1,0 +1,75 @@
+{
+  "source": "Fixture fictícia anterior à correção de elegibilidade de soma",
+  "stats": {
+    "mensais": [
+      {
+        "competencia": "Jan",
+        "valor": 80,
+        "estado": "valor_registrado",
+        "variacaoAnterior": null,
+        "desvioMediaPercentual": 33.33333333333333,
+        "desvioMeta": {
+          "absoluta": -20,
+          "percentual": -20,
+          "pontosPercentuais": null
+        }
+      },
+      {
+        "competencia": "Fev",
+        "valor": null,
+        "estado": "ausente",
+        "variacaoAnterior": null,
+        "desvioMediaPercentual": null,
+        "desvioMeta": null
+      },
+      {
+        "competencia": "Mar",
+        "valor": 40,
+        "estado": "valor_registrado",
+        "variacaoAnterior": null,
+        "desvioMediaPercentual": -33.33333333333333,
+        "desvioMeta": {
+          "absoluta": -60,
+          "percentual": -60,
+          "pontosPercentuais": null
+        }
+      }
+    ],
+    "validos": 2,
+    "ausentes": 1,
+    "soma": 120,
+    "somaAplicavel": true,
+    "media": 60,
+    "tipoMedia": "média aritmética dos valores válidos",
+    "minimo": 40,
+    "maximo": 80,
+    "competenciasMinimo": [
+      "Mar"
+    ],
+    "competenciasMaximo": [
+      "Jan"
+    ],
+    "meta": 100,
+    "direcao": "maior_melhor",
+    "acimaMeta": 0,
+    "abaixoMeta": 2,
+    "igualMeta": 0,
+    "primeiroUltimo": {
+      "de": "Jan",
+      "ate": "Mar",
+      "absoluta": -40,
+      "percentual": -50,
+      "pontosPercentuais": null
+    },
+    "tendencia": {
+      "metodo": "comparação descritiva primeiro/último valor válido; sem inferência causal ou teste estatístico",
+      "comparavel": true,
+      "maiorSequenciaMelhora": 0,
+      "maiorSequenciaPiora": 0
+    },
+    "limitacoes": [
+      "Competências permanentemente revisáveis; não são meses fechados.",
+      "Null/posição sem valor é ausência de informação, não ausência de eventos."
+    ]
+  }
+}

@@ -30,8 +30,8 @@ export function buildReport(stored, selection, updatedAt = null, managementConte
         const month=c=>{const m=String(c).match(/^(\d{1,2})\//);return m?Number(m[1])-1:['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'].indexOf(String(c).slice(0,3).toLowerCase());};
         const key=(c,n)=>(dated[n]?Number(dated[n])%100:0)*12+month(c);
         if(competencies.some((c,n)=>n>0&&key(c,n)-key(competencies[n-1],n-1)!==1))throw Error('REPORT: O período precisa de competências consecutivas e ordenadas.');
-        const last=stats.mensais.filter(p=>p.valor!==null).at(-1);
-        const off=last&&stats.meta!==null&&(stats.direcao==='menor_melhor'?last.valor>stats.meta:stats.direcao==='maior_melhor'?last.valor<stats.meta:false);
+        const last=stats.mensais.at(-1);
+        const off=last&&last.valor!==null&&stats.meta!==null&&(stats.direcao==='menor_melhor'?last.valor>stats.meta:stats.direcao==='maior_melhor'?last.valor<stats.meta:false);
         const d=stats.primeiroUltimo?.absoluta;
         const worse=d!==null&&d!==undefined&&(stats.direcao==='menor_melhor'?d>0:stats.direcao==='maior_melhor'?d<0:false);
         return {...item,estatisticas:stats,critical:Boolean(off||worse),criticalReason:off?'Último valor válido fora da meta':worse?'Piora descritiva entre primeiro e último valor válido':null};

@@ -1071,7 +1071,7 @@ serve(async (req: Request) => {
         success: false,
         error: error.message,
         httpStatus:error.status,
-        ...(error.diagnostic?{diagnosticId:error.diagnostic.id,errorOrigin:error.diagnostic.origin,providerStatus:error.diagnostic.providerStatus,errorCode:error.diagnostic.code,contractRevision:error.diagnostic.revision,...(error.diagnostic.completion?{completionDiagnostics:error.diagnostic.completion}:{})}:{}),
+        ...(error.diagnostic?{diagnosticId:error.diagnostic.id,errorOrigin:error.diagnostic.origin,providerStatus:error.diagnostic.providerStatus,errorCode:error.diagnostic.code,contractRevision:error.diagnostic.revision,...(error.diagnostic.validation??{}),...(error.diagnostic.completion?{completionDiagnostics:error.diagnostic.completion}:{})}:{}),
         ...(error.retryAfter !== undefined ? { retryAfter: error.retryAfter } : {}),
       }, error.status);
     }

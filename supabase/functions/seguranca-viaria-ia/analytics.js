@@ -1,4 +1,5 @@
-// Sem dependências e sem acesso ao banco. Recebe somente o snapshot verificado.
+// Sem acesso ao banco. A natureza financeira vem exclusivamente da política revisada em código.
+import {measurementAssessment,MEASUREMENT_POLICY} from './report-semantics.js';
 export function scopeAnalysis(context, prompt) {
     const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const q=norm(prompt), general=/\btod[oa]s\b/.test(q);
@@ -143,7 +144,7 @@ function legacyAnalysisPresentation(context, interpretation) {
         details:analyticalResponse(context,'')+'\nComparações verificadas\n'+comparisons.join('\n'),rejections:rejected};
 }
 
-export function analyzeIndicator(item, labels) {
+export function analyzeIndicator(item, labels, policy=MEASUREMENT_POLICY) {
     const numeric = v => typeof v === 'number' && Number.isFinite(v);
     const months = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
     const parse = label => {
@@ -167,7 +168,8 @@ export function analyzeIndicator(item, labels) {
     const mean = values.length ? (total === null ? finite(values.reduce((a,b) => a+b/values.length, 0)) : total / values.length) : null;
     const unit = String(item.unidade ?? '').toLowerCase();
     const rate = /%|taxa|milhao|milhão|por\s+.*km|\/.*km/.test(unit + ' ' + String(item.indicador).toLowerCase());
-    const additive = !rate && /^(qtd|quantidade|un|unidade|r\$)$/.test(unit.trim()) && !/score|media|média|indice|índice/.test(String(item.indicador).toLowerCase());
+    const measurement=measurementAssessment(item,policy);
+    const additive = !rate && measurement.canSum && (measurement.monetary?measurement.validated:/^(qtd|quantidade|un|unidade)$/.test(unit.trim())) && !/score|media|média|indice|índice/.test(String(item.indicador).toLowerCase());
     const direction = ['menor_melhor','maior_melhor','neutro'].includes(item.direcaoDesempenho) ? item.direcaoDesempenho : null;
     const target = numeric(item.meta) ? item.meta : null;
     const change = (a,b) => ({absoluta: finite(b-a), percentual: a === 0 ? null : finite((b-a)/Math.abs(a)*100), pontosPercentuais: unit.includes('%') ? finite(b-a) : null});
