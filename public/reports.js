@@ -114,13 +114,17 @@ async function requestManagementReport(interpret=false) {
     const selection=reportSelection(),provider=reportEl('reportProvider').value;
     const {data,error}=await supabaseClient.auth.getSession();
     if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
-    const response=await fetch(SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({action:'report',selection,interpret,provider,managementContext,...(interpret?{expectedUpdatedAt:managementReport.snapshotUpdatedAt,expectedReportBasis:managementReport.basis}:{})})});
+    const v8=reportUsesV8();
+    if(v8&&interpret)throw Error('Use o editor do relatório Groq.');
+    const response=await fetch(v8?reportV8Endpoint():SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},
+        body:JSON.stringify(v8?{action:'preview',selection,managementContext}:{action:'report',selection,interpret,provider,managementContext,...(interpret?{expectedUpdatedAt:managementReport.snapshotUpdatedAt,expectedReportBasis:managementReport.basis}:{})})});
     const body=await response.json().catch(()=>null);
     if(!response.ok||!body?.success)throw Error(body?.error||`Relatório indisponível (HTTP ${response.status}).`);
     if(managementContext&&!interpret&&body.report?.intelligence?.version!==6)throw Error('Atualize a Edge Function para usar o contexto gerencial V6.');
     return body;
 }
+const reportUsesV8=()=>document.querySelector('meta[name="dgranel-report-engine"]')?.content==='v8';
+const reportV8Endpoint=()=>new URL('seguranca-viaria-groq-v2',SUPABASE_AI_FUNCTION_ENDPOINT).href;
 function reportNode(tag,text,className='') { const node=document.createElement(tag);node.textContent=text;node.className=className;return node; }
 function renderManagementReport(expanded=reportEl('reportPreviewToggle')?.getAttribute('aria-expanded')==='true'){
     managementCharts.forEach(c=>c.destroy());managementCharts=[];
@@ -255,7 +259,10 @@ async function generateManagementReport() {
         window.ReportAuthoring?.reset();managementReport=body.report;managementSignature=selection;managementEnrichmentKey='';renderManagementReport(false);
         reportMessage('Prévia pronta. O relatório completo está em memória; aplique a análise ou exporte o PDF.');
         reportEl('reportActions').scrollIntoView({block:'nearest'});
-    }catch(e){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;reportEl('reportPreview').replaceChildren();reportMessage(e.message);}
+    }catch(e){
+        if(!reportUsesV8()){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;reportEl('reportPreview').replaceChildren();}
+        reportMessage(e.message);
+    }
     finally{reportSetBusy(false);}
 }
 async function interpretManagementReport() {
@@ -275,7 +282,7 @@ async function interpretManagementReport() {
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=7');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=8');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
@@ -289,6 +296,7 @@ async function exportManagementReport(){
         reportReady();const {data,error}=await supabaseClient.auth.getSession();if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
         if(signature!==reportSignature())throw Error('Os filtros mudaram. Atualize a prévia.');
         if(source.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(source.snapshotUpdatedAt))throw Error('Os dados foram atualizados. Gere uma nova prévia.');
+        if(reportUsesV8())await window.ReportAuthoring?.verifyExport(source);
         PdfProgress.update('Carregando bibliotecas locais',5);await reportPaint();await loadReportPdfLibraries();
         PdfProgress.update('Bibliotecas carregadas',10);await reportPaint();
         const report=JSON.parse(JSON.stringify(source));report.exportFormat=reportExportFormat();const chartIds=reportFormatChartIds(report),selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report)),images=Array(report.indicators.length).fill(null);

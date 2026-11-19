@@ -59,7 +59,9 @@ window.ReportPdf={
  doc.setProperties({title:`D'Granel – Relatório ${r.type}`,subject:`${period} – ${r.sector}`,author:"D'Granel",creator:executive?'Dashboard D’Granel V6.1':V?'Dashboard D’Granel V6':'Dashboard D’Granel V5'});
  if(options.logo){try{doc.addImage(options.logo,'PNG',30,y,18,18);y+=22;}catch{/* Identidade textual preservada. */}}
  if(r.authored){
-  const C=window. ReportAuthoredCore,authored=r.authored,pack=C?.evidence(r),checked=C?.validate(authored.document,pack);
+  const authored=r.authored,v8=authored.version===8,C=v8?window.ReportV8Core:window.ReportAuthoredCore;
+  if(v8&&(!Array.isArray(authored.evidenceKeys)||!authored.evidenceKeys.length))throw Error('Registro de evidências V8 indisponível.');
+  const pack=C?.evidence(r,authored.evidenceKeys),checked=C?.validate(authored.document,pack);
   if(!C||!authored.reviewed||authored.basis!==r.basis||authored.snapshotUpdatedAt!==r.snapshotUpdatedAt||!checked?.valid)throw Error('Conteúdo editorial incompatível com a base do PDF.');
   const draft=checked.document;
   heading('D’GRANEL — Relatório Gerencial');heading(draft.title);text(`Período: ${period} · Setor: ${r.sector==='TODOS'?'Todos os setores':r.sector}`,10);text(`Emissão: ${date} (Brasília) · Uso interno`,10);
@@ -70,7 +72,7 @@ window.ReportPdf={
   for(const section of draft.sections){
    heading(`${++number} ${section.title}`,true);if(section.type==='hypothesis')text('Hipótese para investigação; não é causa comprovada.',10);
    C.lines(section,pack).forEach(line=>text(line));
-   text('Referências: '+section.refs.join('; ')+'.',10);
+   if(section.refs.length)text('Referências: '+section.refs.join('; ')+'.',10);
    yield {stage:'diagnosis',processed:number,total:draft.sections.length};
   }
   heading(`${++number} Resultados e evidências`,true);
@@ -82,7 +84,7 @@ window.ReportPdf={
    for(const [field,label] of [['actionsTaken','Ações informadas'],['difficulties','Dificuldades relatadas'],['achievements','Conquistas relatadas'],['priorities','Prioridades informadas'],['goals','Objetivos relatados ou propostos'],['observations','Observações']])if(r.managementContext[field]){heading(label);text(r.managementContext[field]);}
   }
   heading(`${++number} Metodologia e rastreabilidade`,true);
-  unique([...r.limitations,...draft.limitations,'Valores e comparações são projetados das estatísticas determinísticas. Texto qualitativo constitui interpretação gerencial sujeita à revisão humana, não evidência causal.','Contexto da gestão é relato sem confirmação independente. Médias usam apenas valores válidos; null não equivale a zero. Saldos não são somados como fluxos.']).forEach(line=>text(line,10));
+  unique([...r.limitations,...draft.limitations,v8?'As linhas de evidência oficial são projetadas do snapshot. O texto autoral é interpretação ou proposta conferida pela gestão.':'Valores e comparações são projetados das estatísticas determinísticas. Texto qualitativo constitui interpretação gerencial sujeita à revisão humana, não evidência causal.','Contexto da gestão é relato sem confirmação independente. Médias usam apenas valores válidos; null não equivale a zero. Saldos não são somados como fluxos.']).forEach(line=>text(line,10));
   text(`Fonte: snapshot autorizado do Supabase (${r.snapshotUpdatedAt??'não informado'}). Base: ${r.basis??'não informada'}.`,10);
   text('Chaves de evidência: '+pack.items.map(i=>i.key+' = '+String(i.id)+' / '+i.name).join('; '),10);
   if(!executive){
@@ -93,9 +95,9 @@ window.ReportPdf={
     yield {stage:'compose',processed:Math.min(offset+4,r.competencias.length),total:r.competencias.length};
    }
    heading('APÊNDICE B — Referências de evidências',true);
-   for(const item of pack.items){heading(item.key+' — '+item.name); Object.keys(pack.facts).filter(key=>key.startsWith(item.key+'.')).forEach(key=>text(key+' · '+C.project(key,pack),10));}
+   for(const item of pack.items){heading(item.key+' — '+item.name);const keys=v8?[item.key]:Object.keys(pack.facts).filter(key=>key.startsWith(item.key+'.'));keys.forEach(key=>text(key+' · '+C.project(key,pack),10));}
   }
-  const pdf=yield* finishPdf(authoredTocPage,executive?null:4,authoredTocY);pdf.reportLayout.version=7;pdf.reportLayout.authored=true;pdf.reportLayout.editorialSectionIds=draft.sections.map(s=>s.id);return pdf;
+  const pdf=yield* finishPdf(authoredTocPage,executive?null:4,authoredTocY);pdf.reportLayout.version=v8?8:7;pdf.reportLayout.authored=true;pdf.reportLayout.editorialSectionIds=draft.sections.map(s=>s.id);return pdf;
  }
  if(executive){
   const e=window.ReportExecutive.build(r),byId=id=>r.indicators.find(i=>i.id===id),dimension=id=>V?.dimensions.find(d=>d.indicatorId===id),name=id=>byId(id)?.indicador??String(id);

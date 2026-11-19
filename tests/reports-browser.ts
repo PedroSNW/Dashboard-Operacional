@@ -2,6 +2,7 @@ const root=new URL('../',import.meta.url);
 const before=Deno.args.includes('--ux32-before');
 const read=p=>Deno.readTextFile(new URL(before&&p.startsWith('public/')&&!p.startsWith('public/vendor/')?'.validation-tools/ux32-before/'+p:p,root));
 let html=await read('public/index.html');
+if(Deno.args.includes('--v8'))html=html.replace('name="dgranel-report-engine" content="v7"','name="dgranel-report-engine" content="v8"');
 html=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*>/gi,'');
 html=html.replace(/\sonerror="[^"]*"/g,'').replace(/src="https:[^"]*"/g,'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="');
 const report=JSON.parse(await read(Deno.args.includes('--v4')?'.validation-tools/report-v4-fixture.json':'.validation-tools/report-fixture.json'));delete report.context;
@@ -33,6 +34,7 @@ addEventListener('load',async()=>{
  }catch(e){result.textContent='FAIL '+e.message;}
 });`;
 const scripts=[setup,await read('public/theme-preference.js'),await read('.validation-tools/tailwind.js'),await read('.validation-tools/chart.js'),await read('public/vendor/jspdf-4.2.1.umd.min.js'),await read('public/vendor/jspdf-autotable-5.0.8.min.js'),...(before?[]:[await read('public/report-authored-core.js')]),await read('public/report-content.js'),await read('public/report-executive.js'),await read('public/report-pdf.js'),await read('public/pending-state.js'),await read('public/main.js'),await read('public/pdf-progress.js'),await read('public/reports.js'),await read('public/workspace-v3.js'),await read('public/motion-v3-1.js'),await read('public/pending-changes.js'),...(before?[]:[await read('public/workspace-v3-2.js'),await read('public/report-authoring.js')]),checks];
+if(Deno.args.includes('--v8'))scripts.unshift(await read('public/report-v8-core.js'));
 const tags=scripts.map(s=>'<script>'+s.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n');
 const styles=(await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css'].map(f=>read('public/'+f)))).join('\n')+(before?'':await read('public/workspace-v3-2.css')+'\n'+await read('public/report-authoring.css'));
 html=html.replace('<head>',()=>`<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:"><style>${styles}</style>`).replace('</body>',()=>tags+'</body>');
