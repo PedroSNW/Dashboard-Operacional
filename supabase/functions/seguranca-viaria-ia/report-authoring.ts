@@ -59,7 +59,12 @@ export function authorPayload(report:any, provider:string, model:string, config=
         selected:all.length,sent:rows.length,partial:rows.length<all.length,history:rows.some(r=>r[14]!==null),indicators:rows,managementContext:pack.managementContext,strategySupport:[...new Set(report.management?.actionPlan?.map((a:any)=>a.title)??[])].slice(0,2)});
     const make=()=>{
         const instruction=provider==='groq'?ANALYST_PROMPT.split('\n')[0]+'\n'+GROQ_WIRE_INSTRUCTION:ANALYST_PROMPT;
-        const messages=[{role:'system',content:instruction},{role:'user',content:JSON.stringify(data())}];
+        const context=data();
+        if(provider==='groq'){
+            context.columns.splice(1,1);
+            context.indicators=rows.map(([key,_id,...fields])=>[key,...fields]);
+        }
+        const messages=[{role:'system',content:instruction},{role:'user',content:JSON.stringify(context)}];
         if(provider==='groq')return {model,messages,temperature:0.3,max_completion_tokens:config.completion,reasoning_effort:'medium',include_reasoning:false,response_format:{type:'json_schema',json_schema:{name:'authored_report_wire_v2',strict:true,schema}}};
         if(provider==='openai')return {model,messages:[messages[0],{role:'user',content:messages[1].content+'\nSchema JSON: '+JSON.stringify(core.schema)}],max_completion_tokens:config.completion,response_format:{type:'json_object'}};
         return {systemInstruction:{parts:[{text:ANALYST_PROMPT+'\nSchema JSON: '+JSON.stringify(core.schema)}]},contents:[{role:'user',parts:[{text:messages[1].content}]}],generationConfig:{maxOutputTokens:config.completion,responseMimeType:'application/json'}};
@@ -72,7 +77,12 @@ export function authorPayload(report:any, provider:string, model:string, config=
     if(!sent.length)throw new AuthoringError('Nenhuma evidência cabe no orçamento autoral. Reduza o recorte; a base foi preservada.',413);
     for(let n=0;n<rows.length;n++){rows[n][14]=sent[n].series.map((p:any)=>p.value);if(!fits())rows[n][14]=null;}
     const measured=measure();
-    return {...measured,schema,pack,allowedRefs:sent.flatMap(i=>Object.keys(pack.facts).filter(key=>key.startsWith(i.key+'.'))),coverage:{selected:all.length,sent:sent.length,sentIds:sent.map((i:any)=>i.id),omittedIds:all.filter((i:any)=>!sent.includes(i)).map((i:any)=>i.id),summarizedSeries:rows.filter(r=>r[14]===null).length,partial:sent.length<all.length},config};
+    const wireContext=provider==='groq'?JSON.parse(measured.payload.messages![1].content):data();
+    const allowedRefs:string[]=wireContext.indicators.flatMap((row:any[])=>wireContext.columns.flatMap((field:string,index:number)=>{
+        const ref=row[0]+'.'+field;
+        return index<row.length&&Object.hasOwn(pack.facts,ref)?[ref]:[];
+    }));
+    return {...measured,schema,pack,allowedRefs,coverage:{selected:all.length,sent:sent.length,sentIds:sent.map((i:any)=>i.id),omittedIds:all.filter((i:any)=>!sent.includes(i)).map((i:any)=>i.id),summarizedSeries:rows.filter(r=>r[14]===null).length,partial:sent.length<all.length},config};
 }
 
 export async function generateAuthoredReport(report:any, provider:string, guard:any, env:(key:string)=>string|undefined=Deno.env.get, transport:typeof fetch=fetch, userId='',expectedCompletionTokens?:unknown) {
@@ -122,12 +132,30 @@ export async function generateAuthoredReport(report:any, provider:string, guard:
         if(provider==='gemini'&&(!Array.isArray(candidate?.content?.parts)||candidate.content.parts.some((p:any)=>!p||typeof p.text!=='string')))reject('response_parse','provider_envelope_incompatible');
         const text=provider==='gemini'?candidate.content.parts.map((p:any)=>p.text).join(''):choice?.message?.content;
         let document;try{document=JSON.parse(text);}catch{reject('response_parse','content_invalid_json');}
+        const wireIssuesBySection:Record<number,string[]>={};
         if(provider==='groq'){
-            currentValidationStage='wire_schema_validation';const wireIssues=core.checkSchema(document,built.schema);if(wireIssues.length)reject('wire_schema_validation','wire_schema_incompatible',core.safePath(wireIssues[0]));
-            try{currentValidationStage='wire_expansion';document=expandGroqAuthoring(document);}catch(error){reject('wire_expansion',error instanceof Error&&error.message==='INVALID_WIRE_RELATION'?'wire_claim_relation':'wire_claim_syntax','$.sections.claims');}
+            currentValidationStage='wire_schema_validation';
+            const wireIssues=core.checkSchema(document,built.schema);
+            if(wireIssues.length){
+                const sections=[...(Array.isArray(document?.sections)?document.sections:[]),...(Array.isArray(document?.recommendations)?document.recommendations:[])].slice(0,80);
+                const allowed=new Set(built.allowedRefs);
+                const sectionEvidenceDiagnostics=sections.flatMap((section,index)=>{
+                    if(!section||typeof section!=='object'||Array.isArray(section))return [];
+                    if(Array.isArray(section.refs)&&section.refs.every((ref:unknown)=>typeof ref==='string'))return [];
+                    const missing=!Object.hasOwn(section,'refs');
+                    const entries=Array.isArray(section.refs)?section.refs:[];
+                    const counts=core.referenceDiagnostic({type:section.type,refs:entries.filter((ref:unknown)=>typeof ref==='string'),claims:[]},index,built.pack,allowed);
+                    return [{...counts,referenceState:missing?'missing':'malformed',referenceCount:entries.length,
+                        malformedReferenceCount:counts.malformedReferenceCount+entries.filter((ref:unknown)=>typeof ref!=='string').length,
+                        codes:[...new Set([missing?'missing_refs':'invalid_ref_format',...counts.codes])]}];
+                });
+                reject('wire_schema_validation','wire_schema_incompatible',core.safePath(wireIssues[0]),{sectionEvidenceDiagnostics,rejectedSectionsCount:sections.length});
+            }
+            currentValidationStage='wire_expansion';
+            document=expandGroqAuthoring(document,(index,code)=>(wireIssuesBySection[index]??=[]).push(code));
         }
         currentValidationStage='internal_schema_validation';const internalIssues=core.checkSchema(document);if(internalIssues.length)reject('internal_schema_validation','internal_schema_incompatible',core.safePath(internalIssues[0]));
-        currentValidationStage='evidence_validation';const validated=core.validate(document,built.pack,built.allowedRefs);
+        currentValidationStage='evidence_validation';const validated=core.validate(document,built.pack,built.allowedRefs,wireIssuesBySection);
         if(!validated.document){const d=validationDiagnostic(validated);reject(d.validationStage,d.validationCode,d.validationPath,validated);}
         currentValidationStage='editorial_validation';diagnosticMetadata={...diagnosticMetadata,...validationDiagnostic(validated)};
         outcome=validated.valid?'review_required':'partial_review_required';

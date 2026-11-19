@@ -1,13 +1,13 @@
 // Safe V7 contract diagnostics. Never log provider messages or failed_generation.
 import {groqUsage,safeFinishReason} from './groq-policy.js';
-export const GROQ_AUTHORING_REVISION='v7-integrated-validation-5';
+export const GROQ_AUTHORING_REVISION='v7-evidence-registry-6';
 export function validationDiagnostic(result:any,stage?:string,code?:string,path?:string){
     const first=result?.issues?.find((i:any)=>i.severity==='blocking')??result?.issues?.[0];
     const safe=(globalThis as any).ReportAuthoredCore.safePath;
     const count=(v:any)=>Number.isSafeInteger(v)&&v>=0?v:0;
     return {validationStage:stage??first?.stage??'editorial_validation',validationCode:code??first?.codes?.[0]??'accepted',
         validationCategory:first?.severity==='blocking'?'blocking':first?.severity??(stage?'blocking':'accepted'),validationPath:safe(path??first?.path??'$'),
-        rejectedSectionsCount:count(result?.rejectedSectionsCount),acceptedSectionsCount:count(result?.acceptedSectionsCount),reviewableIssuesCount:count(result?.reviewableIssuesCount),fatalIssuesCount:count(result?.fatalIssuesCount??(stage?1:0))};
+        sectionEvidenceDiagnostics:result?.sectionEvidenceDiagnostics??[],rejectedSectionsCount:count(result?.rejectedSectionsCount),acceptedSectionsCount:count(result?.acceptedSectionsCount),reviewableIssuesCount:count(result?.reviewableIssuesCount),fatalIssuesCount:count(result?.fatalIssuesCount??(stage?1:0))};
 }
 const knownCodes=new Set(['json_validate_failed','invalid_request_error','invalid_json_schema','invalid_schema','unsupported_schema','unsupported_parameter','invalid_parameter','context_length_exceeded','rate_limit_exceeded','insufficient_quota','generation_failed']);
 const knownTypes=new Set(['invalid_request_error','rate_limit_error','server_error','authentication_error']);

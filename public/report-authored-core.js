@@ -80,11 +80,37 @@
     const comparisons=[[/aument\w*|cresceu|crescimento/,'increase'],[/diminui\w*|reducao|reduziu|caiu|queda/,'decrease'],[/permaneceu estavel/,'stable'],[/fora da meta/,'outside_target'],[/dentro da meta/,'within_target'],[/acima da media/,'above_mean'],[/abaixo da media/,'below_mean'],[/melhorou/,'improved'],[/piorou/,'worsened']];
     const comparisonText=text=>normalize(text).replace(/\b(?:nao (?:(?:e possivel|se pode) )?(?:afirmar|concluir|comprova\w*|inferir|demonstra\w*)|sem comprovar)(?: que)?(?: houve)?(?: uma)?\s+(?:reducao|aumento|melhora|piora)\b/g,'limitação');
     const tentative=text=>/propoe|propost|suger|recomend|objetiv|a fim de|poderia|hipotese|possibilidade|se aprov|para reduzir|para aumentar/.test(normalize(text))&&!/foi |houve |observad|registrou|apresentou/.test(normalize(text));
-    function validate(document, pack, allowedRefs=null) {
+    function referenceDiagnostic(section, index, pack, allowed, wireCodes=[]) {
+        const diagnostic={sectionIndex:index,sectionType:types.includes(section.type)?section.type:null,
+            referenceCount:section.refs.length,recognizedReferenceCount:0,unknownReferenceCount:0,
+            outOfScopeReferenceCount:0,malformedReferenceCount:0,invalidClaimsCount:wireCodes.length,
+            referenceState:section.refs.length?'present':'empty',codes:[...wireCodes]};
+        const classify=ref=>{
+            if(!/^E(?:0|[1-9]\d*)\.[a-zA-Z][a-zA-Z0-9_]*$/.test(ref))return 'invalid_ref_format';
+            if(!Object.hasOwn(pack.facts,ref))return 'unknown_ref';
+            if(!allowed.has(ref))return 'ref_not_sent';
+            return null;
+        };
+        for(const ref of section.refs){
+            const code=classify(ref);
+            if(code==='invalid_ref_format')diagnostic.malformedReferenceCount++;
+            else if(code==='unknown_ref')diagnostic.unknownReferenceCount++;
+            else if(code==='ref_not_sent')diagnostic.outOfScopeReferenceCount++;
+            else diagnostic.recognizedReferenceCount++;
+            if(code)diagnostic.codes.push(code);
+        }
+        for(const claim of section.claims){
+            const code=classify(claim.ref)??(!section.refs.includes(claim.ref)?'claim_ref_mismatch':!checkClaim(claim,pack)?'incompatible_claim':null);
+            if(code){diagnostic.invalidClaimsCount++;diagnostic.codes.push(code);}
+        }
+        return diagnostic;
+    }
+    function validate(document, pack, allowedRefs=null, wireIssues={}) {
         const structural=checkSchema(document),issues=[];
         const add=(section,codes,severity,path,stage)=>{if(codes.length)issues.push({section,codes:[...new Set(codes)],severity,path:safePath(path),stage});};
         if(structural.length){add(null,['schema_invalido'],'blocking',structural[0],'internal_schema_validation');return {valid:false,document:null,issues,structural:structural.map(safePath),acceptedSectionsCount:0,rejectedSectionsCount:Array.isArray(document?.sections)?document.sections.length:0,reviewableIssuesCount:0,fatalIssuesCount:1};}
         const result=clone(document),ids=new Set(),seen=new Set(),seenActions=new Set(),originalCount=result.sections.length;
+        const allowed=new Set(allowedRefs??Object.keys(pack.facts)),sectionEvidenceDiagnostics=[];
         add(null,textIssues(result.title,[],pack),'blocking','$.title','evidence_validation');
         if(!result.title.trim()||result.title.length>100){add(null,['titulo_invalido'],'editorial','$.title','editorial_validation');if(!result.title.trim())result.title='Relatório gerencial';}
         if(!originalCount)add(null,['quantidade_secoes'],'blocking','$.sections','internal_schema_validation');
@@ -95,9 +121,9 @@
             if(s.order!==index+1)editorial.push('ordem_invalida');
             if(!s.title.trim()||s.title.length>90){editorial.push('titulo_invalido');if(!s.title.trim())s.title='Seção para revisão';}
             if(!s.text.trim())codes.push('secao_vazia');
-            if(refs.some(ref=>!Object.hasOwn(pack.facts,ref)||allowedRefs&&!allowedRefs.includes(ref)))codes.push('evidencia_inexistente');
+            const evidenceDiagnostic=referenceDiagnostic(s,index,pack,allowed,wireIssues[index]);
+            codes.push(...evidenceDiagnostic.codes);
             if(new Set(refs).size!==refs.length)editorial.push('referencia_repetida');
-            if(s.claims.some(c=>!refs.includes(c.ref)||!checkClaim(c,pack)))codes.push('afirmacao_inconsistente');
             const fields=[s.title,s.text,...(s.proposal?[s.proposal.problem,s.proposal.objective,...s.proposal.actions,s.proposal.owner,s.proposal.monitoring,s.proposal.completion]:[])];
             fields.forEach((text,n)=>codes.push(...textIssues(text,refs,pack,n>1?'proposal':s.type)));
             if(fields.some(t=>t.length>1800))review.push('texto_longo');
@@ -109,7 +135,12 @@
                 if(refs.length&&refs.every(ref=>pack.facts[ref]?.neutral)&&/melhorou|piorou|favoravel|desfavoravel|recuperacao comprovada/.test(narrative))codes.push('julgamento_sem_direcao');
             }
             const qualitative=s.type==='hypothesis'||Boolean(s.proposal)||/hipotese|orientacao|propost|sugest|recomenda|para avaliacao/.test(normalize(s.text));
-            if(!refs.length&&(s.claims.length||asserted||!qualitative))codes.push('evidencia_inexistente');
+            const hasPlaceholder=fields.some(text=>/\{\{[^{}]+\}\}/.test(text));
+            if(!refs.length&&(s.claims.length||asserted||!qualitative||hasPlaceholder))codes.unshift('missing_refs');
+            if(codes.length||!refs.length){
+                evidenceDiagnostic.codes=codes.length?[...new Set(codes)]:['qualitative_section_without_ref'];
+                sectionEvidenceDiagnostics.push(evidenceDiagnostic);
+            }
             if(s.proposal&&(!s.proposal.actions.length||!s.proposal.problem.trim()||!s.proposal.objective.trim()||!s.proposal.monitoring.trim()||!s.proposal.completion.trim()))review.push('proposta_incompleta');
             if(s.proposal&&s.proposal.actions.every(a=>normalize(a).length<25||/^(acompanhar|avaliar resultados|sustentar tratativas|verificar o escopo)[.! ]*$/.test(normalize(a))))review.push('recomendacao_generica');
             if(s.proposal)for(const action of s.proposal.actions){const normalized=normalize(action);if(seenActions.has(normalized))review.push('repeticao');seenActions.add(normalized);}
@@ -119,11 +150,12 @@
             add(s.id,codes,'blocking',path,'evidence_validation');add(s.id,review,'review',path,'editorial_validation');add(s.id,editorial,'editorial',path,'editorial_validation');
             return !codes.length;
         });
-        if(result.chartIds.some(key=>!pack.items.some(i=>i.key===key)||allowedRefs&&!allowedRefs.some(ref=>ref.startsWith(key+'.'))))add(null,['grafico_inexistente'],'blocking','$.chartIds','evidence_validation');
+        const chartKeys=new Set([...allowed].map(ref=>ref.split('.')[0]));
+        if(result.chartIds.some(key=>!chartKeys.has(key)))add(null,['grafico_inexistente'],'blocking','$.chartIds','evidence_validation');
         result.limitations.forEach((text,index)=>{const unsupported=comparisons.some(([pattern])=>pattern.test(comparisonText(text))&&!tentative(text));add(null,[...textIssues(text,[],pack,'limitation'),...(unsupported?['afirmacao_sem_evidencia']:[])],'blocking','$.limitations.'+index,'evidence_validation');if(text.length>1800)add(null,['texto_longo'],'review','$.limitations.'+index,'editorial_validation');});
         const blocking=issues.filter(i=>i.severity==='blocking'),fatal=blocking.some(i=>i.section===null)||!result.sections.length;
         result.sections.forEach((s,index)=>s.order=index+1);
-        return {valid:!blocking.length&&!fatal,document:fatal?null:result,issues,structural:[],acceptedSectionsCount:result.sections.length,rejectedSectionsCount:originalCount-result.sections.length,reviewableIssuesCount:issues.filter(i=>i.severity!=='blocking').length,fatalIssuesCount:blocking.length,reviewRequired:issues.some(i=>i.severity!=='blocking')};
+        return {valid:!blocking.length&&!fatal,document:fatal?null:result,issues,structural:[],sectionEvidenceDiagnostics,acceptedSectionsCount:result.sections.length,rejectedSectionsCount:originalCount-result.sections.length,reviewableIssuesCount:issues.filter(i=>i.severity!=='blocking').length,fatalIssuesCount:blocking.length,reviewRequired:issues.some(i=>i.severity!=='blocking')};
     }
     function resolve(text, pack) {return text.replace(/\{\{([^{}]+)\}\}/g,(_,ref)=>project(ref,pack)??'[Referência indisponível]');}
     function lines(section, pack) {
@@ -131,5 +163,5 @@
         return [resolve(section.text,pack),...section.claims.map(c=>project(c.ref,pack)+' · '+({observed:'observação',increase:'aumento descritivo',decrease:'redução descritiva',stable:'estabilidade',within_target:'dentro da meta',outside_target:'fora da meta',above_mean:'acima da média',below_mean:'abaixo da média',equal_mean:'igual à média',improved:'melhora descritiva pela direção cadastrada',worsened:'piora descritiva pela direção cadastrada'}[c.relation])),
             ...(p?['Sugestão para avaliação: '+resolve(p.problem,pack),'Objetivo sugerido: '+resolve(p.objective,pack),...p.actions.map(a=>'Ação sugerida: '+resolve(a,pack)),'Área sugerida: '+resolve(p.owner,pack),p.days?'Horizonte sugerido: até '+p.days+' dias.':'Prazo a pactuar.','Monitoramento: '+resolve(p.monitoring,pack),'Conclusão proposta: '+resolve(p.completion,pack)]:[])];
     }
-    globalThis.ReportAuthoredCore={schema,types,relations,evidence,validate,checkSchema,checkClaim,textIssues,project,resolve,lines,clone,safePath};
+    globalThis.ReportAuthoredCore={schema,types,relations,evidence,validate,checkSchema,checkClaim,textIssues,project,resolve,lines,clone,safePath,referenceDiagnostic};
 })();
