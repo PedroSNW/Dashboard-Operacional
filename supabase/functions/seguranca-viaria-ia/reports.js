@@ -2,7 +2,7 @@ import {normalizeManagementContext,buildReportIntelligence,operationalAssessment
 export {buildReportIntelligence} from './report-intelligence.js';
 import {analyzeIndicator} from './analytics.js';
 import {buildReportManagement} from './report-management.js';
-export {buildReportManagement,compactReportContext} from './report-management.js';
+export {buildReportManagement} from './report-management.js';
 /** @param {any} stored @param {any} selection @param {any} updatedAt @param {any} managementContext */
 export function buildReport(stored, selection, updatedAt = null, managementContext = null) {
     const reportContext=normalizeManagementContext(managementContext);
@@ -20,8 +20,8 @@ export function buildReport(stored, selection, updatedAt = null, managementConte
     const items=stored.indicadores.map((i,n)=>({...i,id:i.id??`indice:${n}`})).filter(i=>ids.includes(i.id));
     if(items.length!==ids.length||items.some(i=>sector&&sector!=='TODOS'&&i.setor!==sector))throw Error('REPORT: Seleção indisponível no snapshot autorizado. Atualize os filtros.');
     if(selection.expectedIndicators && (!Array.isArray(selection.expectedIndicators)||selection.expectedIndicators.length!==items.length||items.some(i=>!selection.expectedIndicators.some(e=>e.id===i.id&&e.indicador===i.indicador&&e.setor===(i.setor??null)))))throw Error('REPORT: Os indicadores mudaram desde a seleção. Recarregue o Dashboard antes de gerar.');
-    const context={versao:1,origem:'supabase',competencias:[...labels],totalIndicadoresNoDashboard:stored.indicadores.length,totalIndicadoresSelecionados:items.length,totalIndicadoresEnviados:items.length,contextoParcial:false,indicadores:items.map(i=>({id:i.id,indicador:i.indicador,setor:i.setor??null,unidade:i.und??null,meta:i.meta??null,direcaoDesempenho:i.direcaoDesempenho??null,ultimaAtualizacao:i.ultimaAtualizacao??null,valores:i.valores}))};
-    const indicators=context.indicadores.map(i=>{
+    const source=items.map(i=>({id:i.id,indicador:i.indicador,setor:i.setor??null,unidade:i.und??null,meta:i.meta??null,direcaoDesempenho:i.direcaoDesempenho??null,ultimaAtualizacao:i.ultimaAtualizacao??null,valores:i.valores}));
+    const indicators=source.map(i=>{
         if(!Array.isArray(i.valores)||i.valores.length>labels.length||i.valores.some(v=>v!==null&&(typeof v!=='number'||!Number.isFinite(v)))||(i.meta!==null&&(typeof i.meta!=='number'||!Number.isFinite(i.meta))))throw Error('REPORT: Indicador com valores ou alinhamento de competências inválidos.');
         const item={...i,valores:competencies.map((_,n)=>i.valores[a+n]??null)};
         const stats=analyzeIndicator(item,competencies);
@@ -37,7 +37,7 @@ export function buildReport(stored, selection, updatedAt = null, managementConte
         return {...item,estatisticas:stats,critical:Boolean(off||worse),criticalReason:off?'Último valor válido fora da meta':worse?'Piora descritiva entre primeiro e último valor válido':null};
     });
     const report={type,sector,competencias:competencies,generatedAt:new Date().toISOString(),snapshotUpdatedAt:updatedAt,selectedCount:items.length,indicators:type==='critico'?indicators.filter(i=>i.critical||operationalAssessment(i).level==='Alta'):indicators,criticalCount:indicators.filter(i=>i.critical).length,
-        limitations:['Dados agregados; competências permanentemente revisáveis.','Valores ausentes não são zero. Taxas não são somadas; médias de taxas não são ponderadas sem denominadores vinculados.','Tendência é descritiva, não causa comprovada. Direção neutra/indefinida não recebe julgamento.'],aiUsed:false,context};
+        limitations:['Dados agregados; competências permanentemente revisáveis.','Valores ausentes não são zero. Taxas não são somadas; médias de taxas não são ponderadas sem denominadores vinculados.','Tendência é descritiva, não causa comprovada. Direção neutra/indefinida não recebe julgamento.'],aiUsed:false};
     const result={...report,managementContext:reportContext,management:buildReportManagement(report)};
     return {...result,intelligence:buildReportIntelligence(result)};
 }

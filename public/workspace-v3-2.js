@@ -95,7 +95,7 @@
         const config=$('reportType').closest('section');config.id='reportConfigureStage';config.append($('reportContextPanel'));
         const previousGenerateContainer=$('reportGenerate').parentElement;
         const actions=$('reportActions'),format=$('reportFormat').closest('label'),original=$('reportAI').parentElement,flow=node('div','','ux-report-flow'),prepare=node('section'),exportArea=node('section');
-        prepare.append(node('h3','2. Preparar','v3-report-heading'));const row=node('div','','report-actions-buttons');[$('reportGenerate'),$('reportRefresh'),$('reportAI'),$('reportProvider').closest('details')].forEach(e=>row.append(e));prepare.append(row);
+        prepare.append(node('h3','2. Preparar','v3-report-heading'));const row=node('div','','report-actions-buttons');[$('reportGenerate'),$('reportRefresh'),$('reportAI')].forEach(e=>row.append(e));prepare.append(row);
         exportArea.append(node('h3','3. Exportar','v3-report-heading'),format,$('reportExport'));flow.append(prepare,exportArea);actions.insertBefore(flow,original);original.remove();if(!previousGenerateContainer.children.length)previousGenerateContainer.remove();$('reportActionsTitle').textContent='Preparar e exportar';
         const hint=node('p','','ux-action-hint');hint.id='reportActionHint';hint.setAttribute('role','status');actions.append(hint);
         const sticky=()=>actions.classList.toggle('ux-sticky',innerWidth>=1280&&innerHeight>=850&&actions.getBoundingClientRect().height<innerHeight*.32);new ResizeObserver(sticky).observe(actions);window.addEventListener('resize',sticky);

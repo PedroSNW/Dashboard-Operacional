@@ -3,13 +3,12 @@ let managementReport = null;
 let managementSignature = '';
 let managementCharts = [];
 let managementBusy = false;
-let managementEnrichmentKey='';
 const reportChosenIds=new Set();let reportSelectionInitialized=false;
 window.resetManagementReport = function(){window.ReportAuthoring?.reset();managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';reportChosenIds.clear();reportSelectionInitialized=false;reportEl('reportIndicators')?.replaceChildren();clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
 const reportEl = id => document.getElementById(id);
 const reportValue = value => value === null || value === undefined ? 'Ausente' : new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(value);
 const reportExportFormat=()=>window.ReportExecutive?.format(reportEl('reportFormat')?.value)??'complete';
-const reportFormatChartIds=r=>{const allowed=reportExportFormat()==='executive'?window.ReportExecutive.build(r).chartIds:window.ReportContent.chartIds(r);if(!r.authored?.document.chartIds.length)return allowed;const pack=window.ReportAuthoredCore.evidence(r),requested=r.authored.document.chartIds.map(key=>pack.items.find(i=>i.key===key)?.id);return allowed.filter(id=>requested.includes(id));};
+const reportFormatChartIds=r=>reportExportFormat() === "executive" ? window.ReportExecutive.build(r).chartIds : window.ReportContent.chartIds(r);
 const REPORT_CONTEXT_FIELDS=['actionsTaken','difficulties','achievements','priorities','goals','observations'];
 let reportContextScope='',reportContextDetached=false,reportContextOwner=null;
 function clearReportContext(notify=true){
@@ -57,8 +56,8 @@ function reportUpdateActions(){
     const snapshotChanged=managementReport?.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(managementReport.snapshotUpdatedAt);
     const consistent=Boolean(managementReport&&managementSignature===reportSignature()&&!snapshotChanged);
     const ready=consistent&&supabaseStateLoaded&&supabaseReady&&currentSession&&!hasUnsavedChanges;
-    for(const id of ['reportGenerate','reportRefresh','reportProvider','reportFormat'])if(reportEl(id))reportEl(id).disabled=managementBusy;
-    if(reportEl('reportAI')){reportEl('reportAI').disabled=managementBusy||!ready||!managementReport?.indicators.length;const provider=reportEl('reportProvider').value;reportEl('reportAI').textContent=`Aplicar análise ${{groq:'Groq',gemini:'Gemini',openai:'OpenAI'}[provider]||'Groq'}`;}
+    for(const id of ['reportGenerate','reportRefresh','reportFormat'])if(reportEl(id))reportEl(id).disabled=managementBusy;
+    if(reportEl("reportAI"))reportEl("reportAI").disabled=managementBusy||!ready||!managementReport?.indicators.length;
     if(reportEl('reportExport'))reportEl('reportExport').disabled=managementBusy||!ready;
     reportEl('reportActions')?.setAttribute('aria-busy',String(managementBusy));
     if(reportEl('reportActions'))reportEl('reportActions').dataset.state=managementBusy?'processing':managementReport&&!consistent?'stale':consistent?'ready':'empty';
@@ -108,40 +107,14 @@ window.refreshReportFilters = function() {
     }
     reportIndicatorOptions();
 };
-async function requestManagementReport(interpret=false) {
+async function requestManagementReport() {
     reportReady();
-    const managementContext=reportContextValue();validateReportContext(managementContext);
-    const selection=reportSelection(),provider=reportEl('reportProvider').value;
-    const {data,error}=await supabaseClient.auth.getSession();
-    if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
-    const v8=reportUsesV8();
-    if(v8&&interpret)throw Error('Use o editor do relatório Groq.');
-    const response=await fetchReportEdge(v8?reportV8Endpoint():SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},
-        body:JSON.stringify(v8?{action:'preview',selection,managementContext}:{action:'report',selection,interpret,provider,managementContext,...(interpret?{expectedUpdatedAt:managementReport.snapshotUpdatedAt,expectedReportBasis:managementReport.basis}:{})})});
-    const body=await response.json().catch(()=>null);
-    if(!response.ok||!body?.success)throw reportEdgeError(response,body,'Relatório indisponível.');
-    if(managementContext&&!interpret&&body.report?.intelligence?.version!==6)throw Error('Atualize a Edge Function para usar o contexto gerencial V6.');
+    const managementContext=reportContextValue();
+    validateReportContext(managementContext);
+    const body=await requestDashboardEdge({action:'preview',selection:reportSelection(),managementContext});
+    if(!body.report || typeof body.report.basis!=='string')throw Error('Prévia incompatível com a função publicada.');
     return body;
 }
-async function fetchReportEdge(endpoint,options) {
-    try {
-        return await fetch(endpoint,options);
-    } catch {
-        throw Error('Não foi possível conectar ao serviço de relatórios. Verifique a conexão e tente novamente.');
-    }
-}
-function reportEdgeError(response,body,fallback) {
-    const message=typeof body?.error==='string'&&body.error.trim()?body.error:fallback;
-    const code=body?.errorCode??body?.code;
-    const id=body?.diagnosticId??response.headers?.get('X-DGranel-Diagnostic-Id');
-    const details=[];
-    if(!response.ok)details.push(`HTTP ${response.status}`);
-    if(typeof code==='string'&&/^[a-z0-9_:-]{1,80}$/i.test(code))details.push(code);
-    if(typeof id==='string'&&/^[a-z0-9_-]{1,80}$/i.test(id))details.push(`diagnóstico ${id}`);
-    return Error(details.length?`${message} (${details.join(' · ')})`:message);
-}
-const reportUsesV8=()=>document.querySelector('meta[name="dgranel-report-engine"]')?.content==='v8';
-const reportV8Endpoint=()=>new URL('seguranca-viaria-groq-v2',SUPABASE_AI_FUNCTION_ENDPOINT).href;
 function reportNode(tag,text,className='') { const node=document.createElement(tag);node.textContent=text;node.className=className;return node; }
 function renderManagementReport(expanded=reportEl('reportPreviewToggle')?.getAttribute('aria-expanded')==='true'){
     managementCharts.forEach(c=>c.destroy());managementCharts=[];
@@ -273,33 +246,17 @@ async function generateManagementReport() {
         const selection=reportSignature();const body=await requestManagementReport();
         reportReady();
         if(selection!==reportSignature())throw Error('Os filtros mudaram durante a leitura. Gere novamente.');
-        window.ReportAuthoring?.reset();managementReport=body.report;managementSignature=selection;managementEnrichmentKey='';renderManagementReport(false);
+        window.ReportAuthoring?.reset();managementReport=body.report;managementSignature=selection;renderManagementReport(false);
         reportMessage('Prévia pronta. O relatório completo está em memória; aplique a análise ou exporte o PDF.');
         reportEl('reportActions').scrollIntoView({block:'nearest'});
     }catch(e){
-        if(!reportUsesV8()){managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;reportEl('reportPreview').replaceChildren();}
         reportMessage(e.message);
     }
     finally{reportSetBusy(false);}
 }
-async function interpretManagementReport() {
-    if(managementBusy||!managementReport)return;reportSetBusy(true);reportMessage('Processando análise complementar…');
-    try {
-        if(managementSignature!==reportSignature())throw Error('Atualize a prévia.');
-        const source=managementReport,key=JSON.stringify([managementSignature,source.basis,source.snapshotUpdatedAt,reportEl('reportProvider').value]);
-        if(managementEnrichmentKey===key){reportMessage('O diagnóstico e o plano de ação já estão atualizados para esta seleção.');return;}
-        const body=await requestManagementReport(true);
-        if(source!==managementReport||managementSignature!==reportSignature())throw Error('Os filtros mudaram. Atualize a prévia.');
-        if((source.basis&&body.reportBasis!==source.basis)||!window.ReportContent.valid(body.management,source))throw Error('Conteúdo complementar incompatível. Atualize a geração do relatório.');
-        if(source.intelligence?.version===6&&!window.ReportContent.validIntelligence(body.intelligence,source))throw Error('Resposta V6 incompatível; relatório preservado.');
-        managementReport.intelligence=body.intelligence??source.intelligence;managementReport.management=body.management;managementReport.aiUsed=body.meta?.deterministicOnly!==true;managementReport.interpretation=body.response;
-        managementEnrichmentKey=key;renderManagementReport();reportMessage('Diagnóstico e propostas atualizados. Os resultados numéricos foram preservados.');
-    }catch(e){reportMessage(`Relatório e propostas preservados. Análise complementar indisponível: ${e.message}`);}
-    finally{reportSetBusy(false);}
-}
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=8');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=groq');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
@@ -313,7 +270,7 @@ async function exportManagementReport(){
         reportReady();const {data,error}=await supabaseClient.auth.getSession();if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
         if(signature!==reportSignature())throw Error('Os filtros mudaram. Atualize a prévia.');
         if(source.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(source.snapshotUpdatedAt))throw Error('Os dados foram atualizados. Gere uma nova prévia.');
-        if(reportUsesV8())await window.ReportAuthoring?.verifyExport(source);
+        await window.ReportAuthoring?.verifyExport(source);
         PdfProgress.update('Carregando bibliotecas locais',5);await reportPaint();await loadReportPdfLibraries();
         PdfProgress.update('Bibliotecas carregadas',10);await reportPaint();
         const report=JSON.parse(JSON.stringify(source));report.exportFormat=reportExportFormat();const chartIds=reportFormatChartIds(report),selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report)),images=Array(report.indicators.length).fill(null);
@@ -357,9 +314,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     reportEl('reportAll').addEventListener('click',()=>{[...reportEl('reportIndicators').options].forEach(o=>o.selected=true);reportInvalidate();});
     reportEl('reportGenerate').addEventListener('click',generateManagementReport);
     reportEl('reportRefresh').addEventListener('click',()=>{window.refreshReportFilters();reportMessage('Filtros atualizados a partir do Dashboard. Gere para reler o Supabase.');});
-    reportEl('reportAI').addEventListener('click',()=>window.ReportAuthoring?window.ReportAuthoring.generate():interpretManagementReport());
+    reportEl('reportAI').addEventListener('click',()=>window.ReportAuthoring.generate());
     reportEl('reportExport').addEventListener('click',exportManagementReport);
-    reportEl('reportProvider').addEventListener('change',reportUpdateActions);
     const header=document.querySelector('header');
     if(header){const updateOffset=()=>document.documentElement.style.setProperty('--report-topbar-height',`${header.getBoundingClientRect().height}px`);new ResizeObserver(updateOffset).observe(header);updateOffset();}
     reportUpdateActions();

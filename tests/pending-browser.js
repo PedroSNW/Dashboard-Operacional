@@ -24,7 +24,7 @@ async function runPendingChecks(){
         openNewIndicatorModal();closeModal('modalEdit');renderTable();renderKPIs();renderCharts();updateSaveButton();
         assert(!hasUnsavedChanges&&PendingState.equal(projectPersistedState(),baseline),'Interação visual gera pendência');
         assert(sharedViewPreferences.activeDashboardId==='a'&&activeDashboardId==='b','Dashboard local/legado');
-        const ai=chamarEdgeFunctionIA;try{chamarEdgeFunctionIA=async()=>({response:'Resultado de teste',meta:{deterministicOnly:true}});await executarTesteIA('groq');assert(!hasUnsavedChanges&&PendingState.equal(projectPersistedState(),baseline),'Consulta IA gera pendências');}finally{chamarEdgeFunctionIA=ai;}
+        const ai=requestDashboardEdge;try{requestDashboardEdge=async()=>({response:'Resultado de teste'});document.getElementById('aiQuestionForm').requestSubmit();await new Promise(resolve=>setTimeout(resolve,0));assert(!hasUnsavedChanges&&PendingState.equal(projectPersistedState(),baseline),'Consulta IA gera pendências');}finally{requestDashboardEdge=ai;}
         await saveCurrentState();assert(calls===0&&document.getElementById('pendingChangesDialog').open,'Sem diferenças escreve');document.getElementById('pendingChangesDialog').close();
         currentData[0].valores[0]=10;markStateDirty();assert(hasUnsavedChanges&&inspectPendingState().changes.length===1,'Valor mensal');
         currentData[0].meta=1;currentData[0].direcaoDesempenho='neutro';markStateDirty();assert(inspectPendingState().changes.length===3,'Meta/direção');

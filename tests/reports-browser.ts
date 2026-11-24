@@ -1,41 +1,98 @@
-const root=new URL('../',import.meta.url);
-const before=Deno.args.includes('--ux32-before');
-const read=p=>Deno.readTextFile(new URL(before&&p.startsWith('public/')&&!p.startsWith('public/vendor/')?'.validation-tools/ux32-before/'+p:p,root));
-let html=await read('public/index.html');
-if(Deno.args.includes('--v8'))html=html.replace('name="dgranel-report-engine" content="v7"','name="dgranel-report-engine" content="v8"');
-html=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*>/gi,'');
-html=html.replace(/\sonerror="[^"]*"/g,'').replace(/src="https:[^"]*"/g,'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="');
-const report=JSON.parse(await read(Deno.args.includes('--v4')?'.validation-tools/report-v4-fixture.json':'.validation-tools/report-fixture.json'));delete report.context;
-const setup=`window.__errors=[];addEventListener('error',e=>window.__errors.push(e.message+' '+e.error?.stack));addEventListener('unhandledrejection',e=>window.__errors.push(String(e.reason)));window.ChartDataLabels={id:'mock-labels'};window.Swal={fire:async()=>({})};window.__session=null;window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:window.__session}}),onAuthStateChange(){}}})};`;
-const checks=`
+import { generateReport } from '../supabase/functions/seguranca-viaria-ia/report-ai.ts';
+import { report } from './report-fixtures.mjs';
+
+const read = (path: string) => Deno.readTextFile(path);
+let html = await read('public/index.html');
+const localScripts = [...html.matchAll(/<script src="([a-z][a-z0-9.-]+\.js)(?:\?[^"]*)?"><\/script>/g)].map(match => match[1]);
+html = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<link\b[^>]*>/gi, '')
+    .replace(/\sonerror="[^"]*"/g, '').replace(/src="https:[^"]*"/g, 'src="data:,"');
+const preview = { ...report(4), basis: 'fixture-report' };
+const generated = await generateReport(preview, async (_instruction, input: any) => ({
+    content: JSON.stringify({ highlights: input.indicators.map((item: any) => item.key), actions: input.actions.map((item: any) => item.key) }),
+    model: 'mock',
+}));
+const setup = `
+window.__errors=[];
+addEventListener('error',event=>window.__errors.push(event.message));
+addEventListener('unhandledrejection',event=>window.__errors.push(String(event.reason)));
+window.ChartDataLabels={id:'mock-labels'};
+window.Swal={fire:async()=>({})};
+window.__session=null;
+window.Chart=class { static defaults={plugins:{}}; static register(){} static getChart(){return null;} destroy(){} };
+window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:window.__session}}),onAuthStateChange(){}}})};
+`;
+const checks = [
+    'const smokeReport='+JSON.stringify(preview)+';',
+    'const smokeGeneration='+JSON.stringify(generated)+';',
+    `
 addEventListener('load',async()=>{
- const result=document.createElement('pre');result.id='report-validation';result.style.whiteSpace='pre-wrap';result.style.wordBreak='break-word';document.body.append(result);
- try{
-  const report=${JSON.stringify(report)};
-  currentData=report.indicators.map(i=>({...i,und:i.unidade}));mesesLabels=report.competencias;supabaseStateLoaded=true;supabaseReady=true;hasUnsavedChanges=false;currentSession={access_token:'mock-report',user:{id:'test-user',email:'teste@dgranel.com.br'}};window.__session=currentSession;
-  window.fetch=async(url,options)=>{if(!options?.body)return {ok:true,json:async()=>[]};const body=JSON.parse(options.body);if(options.method==='PATCH')return {ok:true,json:async()=>[{id:1,...body}]};if(body.interpret)return {ok:false,status:429,json:async()=>({error:'Groq indisponível no teste'})};return {ok:true,json:async()=>({success:true,report})};};
-  confirmPersistedSnapshot(projectPersistedState(),'2026-11-13T10:00:00.000Z');
-  document.body.classList.add('authenticated');switchTab('reports');document.getElementById('reportType').value='comparativo';document.getElementById('reportFormat').value='complete';
-  await generateManagementReport();
-  if(hasUnsavedChanges)throw Error('Relatório gerou pendências');
-  if(!managementReport||managementCharts.length!==0||document.getElementById('reportExport').disabled||!document.getElementById('reportPreviewDetails').hidden)throw Error('Prévia compacta');
-  setManagementPreviewExpanded(true);
-  if(managementCharts.length!==ReportContent.chartIds(report).length)throw Error('Gráficos sob demanda');
-  await interpretManagementReport();if(!managementReport||managementReport.aiUsed||!document.getElementById('reportStatus').textContent.includes('preservado'))throw Error('Falha IA apagou relatório');
-  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-  const doc=window.buildManagementPdf(managementReport,managementChartImages());
-  doc.setPage(1);doc.setTextColor(245,185,55);doc.setFontSize(13);doc.text('DEMONSTRACAO - DADOS FICTICIOS',18,265);
-  if(doc.getNumberOfPages()<3)throw Error('PDF não multipágina');
-  const pdf=document.createElement('textarea');pdf.id='report-pdf';pdf.hidden=true;pdf.textContent=doc.output('datauristring').split(',')[1];document.body.append(pdf);
-  if(location.hash.includes('light'))applyTheme('light');
-  if(document.documentElement.scrollWidth>innerWidth+3)throw Error('Overflow horizontal');
-  if(window.__errors.length)throw Error(window.__errors.join(';'));
-  result.textContent='PASS relatório sem consulta automática, '+report.indicators.length+' gráficos Chart.js reais, falha Groq preserva prévia, PDF multipágina com gráficos, filtros, tema e sem overflow em '+innerWidth+'px';
- }catch(e){result.textContent='FAIL '+e.message;}
-});`;
-const scripts=[setup,await read('public/theme-preference.js'),await read('.validation-tools/tailwind.js'),await read('.validation-tools/chart.js'),await read('public/vendor/jspdf-4.2.1.umd.min.js'),await read('public/vendor/jspdf-autotable-5.0.8.min.js'),...(before?[]:[await read('public/report-authored-core.js')]),await read('public/report-content.js'),await read('public/report-executive.js'),await read('public/report-pdf.js'),await read('public/pending-state.js'),await read('public/main.js'),await read('public/pdf-progress.js'),await read('public/reports.js'),await read('public/workspace-v3.js'),await read('public/motion-v3-1.js'),await read('public/pending-changes.js'),...(before?[]:[await read('public/workspace-v3-2.js'),await read('public/report-authoring.js')]),checks];
-if(Deno.args.includes('--v8'))scripts.unshift(await read('public/report-v8-core.js'));
-const tags=scripts.map(s=>'<script>'+s.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n');
-const styles=(await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css'].map(f=>read('public/'+f)))).join('\n')+(before?'':await read('public/workspace-v3-2.css')+'\n'+await read('public/report-authoring.css'));
-html=html.replace('<head>',()=>`<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:"><style>${styles}</style>`).replace('</body>',()=>tags+'</body>');
-await Deno.writeTextFile(new URL('.validation-tools/reports-browser.html',root),html);
+    const status=document.createElement('pre');status.id='report-validation';document.body.append(status);
+    const assert=(valid,message)=>{if(!valid)throw Error(message);};
+    const node=id=>document.getElementById(id);
+    try {
+        currentData=smokeReport.indicators.map(i=>({...i,und:i.unidade}));
+        mesesLabels=smokeReport.competencias;
+        sectors=[...new Set(currentData.map(i=>i.setor))];
+        supabaseStateLoaded=supabaseReady=true;
+        currentSession={access_token:'mock',user:{id:'reviewer',email:'teste@dgranel.com.br'}};
+        window.__session=currentSession;
+        confirmPersistedSnapshot(projectPersistedState(),smokeReport.snapshotUpdatedAt);
+        let fail=true;const actions=[];
+        window.fetch=async(url,options)=>{
+            assert(String(url).endsWith('/seguranca-viaria-ia'),'Rota única');
+            const body=JSON.parse(options.body);actions.push(body.action);
+            if(body.action==='chat'){
+                assert(Object.keys(body).length===2,'O navegador enviou dados operacionais para a consulta');
+                return Response.json({success:true,response:'<b>Resposta como texto</b>',evidence:['Resultado oficial do teste.'],coverage:{sent:3,selected:4}});
+            }
+            if(body.action==='preview')return Response.json({success:true,report:smokeReport});
+            assert(body.expectedReportBasis===smokeReport.basis,'Snapshot não vinculado');
+            const identity={success:true,reportBasis:smokeReport.basis,snapshotUpdatedAt:smokeReport.snapshotUpdatedAt};
+            if(body.action==='generate')return fail?Response.json({success:false,error:'Falha simulada'},{status:502})
+                :Response.json({...identity,...smokeGeneration});
+            assert(body.action==='review'&&body.reviewAcknowledged,'Revisão sem confirmação');
+            const check=ReportEvidence.validate(body.document,ReportEvidence.evidence(smokeReport,smokeGeneration.evidenceKeys));
+            return Response.json({...identity,document:check.document,success:check.valid},{status:check.valid?200:422});
+        };
+        node('aiQuestionForm').requestSubmit();
+        await new Promise(resolve=>setTimeout(resolve,50));
+        assert(node('aiResponseBody').firstChild.textContent==='<b>Resposta como texto</b>'&&!node('aiResponseBody').querySelector('b')&&node('aiResponseBody').querySelector('details').textContent.includes('Resultado oficial do teste.'),'Central - '+node('aiStatusText').textContent+' - '+node('aiResponseBody').textContent+' - '+actions.join(','));
+        switchTab('reports');
+        node('reportType').value='comparativo';
+        refreshReportFilters();
+        await generateManagementReport();
+        assert(managementReport?.basis===smokeReport.basis&&actions.join(',')==='chat,preview','Prévia');
+        await ReportAuthoring.generate();
+        assert(!node('reportExport').disabled&&node('reportStatus').textContent.includes('Falha simulada'),'Falha Groq bloqueou a base');
+        assert(window.buildManagementPdf(managementReport).getNumberOfPages()>1,'PDF da base');
+        fail=false;await ReportAuthoring.generate();
+        assert(node('reportExport').disabled&&!node('reportEditorial').hidden,'Revisão obrigatória');
+        const input=document.querySelector('#reportEditorial textarea');
+        input.value='Houve 999 acidentes.';input.dispatchEvent(new Event('input'));
+        node('reportEditorialAck').click();
+        assert(node('reportEditorialSave').disabled,'Revisão aceitou número sem evidência');
+        ReportAuthoring.restoreAll();node('reportEditorialAck').click();
+        await ReportAuthoring.save();
+        assert(managementReport.authored?.reviewed&&!node('reportExport').disabled,'Revisão e exportação');
+        for(const exportFormat of ['executive','complete']){
+            const pdf=window.buildManagementPdf({...managementReport,exportFormat});
+            assert(pdf.reportLayout.authored&&pdf.reportLayout.format===exportFormat&&pdf.output('arraybuffer').byteLength>1000,'PDF '+exportFormat);
+        }
+        assert(!hasUnsavedChanges&&!window.__errors.length,window.__errors.join('; ')||'IA alterou o dashboard');
+        status.textContent='PASS Central, prévia sem IA, fallback, revisão e PDFs Executivo e Completo na função única.';
+    }catch(error){status.textContent='FAIL '+error.message+' '+window.__errors.join('; ');}
+});
+`
+].join('\n');
+
+const optionalChart = await read('.validation-tools/chart.js').catch(() => '');
+const scripts = [setup, optionalChart,
+    ...await Promise.all(localScripts.map(file => read('public/' + file))),
+    await read('public/vendor/jspdf-4.2.1.umd.min.js'),
+    await read('public/vendor/jspdf-autotable-5.0.8.min.js'),
+    await read('public/report-pdf.js'), checks];
+const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css'].map(file => read('public/' + file)));
+html = html.replace('<head>', () => "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:\"><style>" + styles.join('\n') + '</style>');
+html = html.replace('</body>', () => scripts.map(script => '<script>'+script.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n')+'</body>');
+await Deno.mkdir('.validation-tools', { recursive: true });
+await Deno.writeTextFile('.validation-tools/reports-browser.html', html);

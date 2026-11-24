@@ -2,7 +2,6 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="dgranel-report-engine" content="v7">
     <meta name="google-site-verification" content="ircvyqk4rwH7m8yiF1NCZsCASmjMhBAjjF308aFIvgc">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="theme-preference.js?v=3.1"></script>
@@ -293,7 +292,7 @@
                 <div class="flex justify-center"><button id="intelligenceLoadMore" type="button" class="hidden rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">Carregar mais análises</button></div>
             </div>
 
-            <!-- CONTEÚDO SUBABA 3: PILOTO CENTRAL DE IA (MULTIPROVEDOR GEMINI & OPENAI) -->
+            <!-- CONTEÚDO SUBABA 3: CENTRAL DE IA -->
             <div id="subtab-content-pilot" class="hidden space-y-6">
                 <!-- Painel Piloto Central de IA -->
                 <section id="aiIntegrationTestCard" class="glass-card space-y-5 rounded-2xl border border-amber-500/30 p-5">
@@ -305,51 +304,33 @@
                             <div class="ai-card-copy">
                                 <div class="ai-card-heading flex items-center gap-2">
                                     <h3 class="ai-card-title text-sm font-bold text-white">Central de Inteligência Artificial</h3>
-                                    <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Groq • IA principal</span>
+                                    <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Groq</span>
                                 </div>
                                 <p class="text-xs text-slate-400">Interpretação gerencial dos indicadores reais, com cálculos determinísticos e recomendações fundamentadas.</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 text-xs text-slate-400">
                             <span id="aiStatusDot" class="h-2 w-2 rounded-full bg-slate-500"></span>
-                            <span id="aiStatusText" class="font-mono text-[11px]">Pronto para envio</span>
+                            <span id="aiStatusText" role="status" class="font-mono text-[11px]">Pronto para envio</span>
                         </div>
                     </div>
 
-                    <div class="ai-provider-panel space-y-3">
-                        <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-xs font-semibold text-slate-300">Motor de interpretação</span><span class="text-xs text-slate-400">Cálculos verificados pelo sistema</span></div>
-                        <button id="provider-btn-groq" type="button" onclick="setAiProvider('groq')" aria-pressed="true" class="ai-provider ai-provider-primary">
-                            <i class="fa-solid fa-microchip" aria-hidden="true"></i><span>Groq</span><span class="ai-primary-tag">IA principal</span><span id="badge-provider-groq" class="ai-active-tag">Ativo</span>
-                        </button>
-                        <p class="text-xs text-slate-400">Groq é o motor principal para sínteses e recomendações. As estatísticas continuam sendo calculadas e validadas pelo Dashboard.</p>
-                        <details id="aiAlternativeProviders" class="ai-alternatives">
-                            <summary>Outros provedores • teste e comparação</summary>
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                <button id="provider-btn-gemini" type="button" onclick="setAiProvider('gemini')" aria-pressed="false" class="ai-provider"><i class="fa-brands fa-google" aria-hidden="true"></i> Google Gemini <span id="badge-provider-gemini" class="hidden ai-active-tag">Ativo</span></button>
-                                <button id="provider-btn-openai" type="button" onclick="setAiProvider('openai')" aria-pressed="false" class="ai-provider"><i class="fa-solid fa-bolt" aria-hidden="true"></i> OpenAI <span id="badge-provider-openai" class="hidden ai-active-tag">Ativo</span></button>
-                            </div>
-                            <p class="text-xs text-slate-400 mt-3">Alternativas para comparar interpretações. Selecione um provedor e use o botão de envio abaixo.</p>
-                            <div class="flex flex-wrap gap-2 mt-3"><button type="button" class="ai-secondary-test" onclick="executarTesteConexaoDireta('gemini')">Testar Gemini</button><button type="button" class="ai-secondary-test" onclick="executarTesteConexaoDireta('openai')">Testar OpenAI</button></div>
-                        </details>
-                        <div class="text-xs text-slate-400">Provedor ativo: <strong id="currentProviderLabel" class="text-violet-400">Groq</strong><span id="currentProviderApiInfo" hidden aria-hidden="true"></span></div>
-                    </div>
                     <div class="space-y-3">
-                        <div>
+                        <form id="aiQuestionForm">
                             <label for="aiPromptInput" id="aiPromptLabel" class="mb-1.5 block text-xs font-semibold text-slate-300">Pergunta ou solicitação para a IA:</label>
                             <div class="flex flex-col gap-2 sm:flex-row">
-                                <input id="aiPromptInput" type="text" value="Analise os indicadores de acidentes e acidentes com culpa." class="flex-1 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Digite uma pergunta para a IA...">
-                                <button id="aiTestButton" type="button" onclick="executarTesteIA()" class="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <input id="aiPromptInput" type="text" maxlength="1000" required value="Analise os indicadores de acidentes e acidentes com culpa." class="flex-1 rounded-xl border border-slate-700 bg-[#070D1E] p-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none" placeholder="Digite uma pergunta para a IA...">
+                                <button id="aiTestButton" type="submit" class="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i id="aiTestButtonIcon" class="fa-solid fa-paper-plane"></i>
                                     <span id="aiTestButtonText">Enviar para Groq</span>
                                 </button>
                             </div>
-                        </div>
+                        </form>
 
-                        <div class="flex flex-wrap items-center gap-3 border-t border-slate-800/60 pt-3"><button type="button" class="ai-secondary-test" onclick="executarTesteConexaoDireta('groq')">Testar Groq</button><span class="text-xs text-slate-400">Gemini e OpenAI estão disponíveis em Outros provedores.</span></div>
                         <div id="aiResponseContainer" class="hidden space-y-2 rounded-xl border border-slate-800 bg-[#070D1E]/80 p-4">
                             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2 text-xs text-slate-400">
                                 <span class="flex items-center gap-2 font-bold" id="aiResponseHeader">
-                                    <i id="aiResponseIcon" class="fa-brands fa-google text-amber-400"></i>
+                                    <i id="aiResponseIcon" class="fa-solid fa-microchip text-violet-400"></i>
                                     <span id="aiResponseProviderName" class="text-white">Resposta</span>
                                 </span>
                                 <span id="aiResponseMeta" class="font-mono text-[11px] text-slate-400"></span>
@@ -400,7 +381,6 @@
                 <div class="report-actions-buttons">
                     <button id="reportAI" disabled class="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950">Aplicar análise Groq</button>
                     <button id="reportExport" disabled class="rounded-xl border border-amber-500/50 px-5 py-3 text-sm font-bold text-amber-400">Exportar PDF</button>
-                    <details class="report-provider-menu"><summary>Outros provedores</summary><label for="reportProvider">Provedor da análise complementar</label><select id="reportProvider"><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></details>
                 </div>
                 <div class="report-actions-status"><span id="reportProcessing" hidden aria-hidden="true">⟳ Processando…</span><p id="reportStatus" role="status" aria-live="polite" class="text-sm text-slate-400">Escolha os filtros e gere uma prévia.</p></div>
                 <p class="text-xs text-slate-400">A análise é opcional e pode consumir a cota do provedor. Todas as propostas dependem de avaliação da empresa.</p>
@@ -736,18 +716,18 @@
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
         <script src="pending-state.js?v=1"></script>
-        <script src="main.js?v=ux3.2"></script>
+        <script src="main.js?v=groq"></script>
+        <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=6.1"></script>
         <script src="report-executive.js?v=6.1"></script>
-        <script src="report-authored-core.js?v=7"></script>
-        <script src="report-v8-core.js?v=8"></script>
-        <script src="reports.js?v=8.1"></script>
+        <script src="report-evidence.js?v=1"></script>
+        <script src="reports.js?v=groq"></script>
     <script src="workspace-v3.js?v=ux3.2"></script>
     <script src="motion-v3-1.js?v=3.1"></script>
     <script src="pending-changes.js?v=ux3.2"></script>
-    <script src="workspace-v3-2.js?v=3.2"></script>
-        <script src="report-authoring.js?v=8.1"></script>
+    <script src="workspace-v3-2.js?v=groq"></script>
+        <script src="report-authoring.js?v=groq"></script>
 </body>
 </html>
 

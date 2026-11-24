@@ -1,4 +1,4 @@
-// Shared V8 evidence and presentation rules. The Edge copy is verified in tests.
+// Shared evidence and editorial review. The Edge copy is verified in tests.
 (() => {
     const clone = value => JSON.parse(JSON.stringify(value));
     const normalize = text => text.normalize('NFKC').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
@@ -72,18 +72,15 @@
         const issues = [], add = (section, codes, severity='blocking') => { if(codes.length) issues.push({section,codes:[...new Set(codes)],severity}); };
         const sectionShape = ['id','type','title','text','refs','order','priority','days'];
         const str = (value, max) => typeof value==='string' && value.trim().length>0 && value.length<=max;
-        const shape = objectKeys(document,['title','sections','chartIds','limitations'])
+        const shape = objectKeys(document,['title','sections'])
             && str(document.title,100) && Array.isArray(document.sections) && document.sections.length>0 && document.sections.length<=16
-            && Array.isArray(document.chartIds) && document.chartIds.length===0
-            && Array.isArray(document.limitations) && document.limitations.length<=8 && document.limitations.every(text=>str(text,1000))
             && document.sections.every(section=>objectKeys(section,sectionShape) && types.includes(section.type)
-                && str(section.title,90) && str(section.text,1800) && typeof section.id==='string' && /^v8-[a-z]+-\d{1,2}$/.test(section.id)
+                && str(section.title,90) && str(section.text,1800) && typeof section.id==='string' && /^section-\d{1,2}$/.test(section.id)
                 && ['primary','supporting'].includes(section.priority)
                 && (section.type==='action' ? [0,...horizons].includes(section.days) : section.days===0)
                 && Array.isArray(section.refs) && section.refs.length<=8 && section.refs.every(key=>typeof key==='string'));
         if(!shape){add(null,['schema_invalido']);return {valid:false,document:null,issues};}
         add(null,inspectText(document.title,[],pack));
-        for(const text of document.limitations)add(null,inspectText(text,[],pack));
         const seen=new Set();
         document.sections.forEach((s,index)=>{
             if(seen.has(s.id)||s.order!==index+1)add(s.id,['schema_invalido']);
@@ -103,5 +100,5 @@
             ...(section.days ? ['Horizonte sugerido pelo sistema · '+section.days+' dias'] : []),
             ...section.refs.map(key=>project(key,pack)).filter(Boolean).map(line=>'Evidência oficial · '+line)];
     }
-    globalThis.ReportV8Core = {evidence,validate,project,lines,clone,resolve:text=>text,privateData};
+    globalThis.ReportEvidence = {evidence,validate,project,lines,clone,privateData};
 })();

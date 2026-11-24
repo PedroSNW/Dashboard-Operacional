@@ -16,16 +16,16 @@ async function runMotionChecks(){
     for(let n=0;n<3;n++)for(const page of ['home','dashboard','datagrid','intelligence','reports','governance']){switchTab(page);assert(!document.getElementById('view-'+page).classList.contains('hidden'),'Página oculta');}
     await wait(340);assert(DGranelMotion.activeCount===0,'Animações sem limpeza');
     switchTab('intelligence');switchIntelligenceSubtab('pilot');
-    const request=chamarEdgeFunctionIA;
+    const request=requestDashboardEdge,form=document.getElementById('aiQuestionForm');
     try{
-        let release;chamarEdgeFunctionIA=()=>new Promise(resolve=>release=resolve);
-        const pending=executarTesteIA('groq');await wait(0);
+        let release;requestDashboardEdge=()=>new Promise(resolve=>release=resolve);
+        form.requestSubmit();await wait(0);
         assert(document.querySelector('#aiResponseContainer[aria-busy=true] .motion-ai-skeleton'),'Skeleton sem solicitação');
-        release({response:'Síntese de teste',meta:{deterministicOnly:true}});await pending;
+        release({response:'Síntese de teste'});await wait(0);
         assert(!document.querySelector('.motion-ai-skeleton')&&document.getElementById('aiResponseContainer').getAttribute('aria-busy')==='false','Loading preso');
-        chamarEdgeFunctionIA=async()=>{throw Error('Falha simulada de conexão');};await executarTesteIA('groq');
+        requestDashboardEdge=async()=>{throw Error('Falha simulada de conexão');};form.requestSubmit();await wait(0);
         assert(!document.getElementById('aiTestButton').disabled&&!document.querySelector('.motion-ai-skeleton'),'Falha IA');
-    }finally{chamarEdgeFunctionIA=request;}
+    }finally{requestDashboardEdge=request;}
     switchIntelligenceSubtab('alerts');document.getElementById('alertFilterView').value='unread';
     const read=localStorage.getItem(ALERT_READ_STORAGE_KEY);localStorage.removeItem(ALERT_READ_STORAGE_KEY);renderAlertsList();
     try{const card=document.querySelector('[data-alert-id]');if(card){const id=card.dataset.alertId;toggleAlertReadState(id);assert(getReadAlertIds().has(id),'Leitura não atualizada');assert(![...document.querySelectorAll('#alertsContainer [data-alert-id]')].some(e=>e.dataset.alertId===id),'Alerta lido ainda listado');await wait(200);assert(!document.querySelector('article[inert]'),'Resíduo visual de alerta');}}

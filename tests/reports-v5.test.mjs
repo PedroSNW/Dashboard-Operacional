@@ -1,4 +1,4 @@
-﻿import {readFileSync,writeFileSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
 import {buildReport,buildReportManagement} from '../supabase/functions/seguranca-viaria-ia/reports.js';
 const assert=(v,m)=>{if(!v)throw Error(m);};const clone=v=>JSON.parse(JSON.stringify(v));
 const m={exports:{}};new Function('module','exports',readFileSync('public/vendor/jspdf-4.2.1.umd.min.js','utf8'))(m,m.exports);
@@ -57,9 +57,7 @@ const edge=clone(base);edge.indicators[0].indicador='TÍTULO LONGO '+('com revis
 edge.management=buildReportManagement(edge);
 edge.management.actionPlan[0].actions=Array.from({length:90},(_,n)=>`AÇÃO ${n}: avaliar procedimentos sem atribuir causas; preservar registros e acompanhar as próximas competências.`).concat('MARCADOR FINAL DA TRATATIVA');
 const long=check(edge,'v5-extenso');assert(long.internal.pages.some(p=>p?.join(' ').includes('MARCADOR FINAL DA TRATATIVA')),'Texto longo perdido');
-const ai=clone(base);ai.management=buildReportManagement(ai,JSON.stringify({executiveDiagnosis:[{indicatorId:ai.indicators[0].id,stat:'ultimo'}],priorityRisks:[{indicatorId:ai.indicators[0].id}],actionPlan:[{indicatorId:ai.indicators[0].id,strategy:'defensiva'}],campaignSuggestions:[],communicationSuggestions:[],limitations:['agregados']}));check(ai,'v5-estruturado');
 // A projeção de conteúdo antigo e novo continua contendo as mesmas propostas e valores.
-if(old){const previousContent={};new Function('window',readFileSync('.validation-tools/v5-before/report-content.js','utf8'))(previousContent);assert(JSON.stringify(previousContent.ReportContent.sections(base))===JSON.stringify(win.ReportContent.sections(base)),'Propostas V4 modificadas');}
 // Verifica as células efetivamente desenhadas, não apenas a presença do objeto em memória.
 const complete=win.ReportPdf.build(base),normal=s=>s.replace(/\s+/g,'');
 for(let offset=0;offset<base.competencias.length;offset+=complete.reportLayout.historyColumns){const months=base.competencias.slice(offset,offset+complete.reportLayout.historyColumns),tab=complete.reportLayout.tables.find(t=>t.title===`Histórico – ${months[0]} a ${months.at(-1)}`);

@@ -1,5 +1,5 @@
 // Testes locais com CSP sem rede; Chrome e perfil exclusivos desta auditoria.
-import {stored} from './reports-v6-fixtures.mjs';
+import {stored} from './report-fixtures.mjs';
 const root=new URL('../',import.meta.url),before=Deno.args.includes('--before'),port=9352;
 const profile=decodeURIComponent(new URL('.validation-tools/ux32-cdp-profile',root).pathname.replace(/^\/([A-Za-z]:)/,'$1'));
 const chrome=new Deno.Command('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',{args:['--headless','--disable-gpu','--no-first-run','--disable-extensions','--disable-background-networking','--disable-background-timer-throttling','--disable-renderer-backgrounding',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`],stdout:'null',stderr:'null'}).spawn();let ws;

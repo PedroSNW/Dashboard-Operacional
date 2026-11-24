@@ -1,15 +1,5 @@
-import { analyzeIndicator, analyticalResponse, scopeAnalysis, analysisPresentation } from '../supabase/functions/seguranca-viaria-ia/analytics.js';
-import { readFileSync } from 'node:fs';
-
-export function runEnrichmentTest(back, analyze = analyzeIndicator, render = analyticalResponse) {
-    const source = back.slice(back.indexOf('    const analyticalContext ='), back.indexOf('    const SYSTEM_INSTRUCTION_TEXT =')).replace('(text: string): string', '(text)').replace('(d:{title:string;situation:string;evidence:string[]})','(d)');
-    const context = {competencias:['Jan','Fev'],indicadores:[{indicador:'Teste',unidade:'Qtd',valores:[2,4],meta:3}],totalIndicadoresNoDashboard:1,contextoParcial:false};
-    const output = new Function('contextText','analyzeIndicator','analyticalResponse','scopeAnalysis','analysisPresentation','prompt','requestedReport', source + '\nconst response=composeResponse("Verificar hipóteses."); return {context:JSON.parse(contextText), response, technicalDetails};')(JSON.stringify(context),analyze,render,scopeAnalysis,analysisPresentation,'Analise',null);
-    if (output.context.indicadores[0].estatisticas.soma !== 6 || !output.technicalDetails.includes('Soma: 6')) throw Error('Integração analítica Edge falhou');
-    return 'Enriquecimento e composição reais da Edge passaram.';
-}
-
-export function runAnalyticsTests(analyze = analyzeIndicator, render = analyticalResponse) {
+import { analyzeIndicator } from "../supabase/functions/seguranca-viaria-ia/analytics.js";
+export function runAnalyticsTests(analyze = analyzeIndicator) {
     const assert = (v, msg) => { if (!v) throw new Error(msg); };
     const near = (a,b) => Math.abs(a-b)<1e-9;
     const labels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set'];
@@ -25,9 +15,6 @@ export function runAnalyticsTests(analyze = analyzeIndicator, render = analytica
     for (const direcaoDesempenho of ['neutro',null]) {
         assert(analyze(item([1,2,3],{direcaoDesempenho}),labels.slice(0,3)).tendencia.maiorSequenciaPiora===0,'E: direção');
     }
-    const context = {indicadores:[{...item([10,null,0,20]),estatisticas:c}], totalIndicadoresNoDashboard:75, contextoParcial:true};
-    assert(render(context,'Investigar hipóteses sem presumir causas.').includes('omitidos por tamanho'),'F: parcial');
-    assert(render(context,'Média 999').includes('texto do modelo foi omitido'),'Validação de números livres');
     const changed = analyze(item([15,...[12,8,17,21,13,16,17,10]]),labels);
     assert(changed.soma===129,'H: atualização retroativa permitida');
     const rate = analyze(item([1,2],{indicador:'Acidente por milhão de km',unidade:'Qtd'}),labels.slice(0,2));
@@ -44,9 +31,11 @@ export function runAnalyticsTests(analyze = analyzeIndicator, render = analytica
     assert(huge.soma === null && Number.isFinite(huge.media), 'Overflow da soma');
     const delta = analyze(item([-Number.MAX_VALUE,Number.MAX_VALUE]),labels.slice(0,2));
     assert(delta.primeiroUltimo.absoluta === null && delta.primeiroUltimo.percentual === null && delta.tendencia.maiorSequenciaPiora === 0, 'Overflow da variação');
-    return 'Cenários analíticos A–F, H–I, K e casos de precisão/ordenação/overflow passaram.';
+    const financial = { ...item([80,null,40]), id:'fin', indicador:'Saldo financeiro', setor:'Financeiro', unidade:'R$' };
+    const rules = { criteria:[{indicatorId:financial.id,name:financial.indicador,sector:financial.setor,approved:true,kind:'balance',reference:'Política de teste'}] };
+    assert(analyze(financial, labels.slice(0,3)).soma === null && analyze(financial, labels.slice(0,3), rules).soma === null,'Saldo não somável');
+    rules.criteria[0].kind = 'flow';
+    assert(analyze(financial, labels.slice(0,3), rules).soma === 120,'Fluxo financeiro autorizado');
+    return 'PASS indicadores, precisão, competências, ausências, taxas e política financeira.';
 }
-if (typeof process !== 'undefined') {
-    console.log(runAnalyticsTests());
-    console.log(runEnrichmentTest(readFileSync('supabase/functions/seguranca-viaria-ia/index.ts','utf8')));
-}
+console.log(runAnalyticsTests());
