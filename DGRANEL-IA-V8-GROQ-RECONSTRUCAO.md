@@ -11,9 +11,51 @@ A V8 usa a nova Edge Function `seguranca-viaria-groq-v2`. A Central de Relatóri
 | `report-v8-core.js` na pasta da nova função e em `public/` | Registro determinístico de evidências, proteção textual conservadora, verificação local e projeção no editor e PDF. Um teste confirma igualdade byte a byte. |
 | `public/index.html`, `reports.js`, `report-authoring.js`, `report-pdf.js` | Ativação, rota da Central, editor existente e composição dos mesmos PDFs |
 
-A V8 importa `reports.js` da pasta anterior para executar `buildReport` e suas dependências determinísticas. A leitura usa a chave pública do Supabase e o JWT do usuário, com verificação por `auth.getUser`. A Edge usa a linha já utilizada de `dashboard_state` sob RLS. Seleções inválidas, domínio externo, snapshot antigo e campos arbitrários do cliente são rejeitados. Não há escrita.
+A V8 usa `./deterministic/reports.js` dentro do próprio pacote. Os seis módulos determinísticos são cópias byte a byte da referência no commit `c2635c0`. A leitura usa a chave pública do Supabase e o JWT do usuário, com verificação por `auth.getUser`. A Edge usa a linha já utilizada de `dashboard_state` sob RLS. Seleções inválidas, domínio externo, snapshot antigo e campos arbitrários do cliente são rejeitados. Não há escrita.
 
-Os adaptadores de Gemini e OpenAI, claims, conversão wire e validação autoral do V7 ficam fora do fluxo V8. O chat e outros consumidores da Edge antiga mantêm seus contratos. Ao publicar a nova função, conservar a árvore completa de `supabase/functions` no repositório para que o CLI possa resolver os imports locais do motor determinístico.
+Os adaptadores de Gemini e OpenAI, claims, conversão wire e validação autoral do V7 ficam fora do fluxo V8. O chat e outros consumidores da Edge antiga mantêm seus contratos.
+
+## Pacote de publicação
+
+O erro `Module not found seguranca-viaria-ia/reports.js` acontecia porque a entrada do pacote isolado apontava para uma função irmã que não estava presente no bundle. A entrada agora usa um caminho relativo interno com extensão explícita. A pasta que deve ser enviada integralmente ao empacotador é:
+
+```text
+supabase/functions/seguranca-viaria-groq-v2/
+├── index.ts
+├── engine.ts
+├── report-v8-core.js
+└── deterministic/
+    ├── reports.js
+    ├── analytics.js
+    ├── report-management.js
+    ├── report-intelligence.js
+    ├── report-semantics.js
+    └── groq-context.js
+```
+
+| Módulo | Imports e reexportações locais |
+| --- | --- |
+| `index.ts` | `engine.ts`, `deterministic/reports.js` |
+| `engine.ts` | `report-v8-core.js` |
+| `deterministic/reports.js` | `analytics.js`, `report-management.js`, `report-intelligence.js` |
+| `deterministic/report-management.js` | `groq-context.js`, `report-semantics.js` |
+| `deterministic/groq-context.js` | `analytics.js` |
+| `deterministic/analytics.js` e `deterministic/report-intelligence.js` | `report-semantics.js` |
+| `deterministic/report-semantics.js` e `report-v8-core.js` | Nenhum |
+
+O grafo local tem nove módulos e zero imports dinâmicos. A entrada mantém a dependência externa fixada em `https://esm.sh/@supabase/supabase-js@2.39.8`, cujas dependências transitivas são resolvidas no empacotamento. `groq-context.js` fornece constantes e utilitários usados por `report-management.js`. As fórmulas permanecem idênticas à referência. Ao atualizar bibliotecas determinísticas, atualizar as cópias em conjunto e rodar a regressão de paridade.
+
+Na raiz do repositório, executar:
+
+```powershell
+$env:DENO_DIR = "$PWD\.validation-tools\cache"
+.\.validation-tools\deno.exe check --config supabase/functions/deno.json supabase/functions/seguranca-viaria-groq-v2/index.ts
+.\.validation-tools\deno.exe run --allow-read --allow-write --allow-env=DASHBOARD_ALLOWED_ORIGINS --allow-run=".validation-tools/deno.exe" tests/reports-v8-package.test.ts
+```
+
+O teste cria uma pasta isolada sob `.validation-tools/v8-deploy-*` com os nove arquivos. Verifica paridade, grava o grafo completo do Deno, compila a entrada com `deno bundle` e carrega o JavaScript resultante para confirmar HTTP 401 sem JWT. O bundle de teste e `graph.json` são artefatos locais. O comando de publicação envia a pasta de código da função, preservando `deterministic/`. Colar somente `index.ts` no painel não inclui os demais arquivos.
+
+Com Supabase CLI e Docker disponíveis, a verificação adicional é `supabase functions serve seguranca-viaria-groq-v2` em um projeto local inicializado. A Supabase CLI e o Docker não estavam disponíveis nesta sessão, portanto o bundler da plataforma não foi executado. O empacotamento real com Deno foi concluído em isolamento. [Supabase CLI](https://supabase.com/docs/reference/cli/release-notes) · [Deno bundle](https://docs.deno.com/runtime/reference/cli/bundle/)
 
 ## Conteúdo e evidências
 
@@ -62,10 +104,10 @@ O type check passou e as 20 suítes locais passaram. O navegador V8 passou em qu
 1. Com a meta `dgranel-report-engine` ainda em `v7`, preparar o projeto de homologação e publicar apenas a função nova a partir da raiz do repositório. Conferir as configurações de autenticação e de ambiente do projeto. A função usa o seu próprio `auth.getUser` e a leitura RLS mesmo quando a proteção do gateway também está habilitada.
 
    ```powershell
-   supabase functions deploy seguranca-viaria-groq-v2 --project-ref REF_HOMOLOGACAO
+   supabase functions deploy seguranca-viaria-groq-v2 --remote=REF_HOMOLOGACAO --use-api
    ```
 
-   Substituir `REF_HOMOLOGACAO` pelo projeto de testes. [Publicação de Edge Functions](https://supabase.com/docs/guides/functions/deploy)
+   Substituir `REF_HOMOLOGACAO` pelo projeto de testes. Se a CLI instalada ainda usar a opção anterior, executar `supabase functions deploy seguranca-viaria-groq-v2 --project-ref REF_HOMOLOGACAO --use-api`. Conferir as opções disponíveis com `supabase functions deploy --help`. [Referência da Supabase CLI](https://supabase.com/docs/reference/cli/supabase-db-remote)
 
 2. Para a primeira homologação do contrato, habilitar temporariamente a sonda sintética no ambiente autorizado e executar uma vez. Os valores das variáveis no exemplo devem ser disponibilizados pelo operador no terminal. Usar JWT de conta corporativa confirmada com leitura autorizada no projeto. A sonda testa autorização e usa texto sintético na chamada ao provedor.
 

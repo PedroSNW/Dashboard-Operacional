@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
-import { buildReport } from "../seguranca-viaria-ia/reports.js";
+import { buildReport } from "./reports.js";
 import { buildRequest, createEngine, readJson, ReportError, REVISION, verify } from "./engine.ts";
 
 const generate = createEngine();
