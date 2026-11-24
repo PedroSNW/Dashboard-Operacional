@@ -125,9 +125,6 @@
         $('aiPromptInput').setAttribute('aria-describedby','v3AIDisclaimer');const disclaimer=element('p','A interpretação usa indicadores agregados autorizados; não consulta registros individuais.','v3-help');disclaimer.id='v3AIDisclaimer';$('aiPromptInput').parentElement.after(disclaimer);
         setupReportsSelection();window.onWorkspaceNavigation('home');
         setupModalAccessibility();
-        $('reportType').closest('.report-filters').before(element('h3','1. Configurar','v3-report-heading'));
-
-        const preview=$('reportPreview'),step=element('section','','v3-report-step');preview.before(step);step.append(element('h2','Prévia do relatório'),preview);
         new MutationObserver(()=>window.refreshOperationalUI()).observe($('lastSavedTag'),{childList:true,characterData:true,subtree:true});
     });
 })();

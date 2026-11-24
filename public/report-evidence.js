@@ -16,7 +16,7 @@
     const fmt = value => value == null ? 'indisponível' : new Intl.NumberFormat('pt-BR', {maximumFractionDigits: 2}).format(value);
     const objectKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
         && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
-    const types = ['summary','integrated','action','conclusion'];
+    const types = ['summary','integrated','hypothesis','action','conclusion'];
     const horizons = [30,60,90];
     function evidence(report, allowed = null) {
         const facts = Object.create(null), items = [];
@@ -51,6 +51,7 @@
         return [
             fact.name + (latest ? ' · '+latest.competency : '')+' · resultado '+fmt(latest?.value)+(fact.unit ? ' '+fact.unit : ''),
             'meta atual '+fmt(fact.target), fact.performance,
+            latest?.value == null && fact.lastValid ? 'último dado disponível em '+fact.lastValid.competency+': '+fmt(fact.lastValid.value)+(fact.unit ? ' '+fact.unit : '') : null,
             change ? 'variação descritiva de '+change.de+' a '+change.ate+': '+fmt(change.absoluta) : null
         ].filter(Boolean).join(' · ');
     }
@@ -74,7 +75,9 @@
         const str = (value, max) => typeof value==='string' && value.trim().length>0 && value.length<=max;
         const shape = objectKeys(document,['title','sections'])
             && str(document.title,100) && Array.isArray(document.sections) && document.sections.length>0 && document.sections.length<=16
-            && document.sections.every(section=>objectKeys(section,sectionShape) && types.includes(section.type)
+            && document.sections.every(section=>(objectKeys(section,sectionShape)
+                    || section?.type==='action' && objectKeys(section,[...sectionShape,'owner','followUp'])
+                        && str(section.owner,100) && str(section.followUp,420)) && types.includes(section.type)
                 && str(section.title,90) && str(section.text,1800) && typeof section.id==='string' && /^section-\d{1,2}$/.test(section.id)
                 && ['primary','supporting'].includes(section.priority)
                 && (section.type==='action' ? [0,...horizons].includes(section.days) : section.days===0)
@@ -86,8 +89,9 @@
             if(seen.has(s.id)||s.order!==index+1)add(s.id,['schema_invalido']);
             seen.add(s.id);
             const badRefs = s.refs.some(key=>!Object.hasOwn(pack.facts,key));
-            if(badRefs || new Set(s.refs).size!==s.refs.length || s.type==='integrated'&&!s.refs.length)add(s.id,['evidencia_inexistente']);
-            add(s.id,[...inspectText(s.title,s.refs,pack),...inspectText(s.text,s.refs,pack)]);
+            if(badRefs || new Set(s.refs).size!==s.refs.length || ['integrated','hypothesis'].includes(s.type)&&!s.refs.length)add(s.id,['evidencia_inexistente']);
+            const texts = [s.title,s.text,...(s.owner ? [s.owner,s.followUp] : [])];
+            add(s.id,texts.flatMap(text=>inspectText(text,s.refs,pack)));
             if(/\b(?:houve|registrou|registraram|aumentou|aumentaram|reduziu|reduziram|diminuiu|diminuiram|melhorou|melhoraram|piorou|pioraram|ficou|atingiu|observad\w*)\b/i.test(normalize(s.text)))
                 add(s.id,['verificar_interpretacao'],'review');
         });
@@ -95,9 +99,10 @@
         return {valid,document:valid?clone(document):null,issues};
     }
     function lines(section, pack) {
-        const label = section.type==='action' ? 'Proposta para avaliação da gestão' : 'Interpretação gerencial revisável';
-        return [label+' · '+section.text,
-            ...(section.days ? ['Horizonte sugerido pelo sistema · '+section.days+' dias'] : []),
+        return [(section.type==='hypothesis' ? 'Hipótese a verificar · ' : '')+section.text,
+            ...(section.owner ? ['Área sugerida · '+section.owner] : []),
+            ...(section.days ? ['Prazo sugerido · '+section.days+' dias'] : section.type==='action' ? ['Prazo a pactuar'] : []),
+            ...(section.followUp ? ['Como acompanhar · '+section.followUp] : []),
             ...section.refs.map(key=>project(key,pack)).filter(Boolean).map(line=>'Evidência oficial · '+line)];
     }
     globalThis.ReportEvidence = {evidence,validate,project,lines,clone,privateData};

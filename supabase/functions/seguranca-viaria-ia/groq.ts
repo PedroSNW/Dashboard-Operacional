@@ -48,9 +48,9 @@ export function createGroq(env: Env, fetcher: typeof fetch) {
         if (wait > 0) throw new ApiError(429, 'groq_rate_limit', 'Aguarde a próxima janela da Groq.', wait);
         if (running) throw new ApiError(429, 'groq_busy', 'Já há uma consulta à Groq em andamento.', 2);
         const body = JSON.stringify({
-            model, reasoning_effort: 'low', include_reasoning: false, max_completion_tokens: 1800,
+            model, reasoning_effort: schema ? 'medium' : 'low', include_reasoning: false, max_completion_tokens: schema ? 3200 : 1800,
             messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(input) }],
-            ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'report_selection', strict: true, schema } } } : {}),
+            ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'management_report', strict: true, schema } } } : {}),
         });
         if (new TextEncoder().encode(body).length > 6500) {
             throw new ApiError(422, 'context_too_large', 'O contexto é muito grande. Reduza o recorte ou a pergunta.');

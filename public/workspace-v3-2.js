@@ -68,12 +68,13 @@
     }
     function reportState({consistent}={}){
         if(!initialized)return;
-        const selected=$('reportIndicators').selectedOptions.length,stale=managementReport&&(consistent===false||managementSignature!==reportSignature());
-        const reason=managementBusy?'Processamento em andamento.':!currentSession?'Sessão encerrada. Entre novamente.':!supabaseStateLoaded||!supabaseReady?'Valide a leitura do Supabase antes de continuar.':hasUnsavedChanges?'Salve as alterações pendentes antes de continuar.':!selected?'Selecione pelo menos um indicador.':stale?(managementSignature!==reportSignature()?'Os filtros foram alterados. Atualize a prévia.':'Os dados foram atualizados. Gere uma nova prévia.'):!managementReport?'Gere a prévia antes de aplicar a análise ou exportar.':'';
-        if($('reportActionHint'))$('reportActionHint').textContent=reason||'Prévia atualizada. A análise Groq é opcional; os dois formatos usam a mesma base.';
-        for(const id of ['reportAI','reportExport']){$(id).setAttribute('aria-describedby','reportActionHint');$(id).title=$(id).disabled?reason:'';$(id).setAttribute('aria-disabled',String($(id).disabled));}
-        if(!selected||!loaded()||hasUnsavedChanges)$('reportGenerate').disabled=true;
-        $('reportGenerate').title=$('reportGenerate').disabled?reason:'';$('reportGenerate').setAttribute('aria-describedby','reportActionHint');
+        const stale=managementReport&&!consistent;
+        const reason=!currentSession?'Entre para preparar o relatório.':!loaded()?'Aguarde a leitura do Supabase.':hasUnsavedChanges?'Salve as alterações pendentes.':!$('reportIndicators').selectedOptions.length?'Selecione pelo menos um indicador.':!reportPeriodValid()?'O período escolhido não está disponível para esse tipo de relatório.':stale?'O recorte mudou. Gere uma nova prévia para continuar.':'';
+        const hint=$('reportActionHint');hint.textContent=managementBusy?'':reason;hint.hidden=!hint.textContent;
+        for(const id of ['reportAI','reportGenerate','reportExport']){
+            $(id).setAttribute('aria-describedby',id==='reportExport'?'reportDownloadState':'reportActionHint');
+            $(id).setAttribute('aria-disabled',String($(id).disabled));
+        }
     }
     async function requestModalClose(id){const modal=$(id);if(!modal||closing.has(modal))return;const before=formBaselines.get(modal);if(before!==undefined&&formState(modal)!==before){closing.add(modal);try{const result=await fireThemedAlert({title:'Descartar o que foi digitado?',text:'Os campos ainda não foram aplicados. Você pode continuar editando.',icon:'question',showCancelButton:true,confirmButtonText:'Descartar campos',cancelButtonText:'Continuar editando'});if(!result.isConfirmed)return;}finally{closing.delete(modal);}}closeModal(id);}
     function decorateTable(){
@@ -92,13 +93,6 @@
         document.querySelectorAll('[onclick^="filterAlertsBySeverityQuick"]').forEach(e=>{e.setAttribute('role','button');e.tabIndex=0;e.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();e.click();}};});
         const descriptions=['Consulte os registros disponíveis.','Avaliação por meta e direção; não é um ranking de gravidade.','Regras automáticas; não representa quantidade de sinistros.','Configurações que precisam de validação.'];document.querySelectorAll('.v3-metric-grid article').forEach((e,n)=>e.append(node('p',descriptions[n],'ux-meta')));
         const breakdown=node('p','','ux-meta');breakdown.id='uxAlertBreakdown';$('v3QuickActions').before(breakdown);
-        const config=$('reportType').closest('section');config.id='reportConfigureStage';config.append($('reportContextPanel'));
-        const previousGenerateContainer=$('reportGenerate').parentElement;
-        const actions=$('reportActions'),format=$('reportFormat').closest('label'),original=$('reportAI').parentElement,flow=node('div','','ux-report-flow'),prepare=node('section'),exportArea=node('section');
-        prepare.append(node('h3','2. Preparar','v3-report-heading'));const row=node('div','','report-actions-buttons');[$('reportGenerate'),$('reportRefresh'),$('reportAI')].forEach(e=>row.append(e));prepare.append(row);
-        exportArea.append(node('h3','3. Exportar','v3-report-heading'),format,$('reportExport'));flow.append(prepare,exportArea);actions.insertBefore(flow,original);original.remove();if(!previousGenerateContainer.children.length)previousGenerateContainer.remove();$('reportActionsTitle').textContent='Preparar e exportar';
-        const hint=node('p','','ux-action-hint');hint.id='reportActionHint';hint.setAttribute('role','status');actions.append(hint);
-        const sticky=()=>actions.classList.toggle('ux-sticky',innerWidth>=1280&&innerHeight>=850&&actions.getBoundingClientRect().height<innerHeight*.32);new ResizeObserver(sticky).observe(actions);window.addEventListener('resize',sticky);
         for(const area of document.querySelectorAll('.overflow-x-auto')){area.tabIndex=0;area.setAttribute('role','region');area.setAttribute('aria-label',area.closest('#view-datagrid')?'Tabela de indicadores, com rolagem horizontal':'Tabela com rolagem horizontal');}
         $('jsonEditor').setAttribute('aria-label','Editor JSON dos dados, uso autorizado');$('authMessage').setAttribute('role','status');$('authMessage').setAttribute('aria-live','polite');
         for(const modal of document.querySelectorAll('div.fixed[id^="modal"]')){const heading=modal.querySelector('h2,h3');if(heading){if(!heading.id)heading.id=modal.id+'Title';modal.setAttribute('aria-labelledby',heading.id);}modal.querySelectorAll('[onclick^="closeModal"]').forEach(b=>{b.type='button';b.setAttribute('aria-label','Fechar '+(heading?.textContent??'diálogo'));});let visible=!modal.classList.contains('hidden');new MutationObserver(()=>{const next=!modal.classList.contains('hidden');if(next&&!visible)formBaselines.set(modal,formState(modal));visible=next;}).observe(modal,{attributes:true,attributeFilter:['class']});}
@@ -108,7 +102,7 @@
         const showTooltip=target=>{const owner=target.closest('.v3-nav button,#headerToolsMenu>summary');if(!owner||innerWidth<1024||!document.body.classList.contains('v3-sidebar-collapsed'))return;hideTooltip();tooltipOwner=owner;tooltip.textContent=owner.getAttribute('aria-label')||owner.title;tooltip.hidden=false;const r=owner.getBoundingClientRect();tooltip.style.left=Math.min(innerWidth-250,r.right+12)+'px';tooltip.style.top=Math.min(innerHeight-50,Math.max(8,r.top))+'px';owner.setAttribute('aria-describedby',[owner.getAttribute('aria-describedby'),tooltip.id].filter(Boolean).join(' '));};
         document.addEventListener('focusin',e=>showTooltip(e.target));document.addEventListener('focusout',hideTooltip);document.addEventListener('pointerover',e=>showTooltip(e.target));document.addEventListener('pointerout',e=>{if(tooltipOwner&&!tooltipOwner.contains(e.relatedTarget))hideTooltip();});document.addEventListener('keydown',e=>{if(e.key==='Escape')hideTooltip();});window.addEventListener('resize',hideTooltip);document.addEventListener('click',hideTooltip);
         const gov=$('governanceSearch');if(gov){const clear=node('button','Limpar filtros de governança','v3-button');clear.type='button';clear.onclick=()=>{gov.value='';$('governanceSectorFilter').value='TODOS';$('governanceDirectionFilter').value='TODOS';renderGovernanceDashboard();};gov.closest('section').append(clear);}
-        document.addEventListener('focusin',e=>{const bar=$('reportActions'),header=document.querySelector('header.v3-topbar');if(e.target.closest('#reportActions,#v3Sidebar,dialog,[role=dialog]'))return;const top=e.target.getBoundingClientRect().top,bottom=bar.classList.contains('ux-sticky')?bar.getBoundingClientRect().bottom:header.getBoundingClientRect().bottom;if(top>=0&&top<bottom)window.scrollBy({top:top-bottom-12,behavior:'auto'});});
+        document.addEventListener('focusin',e=>{const header=document.querySelector('header.v3-topbar');if(e.target.closest('#v3Sidebar,dialog,[role=dialog]'))return;const top=e.target.getBoundingClientRect().top,bottom=header.getBoundingClientRect().bottom;if(top>=0&&top<bottom)window.scrollBy({top:top-bottom-12,behavior:'auto'});});
         initialized=true;homeSignature='';refreshOperational();reportUpdateActions();renderAlerts();
     });
 })();

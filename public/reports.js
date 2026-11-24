@@ -52,18 +52,45 @@ function initReportContext(){
 }
 
 function reportMessage(text) { reportEl('reportStatus').textContent = text;reportUpdateActions(); }
+function reportHasCurrentPreview(){
+    return Boolean(managementReport&&managementSignature===reportSignature()
+        &&!(managementReport.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(managementReport.snapshotUpdatedAt)));
+}
+const fixedReportPeriods={mensal:1,trimestral:3,anual:12};
+function reportPeriodValid(){
+    const start=mesesLabels.indexOf(reportEl('reportStart').value),end=mesesLabels.indexOf(reportEl('reportEnd').value);
+    const length=fixedReportPeriods[reportEl('reportType').value];
+    return start>=0&&end>=start&&(!length||end-start+1===length);
+}
+function syncReportPeriod(){
+    const start=reportEl('reportStart'),end=reportEl('reportEnd');
+    const length=fixedReportPeriods[reportEl('reportType').value];
+    [...start.options].forEach((option,index)=>{option.disabled=Boolean(length&&index+length>mesesLabels.length);});
+    if(start.selectedOptions[0]?.disabled&&length<=mesesLabels.length)start.selectedIndex=mesesLabels.length-length;
+    if(length&&start.selectedIndex>=0)end.selectedIndex=Math.min(mesesLabels.length-1,start.selectedIndex+length-1);
+    else if(end.selectedIndex<start.selectedIndex)end.selectedIndex=start.selectedIndex;
+    [...end.options].forEach((option,index)=>{option.disabled=index<start.selectedIndex;});
+}
 function reportUpdateActions(){
-    const snapshotChanged=managementReport?.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(managementReport.snapshotUpdatedAt);
-    const consistent=Boolean(managementReport&&managementSignature===reportSignature()&&!snapshotChanged);
-    const ready=consistent&&supabaseStateLoaded&&supabaseReady&&currentSession&&!hasUnsavedChanges;
-    for(const id of ['reportGenerate','reportRefresh','reportFormat'])if(reportEl(id))reportEl(id).disabled=managementBusy;
-    if(reportEl("reportAI"))reportEl("reportAI").disabled=managementBusy||!ready||!managementReport?.indicators.length;
-    if(reportEl('reportExport'))reportEl('reportExport').disabled=managementBusy||!ready;
+    const consistent=reportHasCurrentPreview();
+    const available=supabaseStateLoaded&&supabaseReady&&currentSession&&!hasUnsavedChanges;
+    const canPrepare=Boolean(available&&reportPeriodValid()&&reportEl('reportIndicators').selectedOptions.length);
+    const ready=Boolean(consistent&&available);
+    for(const id of ['reportRefresh','reportFormat','reportType','reportSector','reportStart','reportIndicators','reportAll','reportIndicatorSearch','reportIndicatorClear']){
+        if(reportEl(id))reportEl(id).disabled=managementBusy;
+    }
+    if(reportEl('reportIndicatorPicker'))reportEl('reportIndicatorPicker').inert=managementBusy;
+    reportEl('reportEnd').disabled=managementBusy||Boolean(fixedReportPeriods[reportEl('reportType').value]);
+    reportEl('reportGenerate').disabled=managementBusy||!canPrepare;
+    reportEl('reportAI').disabled=managementBusy||!canPrepare;
+    reportEl('reportExport').disabled=managementBusy||!ready;
+    reportEl('reportResults').hidden=!consistent;
+    reportEl('reportDownload').hidden=!consistent;
+    reportEl('reportDownloadState').textContent=managementReport?.authored?'Análise revisada, pronta para baixar.':'Prévia com os dados oficiais.';
     reportEl('reportActions')?.setAttribute('aria-busy',String(managementBusy));
-    if(reportEl('reportActions'))reportEl('reportActions').dataset.state=managementBusy?'processing':managementReport&&!consistent?'stale':consistent?'ready':'empty';
     if(reportEl('reportProcessing'))reportEl('reportProcessing').hidden=!managementBusy;
     window.DGranelUX?.reportState({consistent,ready});
-    window.ReportAuthoring?.update({consistent,ready});
+    window.ReportAuthoring?.update({consistent,canPrepare});
 }
 function reportSetBusy(value){managementBusy=value;updateReportContextUI();reportUpdateActions();}
 function reportReady() {
@@ -105,6 +132,7 @@ window.refreshReportFilters = function() {
         if(mesesLabels.includes(old))reportEl(id).value=old;
         else reportEl(id).value=id==='reportStart'?mesesLabels[0]:mesesLabels.at(-1);
     }
+    syncReportPeriod();
     reportIndicatorOptions();
 };
 async function requestManagementReport() {
@@ -239,24 +267,31 @@ function renderManagementReportDetails() {
     renderSections(sections.final.slice(0,1));
     preview.append(reportNode('h3','Metodologia e limitações','font-bold'),reportNode('p',r.limitations.join(' '),'text-xs text-slate-400'));
 }
-async function generateManagementReport() {
-    if(managementBusy)return;reportSetBusy(true);
-    reportMessage('Lendo snapshot autorizado e calculando o relatório…');
+function focusReportResults(){
+    const heading=reportEl('reportResultsHeading');
+    heading.focus({preventScroll:true});
+    heading.scrollIntoView({block:'start'});
+}
+async function generateManagementReport({forAnalysis=false}={}) {
+    if(managementBusy)return false;reportSetBusy(true);
+    reportMessage('Preparando os indicadores do recorte…');
     try {
         const selection=reportSignature();const body=await requestManagementReport();
         reportReady();
         if(selection!==reportSignature())throw Error('Os filtros mudaram durante a leitura. Gere novamente.');
         window.ReportAuthoring?.reset();managementReport=body.report;managementSignature=selection;renderManagementReport(false);
-        reportMessage('Prévia pronta. O relatório completo está em memória; aplique a análise ou exporte o PDF.');
-        reportEl('reportActions').scrollIntoView({block:'nearest'});
+        reportMessage('Prévia pronta.');
+        if(!forAnalysis)focusReportResults();
+        return true;
     }catch(e){
         reportMessage(e.message);
+        return false;
     }
     finally{reportSetBusy(false);}
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=groq');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=analysis');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
@@ -307,12 +342,13 @@ function managementChartImages(charts=managementReport?.indicators.map(i=>manage
 });}
 document.addEventListener('DOMContentLoaded',()=>{
     reportEl('reportIndicators').addEventListener('change',captureReportIndicatorSelection);
-    reportEl('reportFormat')?.addEventListener('change',()=>{reportEl('reportFormatHint').textContent=reportExportFormat()==='executive'?'Síntese para reunião, sem apêndices extensos. A base de dados é a mesma nos dois formatos.':'Histórico, tabelas, evidências e apêndices completos da mesma base.';if(managementReport)renderManagementReport();});
+    reportEl('reportFormat')?.addEventListener('change',()=>{reportEl('reportFormatHint').textContent=reportExportFormat()==='executive'?'Síntese para reunião.':'Inclui histórico e apêndices.';if(managementReport)renderManagementReport();});
     initReportContext();
     reportEl('reportSector').addEventListener('change',reportIndicatorOptions);
-    for(const id of ['reportType','reportStart','reportEnd','reportIndicators'])reportEl(id).addEventListener('change',reportInvalidate);
-    reportEl('reportAll').addEventListener('click',()=>{[...reportEl('reportIndicators').options].forEach(o=>o.selected=true);reportInvalidate();});
-    reportEl('reportGenerate').addEventListener('click',generateManagementReport);
+    for(const id of ['reportType','reportStart'])reportEl(id).addEventListener('change',()=>{syncReportPeriod();reportInvalidate();});
+    for(const id of ['reportEnd','reportIndicators'])reportEl(id).addEventListener('change',reportInvalidate);
+    reportEl('reportAll').addEventListener('click',()=>{[...reportEl('reportIndicators').options].forEach(o=>o.selected=true);reportEl('reportIndicators').dispatchEvent(new Event('change'));});
+    reportEl('reportGenerate').addEventListener('click',()=>generateManagementReport());
     reportEl('reportRefresh').addEventListener('click',()=>{window.refreshReportFilters();reportMessage('Filtros atualizados a partir do Dashboard. Gere para reler o Supabase.');});
     reportEl('reportAI').addEventListener('click',()=>window.ReportAuthoring.generate());
     reportEl('reportExport').addEventListener('click',exportManagementReport);

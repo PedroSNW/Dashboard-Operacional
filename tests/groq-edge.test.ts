@@ -26,10 +26,16 @@ const fetcher: typeof fetch = async (url, init) => {
     const input = JSON.parse(captured.messages[1].content);
     assert(!JSON.stringify(input).includes('indice:'), 'Identificador interno enviado ao provedor');
     if (groqStatus !== 200) return Response.json({ error: 'RAW_PRIVATE_ERROR' }, { status: groqStatus, headers: { 'Retry-After': '17' } });
+    const refs = [input.indicators[0].key];
     const answer = input.question ? 'Confira as competências e os dados disponíveis.' : JSON.stringify({
-        highlights: [input.indicators[0].key, 'inventado', input.indicators[0].key],
-        actions: input.actions.map((item: { key: string }) => item.key),
-        unexpected: 'Houve 999 acidentes.',
+        summary: { text: 'Priorize a revisão das barreiras que mantêm a operação distante da referência.', refs },
+        findings: [
+            { type: 'hypothesis', title: 'Completude dos registros', text: 'Comparar as fichas recebidas com o fechamento do período pode esclarecer a lacuna.', refs },
+            { type: 'integrated', title: 'Dado inventado', text: 'Houve 999 acidentes.', refs },
+            { type: 'integrated', title: 'Fora do recorte', text: 'Conferir os registros.', refs: ['inventado'] },
+        ],
+        actions: [{ title: 'Conciliar registros operacionais', text: 'Começar pelos registros pendentes e registrar o motivo das divergências.', refs,
+            owner: 'Segurança Viária e Operações', followUp: 'Verificar as pendências no próximo fechamento.', days: 30 }],
     });
     return Response.json({ choices: [{ finish_reason: completion, message: { content: answer } }] });
 };
@@ -67,7 +73,8 @@ await invoke({ action: 'generate', ...basis, expectedReportBasis: 'incorreto' },
 const generated = (await invoke({ action: 'generate', ...basis })).result;
 assert(groqCalls === 1 && captured.response_format.json_schema.strict, 'Contrato Groq');
 assert(!JSON.stringify(captured).includes(managementContext.observations), 'Contexto sem consentimento enviado');
-assert(generated.evidenceKeys.length === 8 && generated.coverage.partial && generated.document.sections.length > 1, 'Cobertura ou conteúdo');
+assert(generated.evidenceKeys.length === 8 && generated.coverage.partial && generated.document.sections.length === 3, 'Cobertura ou conteúdo');
+assert(generated.validation.removed===2 && generated.document.sections[1].type==='hypothesis' && generated.document.sections[2].owner==='Segurança Viária e Operações', 'Elaboração parcial ou plano');
 assert(!/inventado|999 acidentes/.test(JSON.stringify(generated.document)), 'Conteúdo arbitrário do provedor aceito');
 const review = { action: 'review', ...basis, document: generated.document, reviewAcknowledged: true };
 await invoke({ ...review, reviewAcknowledged: false }, 422);

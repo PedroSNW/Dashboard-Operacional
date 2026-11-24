@@ -5,8 +5,9 @@ O dashboard está em `public/`. A Central de IA e os relatórios gerenciais usam
 ## IA e relatórios
 
 - A Central recebe uma pergunta e usa um recorte dos indicadores autorizados para responder com Groq.
-- A prévia calcula o relatório a partir do snapshot do Supabase e pode ser exportada sem IA. A opção Groq prioriza evidências e ações do catálogo gerencial. O dashboard projeta números e metas diretamente da base.
-- A elaboração com IA passa por revisão antes da exportação. A sessão corporativa, o recorte e o snapshot são conferidos no servidor. O acesso aos dados usa o token do usuário e as políticas RLS.
+- **Gerar análise com IA** prepara a prévia, interpreta os indicadores e apresenta propostas com área sugerida, prazo e acompanhamento. As seções citam evidências do recorte. O dashboard projeta números e metas diretamente da base.
+- Em **Preparar sem IA**, a prévia é calculada a partir do snapshot do Supabase e pode ser exportada diretamente.
+- A análise com IA passa por revisão antes da exportação. A sessão corporativa, o recorte e o snapshot são conferidos no servidor. O acesso aos dados usa o token do usuário e as políticas RLS.
 
 ## Configuração e publicação
 

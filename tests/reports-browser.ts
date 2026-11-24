@@ -8,7 +8,12 @@ html = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<link\b[
     .replace(/\sonerror="[^"]*"/g, '').replace(/src="https:[^"]*"/g, 'src="data:,"');
 const preview = { ...report(4), basis: 'fixture-report' };
 const generated = await generateReport(preview, async (_instruction, input: any) => ({
-    content: JSON.stringify({ highlights: input.indicators.map((item: any) => item.key), actions: input.actions.map((item: any) => item.key) }),
+    content: JSON.stringify({
+        summary: { text: 'A gestão deve conferir as pendências antes de ampliar a intervenção.', refs: [input.indicators[0].key] },
+        findings: [{ type: 'integrated', title: 'Lacuna de tratamento', text: 'Conferir os registros que ficaram pendentes pode orientar a decisão.', refs: [input.indicators[0].key] }],
+        actions: [{ title: 'Revisar o fluxo de conferência', text: 'Analisar as pendências com a operação.', refs: [input.indicators[0].key],
+            owner: 'Segurança Viária', followUp: 'Acompanhar o fechamento dos registros.', days: 30 }],
+    }),
     model: 'mock',
 }));
 const setup = `
@@ -58,25 +63,32 @@ addEventListener('load',async()=>{
         await new Promise(resolve=>setTimeout(resolve,50));
         assert(node('aiResponseBody').firstChild.textContent==='<b>Resposta como texto</b>'&&!node('aiResponseBody').querySelector('b')&&node('aiResponseBody').querySelector('details').textContent.includes('Resultado oficial do teste.'),'Central - '+node('aiStatusText').textContent+' - '+node('aiResponseBody').textContent+' - '+actions.join(','));
         switchTab('reports');
+        node('reportType').value='mensal';
+        node('reportType').dispatchEvent(new Event('change'));
+        assert(node('reportStart').value===node('reportEnd').value&&node('reportEnd').disabled,'Período mensal');
         node('reportType').value='comparativo';
+        node('reportType').dispatchEvent(new Event('change'));
+        node('reportEnd').value=smokeReport.competencias.at(-1);
         refreshReportFilters();
-        await generateManagementReport();
-        assert(managementReport?.basis===smokeReport.basis&&actions.join(',')==='chat,preview','Prévia');
+        assert(!node('reportAI').disabled&&node('reportDownload').hidden,'Análise direta e exportação antes da prévia');
         await ReportAuthoring.generate();
+        assert(managementReport?.basis===smokeReport.basis&&actions.join(',')==='chat,preview,generate','O clique de IA deve preparar e analisar');
         assert(!node('reportExport').disabled&&node('reportStatus').textContent.includes('Falha simulada'),'Falha Groq bloqueou a base');
         assert(window.buildManagementPdf(managementReport).getNumberOfPages()>1,'PDF da base');
         fail=false;await ReportAuthoring.generate();
         assert(node('reportExport').disabled&&!node('reportEditorial').hidden,'Revisão obrigatória');
+        assert(node('reportEditorial').textContent.includes('Síntese executiva')&&node('reportEditorial').textContent.includes('Evidências oficiais'),'Leitura da análise');
         const input=document.querySelector('#reportEditorial textarea');
         input.value='Houve 999 acidentes.';input.dispatchEvent(new Event('input'));
         node('reportEditorialAck').click();
         assert(node('reportEditorialSave').disabled,'Revisão aceitou número sem evidência');
-        ReportAuthoring.restoreAll();node('reportEditorialAck').click();
+        ReportAuthoring.restoreSection(smokeGeneration.document.sections[0].id);node('reportEditorialAck').click();
         await ReportAuthoring.save();
         assert(managementReport.authored?.reviewed&&!node('reportExport').disabled,'Revisão e exportação');
         for(const exportFormat of ['executive','complete']){
             const pdf=window.buildManagementPdf({...managementReport,exportFormat});
             assert(pdf.reportLayout.authored&&pdf.reportLayout.format===exportFormat&&pdf.output('arraybuffer').byteLength>1000,'PDF '+exportFormat);
+            assert(pdf.reportLayout.blocks.some(block=>block.text?.includes('Como acompanhar')),'Acompanhamento no PDF');
         }
         assert(!hasUnsavedChanges&&!window.__errors.length,window.__errors.join('; ')||'IA alterou o dashboard');
         status.textContent='PASS Central, prévia sem IA, fallback, revisão e PDFs Executivo e Completo na função única.';

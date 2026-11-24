@@ -29,12 +29,7 @@ body.light-theme{--ds-control-border:#76879c}
 .workspace-v32 .ux-alert-details{font-size:.8125rem;color:var(--ds-muted);overflow-wrap:anywhere}.workspace-v32 .ux-alert-details summary{cursor:pointer;color:var(--ds-brand);padding:7px 0}.workspace-v32 .ux-alert-details p{margin:9px 0;white-space:pre-wrap}
 .workspace-v32 #alertLoadMore{margin-top:12px}
 .workspace-v32 .report-context{box-shadow:none;margin-top:16px;padding:14px}
-.workspace-v32 .ux-report-flow{display:grid;grid-template-columns:1.2fr 1fr;gap:22px}.workspace-v32 .ux-report-flow h3{margin-bottom:10px}
-.workspace-v32 .ux-report-flow section{min-width:0}.workspace-v32 .ux-report-flow .report-actions-buttons{align-items:stretch}
-
 .workspace-v32 .ux-action-hint{font-size:.8125rem;color:var(--ds-muted);margin-top:9px;min-height:1.5em}
-.workspace-v32 #reportActions{position:static;scroll-margin-top:calc(var(--report-topbar-height,76px) + 42px)}
-.workspace-v32 #reportActions.ux-sticky{position:sticky;top:calc(var(--report-topbar-height,76px) + 8px)}
 .workspace-v32 .report-format{margin-top:0}.workspace-v32 #reportGenerate,.workspace-v32 #reportAI,.workspace-v32 #reportExport{min-height:44px}
 .workspace-v32 #view-datagrid .overflow-x-auto{max-height:70dvh;overflow:auto;overscroll-behavior:contain}
 .workspace-v32 :is(#view-datagrid,#view-governance,#view-audit,#view-intelligence,[role=dialog]) :is([class~="text-[10px]"],[class~="text-[11px]"]){font-size:.75rem}
@@ -44,6 +39,6 @@ body.light-theme{--ds-control-border:#76879c}
 .workspace-v32 div.fixed[id^=modal]>div{max-height:calc(100dvh - 28px - env(safe-area-inset-bottom,0px));overflow:auto;overscroll-behavior:contain;scroll-padding:16px}
 .workspace-v32 .v3-sidebar{padding-top:calc(24px + env(safe-area-inset-top,0px))}
 .workspace-v32 .ux-tooltip{position:fixed;z-index:100;background:var(--ds-raised);border:1px solid var(--ds-border);color:var(--ds-text);padding:7px 10px;border-radius:7px;font-size:.8125rem;max-width:240px;pointer-events:none}
-@media(max-width:767px){.workspace-v32 .ux-alert-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace-v32 .ux-report-flow{grid-template-columns:1fr;gap:16px}.workspace-v32 .ux-alert-top button{margin-left:0}.workspace-v32 .ux-alert-group-heading,.workspace-v32 .ux-alert-record{padding:12px}.workspace-v32 .ux-report-flow #reportExport{width:100%}}
+@media(max-width:767px){.workspace-v32 .ux-alert-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace-v32 .ux-alert-top button{margin-left:0}.workspace-v32 .ux-alert-group-heading,.workspace-v32 .ux-alert-record{padding:12px}}
 @media(max-width:374px){.workspace-v32 .ux-alert-filters{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.workspace-v32 .ux-tooltip{transition:none}.workspace-v32 :is(.ux-alert-record,.ux-alert-group){animation:none}}

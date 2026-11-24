@@ -21,12 +21,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=ux3.2">
+        <link rel="stylesheet" href="style.css?v=analysis">
     <link rel="stylesheet" href="workspace-v3.css?v=ux3.2">
     <link rel="stylesheet" href="motion-v3-1.css?v=3.1">
     <link rel="stylesheet" href="pending-changes.css?v=1">
-        <link rel="stylesheet" href="workspace-v3-2.css?v=3.2">
-        <link rel="stylesheet" href="report-authoring.css?v=7">
+        <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
+        <link rel="stylesheet" href="report-authoring.css?v=analysis">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
@@ -343,21 +343,15 @@
         </div>
 
         <div id="view-reports" class="page-view hidden space-y-6">
-            <section class="glass-card rounded-2xl border border-slate-700 p-5 sm:p-7 space-y-5">
-                <div><p class="text-xs font-bold uppercase text-amber-400">Segurança Viária • D'Granel</p><h2 class="text-2xl font-bold">Relatórios Gerenciais</h2><p class="text-sm text-slate-400 mt-2">Selecione o escopo, revise a prévia e exporte. A geração relê o Supabase e não altera indicadores.</p></div>
+            <section class="glass-card report-panel" id="reportConfigureStage"><header class="report-panel-heading"><h2>Relatórios gerenciais</h2><p>Defina o período e os indicadores que entram no relatório.</p></header>
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 report-filters">
-                    <label>Tipo de relatório<select id="reportType"><option value="executivo">Executivo</option><option value="mensal">Mensal — uma competência</option><option value="trimestral">Trimestral — três competências</option><option value="anual">Anual — doze competências</option><option value="comparativo">Comparativo</option><option value="critico">Crítico</option></select></label>
+                    <label>Objetivo do relatório<select id="reportType"><option value="executivo">Visão gerencial</option><option value="mensal">Mensal — uma competência</option><option value="trimestral">Trimestral — três competências</option><option value="anual">Anual — doze competências</option><option value="comparativo">Comparativo</option><option value="critico">Crítico</option></select></label>
                     <label>Setor<select id="reportSector"><option value="TODOS">Todos os setores</option></select></label>
                     <label>Competência inicial<select id="reportStart"></select></label>
                     <label>Competência final<select id="reportEnd"></select></label>
                 </div>
-                <div class="report-filters"><label for="reportIndicators">Indicadores — use Ctrl/Cmd para seleção múltipla</label><select id="reportIndicators" multiple size="7" class="w-full"></select><button id="reportAll" class="mt-2 text-sm text-amber-400 underline">Selecionar todos do setor</button></div>
-                <div class="flex flex-wrap items-center gap-3">
-                    <button id="reportGenerate" class="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950">Gerar prévia</button>
-                    <button id="reportRefresh" class="rounded-xl border border-slate-600 px-4 py-3 text-sm">Atualizar filtros</button>
-                </div>
-            </section>
-            <details id="reportContextPanel" class="report-context glass-card rounded-2xl p-5">
+                <div class="report-filters"><label for="reportIndicators">Indicadores do relatório</label><select id="reportIndicators" multiple size="7" class="w-full"></select><button id="reportAll" class="mt-2 text-sm text-amber-400 underline">Selecionar todos do setor</button></div>
+            <details id="reportContextPanel" class="report-context report-context-inline">
                 <summary class="font-bold">Contexto da Gestão <span class="text-sm font-normal">— opcional</span></summary>
                 <p class="text-sm">Informações complementares, declaradas pela gestão e sem verificação independente. Não alteram indicadores, metas oficiais ou o salvamento corporativo. Mantidas somente nesta elaboração.</p>
                 <p id="reportContextScope" role="status" class="text-sm"></p>
@@ -371,21 +365,35 @@
                 </div>
                 <label class="report-context-check"><input id="reportContextApproval" type="checkbox"> Confirmo explicitamente a aprovação informada dos objetivos. Esta declaração não é confirmação independente nem altera a meta oficial.</label>
                 <p class="text-sm">Evite nomes de motoristas, dados pessoais, detalhes identificáveis de sinistros e informações jurídicas ou financeiras sensíveis.</p>
-                <label class="report-context-check"><input id="reportContextShare" type="checkbox"> Permitir enviar este contexto ao provedor externo selecionado quando eu solicitar a análise. Sem esta opção, os textos ficam fora da solicitação à IA.</label>
+                <label class="report-context-check"><input id="reportContextShare" type="checkbox"> Compartilhar este contexto com a Groq ao gerar a análise.</label>
                 </fieldset>
                 <div class="report-context-footer"><span id="reportContextTotal" role="status">0/1200 caracteres no total</span><button id="reportContextClear" type="button" class="v3-button">Limpar contexto</button></div>
             </details>
-            <section id="reportActions" class="report-actions" aria-labelledby="reportActionsTitle" aria-busy="false">
-                <h2 id="reportActionsTitle" class="font-bold">Ações do relatório</h2>
-                <label class="report-format" for="reportFormat">Formato da prévia e do PDF<select id="reportFormat"><option value="executive">Relatório Executivo — recomendado</option><option value="complete">Relatório Completo — técnico</option></select><span id="reportFormatHint" class="text-xs">Síntese para reunião, sem apêndices extensos. A base de dados é a mesma nos dois formatos.</span></label>
-                <div class="report-actions-buttons">
-                    <button id="reportAI" disabled class="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950">Aplicar análise Groq</button>
-                    <button id="reportExport" disabled class="rounded-xl border border-amber-500/50 px-5 py-3 text-sm font-bold text-amber-400">Exportar PDF</button>
+                <div id="reportActions" class="report-run" aria-busy="false">
+                    <div class="report-run-buttons">
+                        <button id="reportAI" type="button" class="report-primary" disabled>Gerar análise com IA</button>
+                        <button id="reportGenerate" type="button" class="v3-button">Preparar sem IA</button>
+                        <button id="reportRefresh" type="button" class="v3-button report-quiet">Atualizar indicadores</button>
+                    </div>
+                    <div class="report-actions-status">
+                        <span id="reportProcessing" hidden aria-hidden="true">⟳</span>
+                        <p id="reportStatus" role="status" aria-live="polite">Selecione os indicadores para começar.</p>
+                    </div>
+                    <p id="reportActionHint" class="ux-action-hint" hidden></p>
                 </div>
-                <div class="report-actions-status"><span id="reportProcessing" hidden aria-hidden="true">⟳ Processando…</span><p id="reportStatus" role="status" aria-live="polite" class="text-sm text-slate-400">Escolha os filtros e gere uma prévia.</p></div>
-                <p class="text-xs text-slate-400">A análise é opcional e pode consumir a cota do provedor. Todas as propostas dependem de avaliação da empresa.</p>
             </section>
-            <section id="reportPreview" aria-label="Prévia do relatório" class="glass-card rounded-2xl p-5 sm:p-7 space-y-5"></section>
+            <section id="reportResults" class="glass-card report-panel" aria-labelledby="reportResultsHeading" hidden>
+                <header class="report-panel-heading"><h2 id="reportResultsHeading" tabindex="-1">Prévia e revisão</h2></header>
+                <div id="reportEditorial" class="report-editor" hidden></div>
+                <div id="reportPreview" class="report-preview" aria-label="Prévia do relatório"></div>
+            </section>
+            <section id="reportDownload" class="glass-card report-panel report-download" aria-labelledby="reportActionsTitle" hidden>
+                <header class="report-panel-heading"><h2 id="reportActionsTitle" tabindex="-1">Exportar PDF</h2><p id="reportDownloadState"></p></header>
+                <div class="report-download-controls">
+                    <label class="report-format" for="reportFormat">Formato<select id="reportFormat" aria-describedby="reportFormatHint"><option value="executive">Executivo</option><option value="complete">Completo</option></select><span id="reportFormatHint">Síntese para reunião.</span></label>
+                    <button id="reportExport" type="button" class="report-primary" disabled>Baixar PDF</button>
+                </div>
+            </section>
         </div>
         <div id="view-governance" class="page-view hidden space-y-6">
             <section class="glass-card flex flex-col justify-between gap-4 rounded-2xl p-5 lg:flex-row lg:items-center">
@@ -721,13 +729,13 @@
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=6.1"></script>
         <script src="report-executive.js?v=6.1"></script>
-        <script src="report-evidence.js?v=1"></script>
-        <script src="reports.js?v=groq"></script>
-    <script src="workspace-v3.js?v=ux3.2"></script>
+        <script src="report-evidence.js?v=analysis"></script>
+        <script src="reports.js?v=analysis"></script>
+    <script src="workspace-v3.js?v=analysis"></script>
     <script src="motion-v3-1.js?v=3.1"></script>
     <script src="pending-changes.js?v=ux3.2"></script>
-    <script src="workspace-v3-2.js?v=groq"></script>
-        <script src="report-authoring.js?v=groq"></script>
+    <script src="workspace-v3-2.js?v=analysis"></script>
+        <script src="report-authoring.js?v=analysis"></script>
 </body>
 </html>
 
