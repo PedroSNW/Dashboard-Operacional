@@ -29,6 +29,7 @@ window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:wi
 const checks = [
     'const smokeReport='+JSON.stringify(preview)+';',
     'const smokeGeneration='+JSON.stringify(generated)+';',
+    'const smokeLogo='+JSON.stringify(btoa(String.fromCharCode(...await Deno.readFile('public/report-logo-dgranel.png'))))+';',
     `
 addEventListener('load',async()=>{
     const status=document.createElement('pre');status.id='report-validation';document.body.append(status);
@@ -42,8 +43,12 @@ addEventListener('load',async()=>{
         currentSession={access_token:'mock',user:{id:'reviewer',email:'teste@dgranel.com.br'}};
         window.__session=currentSession;
         confirmPersistedSnapshot(projectPersistedState(),smokeReport.snapshotUpdatedAt);
-        let fail=true;const actions=[];
+        let fail=true,logoLoaded=false;const actions=[];
         window.fetch=async(url,options)=>{
+            if(url==='report-logo-dgranel.png'){
+                logoLoaded=true;
+                return new Response(Uint8Array.from(atob(smokeLogo),ch=>ch.charCodeAt(0)));
+            }
             assert(String(url).endsWith('/seguranca-viaria-ia'),'Rota única');
             const body=JSON.parse(options.body);actions.push(body.action);
             if(body.action==='chat'){
@@ -90,6 +95,13 @@ addEventListener('load',async()=>{
             assert(pdf.reportLayout.authored&&pdf.reportLayout.format===exportFormat&&pdf.output('arraybuffer').byteLength>1000,'PDF '+exportFormat);
             assert(pdf.reportLayout.blocks.some(block=>block.text?.includes('Como acompanhar')),'Acompanhamento no PDF');
         }
+        reportPdfLibraries=Promise.resolve();
+        let downloaded=false;
+        reportDownloadBlob=(blob,name)=>{downloaded=blob.size>1000&&name.endsWith('.pdf');};
+        const scheduleFrame=window.requestAnimationFrame;
+        window.requestAnimationFrame=callback=>setTimeout(()=>callback(performance.now()),0);
+        try{await exportManagementReport();}finally{window.requestAnimationFrame=scheduleFrame;}
+        assert(logoLoaded&&downloaded,'Exportação do PDF com a logo: '+node('reportStatus').textContent);
         assert(!hasUnsavedChanges&&!window.__errors.length,window.__errors.join('; ')||'IA alterou o dashboard');
         status.textContent='PASS Central, prévia sem IA, fallback, revisão e PDFs Executivo e Completo na função única.';
     }catch(error){status.textContent='FAIL '+error.message+' '+window.__errors.join('; ');}

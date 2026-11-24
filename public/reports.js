@@ -176,7 +176,11 @@ function setManagementPreviewExpanded(expanded){
         else managementCharts.forEach(c=>c.resize());
     }else{managementCharts.forEach(c=>c.destroy());managementCharts=[];details.replaceChildren();delete details.dataset.rendered;}
 }
-function managementChartSource(i,r=managementReport){return {data:{labels:[...r.competencias],datasets:[{label:i.unidade??'Valor',data:[...i.valores],borderColor:'#d38b00',backgroundColor:'#d38b0022',spanGaps:false,tension:0.15,pointRadius:3}]}};}
+function managementChartSource(i,r=managementReport,forPdf=false){
+    const blue=forPdf||document.body.classList.contains('light-theme')?'#0b4c8e':'#78adeb';
+    return {data:{labels:[...r.competencias],datasets:[{label:i.unidade??'Valor',data:[...i.valores],
+        borderColor:blue,backgroundColor:blue+'22',pointBackgroundColor:'#f4cc18',spanGaps:false,tension:0.15,pointRadius:3}]}};
+}
 function renderIndicatorTechnicalCards(preview,r){
     r.indicators.forEach(i=>{
         const card=reportNode('article','','glass-card rounded-2xl border border-slate-700 p-5 space-y-3');
@@ -190,7 +194,7 @@ function renderIndicatorTechnicalCards(preview,r){
         s.mensais.forEach(p=>{const row=document.createElement('tr');[p.competencia,reportValue(p.valor),reportValue(p.variacaoAnterior?.absoluta),reportValue(p.variacaoAnterior?.percentual)].forEach(t=>row.append(reportNode('td',t,'p-2 border-b border-slate-700')));table.append(row);});
         const scroll=document.createElement('div');scroll.className='overflow-x-auto';scroll.append(table);details.append(scroll);card.append(details);preview.append(card);
         const light=document.body.classList.contains('light-theme');
-        if(hasChart)managementCharts.push(new Chart(canvas,{type:'line',data:{labels:r.competencias,datasets:[{label:i.unidade??'Valor',data:i.valores,borderColor:'#d38b00',backgroundColor:'#d38b0022',spanGaps:false,tension:0.15,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:light?'#334155':'#cbd5e1'}},y:{beginAtZero:true,ticks:{color:light?'#334155':'#cbd5e1'}}}}}));
+        if(hasChart)managementCharts.push(new Chart(canvas,{type:'line',...managementChartSource(i,r),options:{responsive:true,maintainAspectRatio:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:light?'#334155':'#cbd5e1'}},y:{beginAtZero:true,ticks:{color:light?'#334155':'#cbd5e1'}}}}}));
     });
 }
 function renderManagementReportV6Details(){
@@ -291,7 +295,15 @@ async function generateManagementReport({forAnalysis=false}={}) {
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=analysis');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=dgranel');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportLogo(){
+    try {
+        const response=await fetch('report-logo-dgranel.png');
+        return response.ok?new Uint8Array(await response.arrayBuffer()):null;
+    } catch {
+        return null;
+    }
+}
 window.buildManagementPdf = function(r, images=[]) { return window.ReportPdf.build(r,images); };
 const reportPaint = () => new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 function reportDownloadBlob(blob,name){const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=name;link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}}
@@ -306,16 +318,15 @@ async function exportManagementReport(){
         if(signature!==reportSignature())throw Error('Os filtros mudaram. Atualize a prévia.');
         if(source.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(source.snapshotUpdatedAt))throw Error('Os dados foram atualizados. Gere uma nova prévia.');
         await window.ReportAuthoring?.verifyExport(source);
-        PdfProgress.update('Carregando bibliotecas locais',5);await reportPaint();await loadReportPdfLibraries();
-        PdfProgress.update('Bibliotecas carregadas',10);await reportPaint();
-        const report=JSON.parse(JSON.stringify(source));report.exportFormat=reportExportFormat();const chartIds=reportFormatChartIds(report),selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report)),images=Array(report.indicators.length).fill(null);
+        PdfProgress.update('Carregando recursos do PDF',5);await reportPaint();
+        const [,logo]=await Promise.all([loadReportPdfLibraries(),loadReportLogo()]);
+        PdfProgress.update('Recursos carregados',10);await reportPaint();
+        const report=JSON.parse(JSON.stringify(source));report.exportFormat=reportExportFormat();const chartIds=reportFormatChartIds(report),selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report,true)),images=Array(report.indicators.length).fill(null);
         for(let n=0;n<charts.length;n++){
             images[selected[n].index]=managementChartImages([charts[n]])[0];
             PdfProgress.update('Preparando gráficos',10+35*(n+1)/Math.max(1,charts.length),n+1,charts.length);await reportPaint();
         }
         PdfProgress.update('Compondo páginas do PDF',45,0,report.indicators.length);await reportPaint();
-        let logo=null;const loadedLogo=document.getElementById('dashboardLogo');
-        if(loadedLogo?.complete&&loadedLogo.naturalWidth){try{const c=document.createElement('canvas');c.width=c.height=128;c.getContext('2d').drawImage(loadedLogo,0,0,128,128);logo=c.toDataURL('image/png');}catch{/* Imagem sem CORS: usar assinatura textual. */}}
         const doc=await window.ReportPdf.buildAsync(report,images,event=>{
             const fraction=event.processed/Math.max(1,event.total);
             const stage={diagnosis:['Preparando diagnóstico',45,7],compose:['Compondo páginas do PDF',52,26],figures:['Preparando gráficos complementares',78,6],management:['Diagramando plano de ação',84,6],finalize:['Finalizando páginas',90,4]}[event.stage];
@@ -331,7 +342,7 @@ async function exportManagementReport(){
     }catch(e){if(window.PdfProgress?.dialog?.open)PdfProgress.error(e.message);reportMessage(`PDF não gerado: ${e.message}`);}
     finally{reportSetBusy(false);}
 }
-function managementChartImages(charts=managementReport?.indicators.map(i=>managementChartSource(i))??[]){return charts.map(chart=>{
+function managementChartImages(charts=managementReport?.indicators.map(i=>managementChartSource(i,managementReport,true))??[]){return charts.map(chart=>{
     const canvas=document.createElement('canvas');canvas.width=1400;canvas.height=500;
     const renderer=new Chart(canvas,{type:'line',data:{labels:[...chart.data.labels],datasets:chart.data.datasets.map(d=>({...d,data:[...d.data],pointRadius:3,borderWidth:2}))},options:{responsive:false,animation:false,devicePixelRatio:2,plugins:{legend:{display:false},datalabels:{display:false}},scales:{x:{ticks:{color:'#334155',font:{size:28},maxTicksLimit:12,maxRotation:0}},y:{beginAtZero:true,ticks:{color:'#334155',font:{size:28}}}}}});
     try {

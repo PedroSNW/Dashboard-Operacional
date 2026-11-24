@@ -1,10 +1,12 @@
-// Editorial V5: projeção do relatório validado, sem recalcular indicadores.
+// Composição dos relatórios A4 com a identidade visual da D’Granel.
 window.ReportPdf={
- theme:Object.freeze({navy:[10,23,43],gold:[177,126,32],ink:[0,0,0],margin:30,right:20,bodyTop:30,bodyBottom:277}),
+ theme:Object.freeze({navy:[9,39,71],blue:[11,76,142],gold:[244,204,24],ink:[29,43,58],muted:[75,97,119],
+  pale:[237,244,251],line:[211,224,236],white:[255,255,255],margin:30,right:20,bodyTop:30,bodyBottom:277}),
  build(r,images=[],options={}){const it=this.compose(r,images,options);let s;do{s=it.next();}while(!s.done);return s.value;},
  async buildAsync(r,images=[],onProgress=()=>{},yieldUI=()=>new Promise(r=>setTimeout(r,0)),options={}){const it=this.compose(r,images,options);let s;do{s=it.next();if(!s.done){onProgress(s.value);await yieldUI();}}while(!s.done);return s.value;},
  *compose(r,images=[],options={}){
  const executive=r.exportFormat==='executive'&&Boolean(window.ReportExecutive);
+ const {navy,blue,gold,ink,muted,pale,line,white}=this.theme;
  const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true}),E=window.ReportContent.editorial(r),m=E.management,W=160,V=E.version===6?r.intelligence:null,chartIds=new Set(executive?window.ReportExecutive.build(r).chartIds:window.ReportContent.chartIds(r));
  const fmt=v=>v===null||v===undefined?'Indisp.':new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(v);
  const direction=i=>({menor_melhor:'Menor é melhor',maior_melhor:'Maior é melhor',neutro:'Neutra'}[i.direcaoDesempenho]??'Não definida');
@@ -12,14 +14,49 @@ window.ReportPdf={
  const source='Fonte: Dashboard D’Granel, snapshot validado do Supabase.';
  const toc=[],layout=[],tables=[],figures=[],counters={Tabela:0,Quadro:0};let y=30,tableNo=0,figureNo=0;
  const page=()=>doc.getCurrentPageInfo().pageNumber;
- const font=(size=12,bold=false)=>{doc.setFont('helvetica',bold?'bold':'normal');doc.setFontSize(size);doc.setTextColor(0,0,0);};
+ const font=(size=12,bold=false,color=ink)=>{doc.setFont('helvetica',bold?'bold':'normal');doc.setFontSize(size);doc.setTextColor(...color);};
  const newPage=()=>{doc.addPage();y=30;};
  const ensure=h=>{if(y+h>277&&y>30)newPage();};
- const text=(value,size=12,bold=false,center=false)=>{
+ const text=(value,size=12,bold=false,center=false,color=ink)=>{
   font(size,bold);const lines=doc.splitTextToSize(String(value??''),W),step=size*.352778*1.15;
-  for(const line of lines){ensure(step);font(size,bold);doc.text(line,center?110:30,y+size*.352778,{align:center?'center':'left'});layout.push({page:page(),kind:'text',x:30,y,bottom:y+step,width:W,text:line});y+=step;}y+=2;
+  for(const line of lines){ensure(step);font(size,bold,color);doc.text(line,center?110:30,y+size*.352778,{align:center?'center':'left'});layout.push({page:page(),kind:'text',x:30,y,bottom:y+step,width:W,text:line});y+=step;}y+=2;
  };
- const heading=(title,entry=false,center=false)=>{font(12,true);const h=doc.splitTextToSize(title,W).length*4.87+3;ensure(Math.min(h+14,247));if(entry)toc.push({title,page:page()});text(title,12,true,center);y+=2;};
+ const heading=(title,entry=false,center=false)=>{
+  const size=entry?14:12;font(size,true);const h=doc.splitTextToSize(title,W).length*size*.352778*1.15+3;
+  ensure(Math.min(h+14,247));
+  if(entry){
+   toc.push({title,page:page()});doc.setFillColor(...gold);doc.rect(30,y,11,.9,'F');y+=3;
+  }
+  text(title,size,true,center,entry?navy:blue);y+=2;
+ };
+ function cover(title){
+  const label=executive?'EDIÇÃO EXECUTIVA':'EDIÇÃO COMPLETA';
+  const size=28,step=12; font(size,true,white);
+  const lines=doc.splitTextToSize(title,W-25),height=29+step*lines.length;
+  doc.setFillColor(...navy);doc.rect(30,y,W,height,'F');
+  doc.setFillColor(...blue);doc.triangle(190,y+height-35,190,y+height,153,y+height,'F');
+  doc.setFillColor(...gold);doc.rect(42,y+8,19,1.1,'F');font(9,true,gold);doc.text(label,42,y+15);
+  font(size,true,white);
+  lines.forEach((content,index)=>{
+   const top=y+19+index*step;doc.text(content,42,top+size*.352778);
+   layout.push({kind:'text',page:page(),x:42,y:top,bottom:top+step,width:W-25,text:content});
+  });
+  y+=height+7;
+  const metrics=[[r.indicators.length,'Indicadores no recorte'],[r.criticalCount,'Pontos de atenção'],[r.competencias.length,'Competências']];
+  const cardWidth=(W-8)/metrics.length;
+  metrics.forEach(([value,caption],index)=>{
+   const x=30+index*(cardWidth+4);doc.setFillColor(...pale);doc.roundedRect(x,y,cardWidth,19,1,1,'F');
+   font(17,true,navy);doc.text(String(value??'—'),x+4,y+8);
+   font(8,false,muted);doc.text(caption,x+4,y+14);
+  });
+  y+=25;
+  text(`Período: ${period} · Setor: ${r.sector==='TODOS'?'Todos os setores':r.sector??'Não informado'}`,10,true,false,navy);
+  text(`Emissão: ${date} (Brasília)`,9,false,false,muted);
+ }
+ function contents(){
+  newPage();text('Sumário',25,true,false,navy);y+=6;
+  return {number:page(),top:y};
+ }
  const table=(title,head,body,widths=[],numeric=[],kind='Tabela')=>{
   // AutoTable não consegue manter inteira uma linha maior que a própria página.
   // Dividir previamente células muito extensas mantém todos os trechos e sinaliza continuidade.
@@ -34,10 +71,11 @@ window.ReportPdf={
   const startPage=page();tables.push({number,displayNumber,kind,title,page:startPage,rows:body.length});text(caption,10,true);
   const columnStyles={};widths.forEach((w,n)=>columnStyles[n]={cellWidth:w,halign:numeric.includes(n)?'right':'left'});
   doc.autoTable({startY:y,margin:{left:30,right:20,top:38,bottom:25},tableWidth:W,head:[head],body:safeRows.length?safeRows:[head.map((_,n)=>n===0?'Sem registros neste recorte.':'—')],theme:'plain',
-   styles:{font:'helvetica',fontSize:10,cellPadding:1.5,overflow:'linebreak',textColor:0,lineWidth:0},headStyles:{fontStyle:'bold',textColor:0,fillColor:[239,241,243],lineWidth:{top:.25,bottom:.25},lineColor:0},columnStyles,rowPageBreak:'avoid',showHead:'everyPage',
-   willDrawPage:()=>{if(page()!==startPage){font(10,true);doc.text(`${kind} ${displayNumber} – continuação`,30,34);}},
+   styles:{font:'helvetica',fontSize:10,cellPadding:1.5,overflow:'linebreak',textColor:ink,lineWidth:0},
+   headStyles:{fontStyle:'bold',textColor:white,fillColor:navy},alternateRowStyles:{fillColor:pale},columnStyles,rowPageBreak:'avoid',showHead:'everyPage',
+   willDrawPage:()=>{if(page()!==startPage){font(10,true,blue);doc.text(`${kind} ${displayNumber} – continuação`,30,34);}},
    didDrawCell:d=>{if(d.section==='body')layout.push({kind:'cell',page:page(),x:d.cell.x,y:d.cell.y,bottom:d.cell.y+d.cell.height,width:d.cell.width,table:number,row:d.row.index,column:d.column.index,text:d.cell.text.join('\n')});}
-  });y=doc.lastAutoTable.finalY+2;doc.setDrawColor(0);doc.line(30,y,190,y);y+=1;text(source,10);y+=2;
+  });y=doc.lastAutoTable.finalY+2;doc.setDrawColor(...line);doc.line(30,y,190,y);y+=1;text(source,9,false,false,muted);y+=2;
  };
  const graph=(i,index)=>{if(!images[index]||!chartIds.has(i.id))return;const caption=`Gráfico ${++figureNo} – ${i.indicador} (${i.unidade??'unidade não informada'})`;
   font(10,true);ensure(doc.splitTextToSize(caption,W).length*4.1+78);text(caption,10,true);
@@ -46,32 +84,56 @@ window.ReportPdf={
   doc.addImage(images[index],'PNG',30,y,W,57);layout.push({kind:'graph',page:page(),x:30,y,bottom:y+57,width:W});y+=59;text(`${source} ${period}. Lacunas preservadas.`,10);
  };
  const unique=a=>[...new Set(a.filter(x=>typeof x==='string'&&x.trim()))];
- function* finishPdf(tocPage,historyColumns=null,tocY=43){
- // Não criar uma página apenas para repetir a contagem já conhecida pelo leitor de PDF.
+ function* finishPdf(contentsPage,historyColumns=null){
+ const {number:tocPage,top:tocY}=contentsPage;
  const pages=doc.getNumberOfPages();
- const lastPage=page(),lastY=y;doc.setPage(tocPage);y=tocY;
- for(const entry of toc){font(12,true);const lines=doc.splitTextToSize(entry.title,W-16),h=lines.length*4.87+3;if(y+h>277)throw Error('Sumário excedeu a página reservada.');const top=y;text(entry.title,12,true);font(12);doc.text(String(entry.page),190,top+4.23,{align:'right'});doc.link(30,top,W,h,{pageNumber:entry.page});}
- doc.setPage(lastPage);y=lastY;
- for(let p=1;p<=pages;p++){doc.setPage(p);font(10,true);doc.text("D'GRANEL",30,18);doc.setDrawColor(177,126,32);doc.line(30,23,190,23);if(p>tocPage){font(10);doc.text(String(p),190,18,{align:'right'});}doc.setDrawColor(205,210,216);doc.line(30,282,190,282);font(10);doc.text('D’Granel • Uso interno',30,288);yield {stage:'finalize',processed:p,total:pages};}
+ doc.setPage(tocPage);
+ const perColumn=Math.ceil(toc.length/2),width=(W-10)/2;
+ for(let column=0;column<2;column++){
+  const x=30+column*(width+10);let top=tocY;
+  for(const entry of toc.slice(column*perColumn,(column+1)*perColumn)){
+   font(11,true,navy);const lines=doc.splitTextToSize(entry.title,width-16),height=Math.max(11,lines.length*5+4);
+   if(top+height>277)throw Error('Sumário excedeu a página reservada.');
+   doc.setFillColor(...pale);doc.roundedRect(x,top+1,11,9,1,1,'F');
+   font(9,true,blue);doc.text(String(entry.page),x+5.5,top+7,{align:'center'});
+   font(11,true,navy);lines.forEach((content,index)=>doc.text(content,x+15,top+5.5+index*5));
+   doc.setDrawColor(...line);doc.line(x,top+height,x+width,top+height);
+   doc.link(x,top,width,height,{pageNumber:entry.page});top+=height+5;
+  }
+ }
+ let logoHeight=0;
+ if(options.logo){try{const logo=doc.getImageProperties(options.logo);logoHeight=34*logo.height/logo.width;}catch{/* A assinatura textual ocupa o mesmo cabeçalho. */}}
+ for(let p=1;p<=pages;p++){
+  doc.setPage(p);
+  if(logoHeight){doc.addImage(options.logo,'PNG',30,15-logoHeight/2,34,logoHeight,'dgranel-header');}
+  else{font(10,true,blue);doc.text("D'GRANEL",30,17);}
+  font(9,true,navy);doc.text('SEGURANÇA VIÁRIA',190,16,{align:'right'});
+  doc.setLineWidth(.2);doc.setDrawColor(...line);doc.line(30,23.5,190,23.5);doc.setDrawColor(...gold);doc.setLineWidth(.8);doc.line(30,23.5,58,23.5);
+  doc.setLineWidth(.2);doc.setDrawColor(...line);doc.line(30,282,190,282);
+  font(9,false,muted);doc.text('D’Granel  |  Uso interno',30,288);doc.text(`${p} / ${pages}`,190,288,{align:'right'});
+  yield {stage:'finalize',processed:p,total:pages};
+ }
  doc.reportLayout={version:executive?'6.1':V?6:5,format:executive?'executive':'complete',pages,toc,tocPage,tables,figures,historyColumns,blocks:layout,coverage:r.indicators.map(i=>({id:i.id,months:executive?0:i.estatisticas.mensais.length})),historyIncluded:!executive,sourceIds:r.indicators.map(i=>i.id),criticalCoverage:executive?window.ReportExecutive.build(r).criticalIds:null,margins:{left:30,right:20,top:30,bottom:20}};return doc;
  }
- doc.setProperties({title:`D'Granel – Relatório ${r.type}`,subject:`${period} – ${r.sector}`,author:"D'Granel",creator:executive?'Dashboard D’Granel V6.1':V?'Dashboard D’Granel V6':'Dashboard D’Granel V5'});
- if(options.logo){try{doc.addImage(options.logo,'PNG',30,y,18,18);y+=22;}catch{/* Identidade textual preservada. */}}
+ doc.setProperties({title:`D'Granel – Relatório ${r.type}`,subject:`${period} – ${r.sector}`,author:"D'Granel",creator:'Dashboard Operacional D’Granel'});
  if(r.authored){
   const authored=r.authored,C=window.ReportEvidence;
   if(!Array.isArray(authored.evidenceKeys)||!authored.evidenceKeys.length)throw Error('Registro de evidências indisponível.');
   const pack=C?.evidence(r,authored.evidenceKeys),checked=C?.validate(authored.document,pack);
   if(!C||!authored.reviewed||authored.basis!==r.basis||authored.snapshotUpdatedAt!==r.snapshotUpdatedAt||!checked?.valid)throw Error('Conteúdo editorial incompatível com a base do PDF.');
   const draft=checked.document;
-  heading('D’GRANEL — Relatório Gerencial');heading(draft.title);text(`Período: ${period} · Setor: ${r.sector==='TODOS'?'Todos os setores':r.sector}`,10);text(`Emissão: ${date} (Brasília) · Uso interno`,10);
+  cover(draft.title);
   text('Documento de apoio à decisão. Interpretações e sugestões revisadas localmente não representam aprovação institucional. Áreas, iniciativas e prazos dependem de validação da gestão.',10);
   if(authored.coverage?.partial)text(`A elaboração abrange ${authored.coverage.sent} de ${authored.coverage.selected} indicadores selecionados. A interpretação não representa cobertura integral do recorte.`,10);
-  heading('SUMÁRIO');const authoredTocY=y,authoredTocPage=page();newPage();
+  const authoredContents=contents();newPage();
   let number=0;
   for(const section of draft.sections){
    heading(`${++number} ${section.title}`,true);
-   C.lines(section,pack).forEach(line=>text(line));
-   if(section.refs.length)text('Referências: '+section.refs.join('; ')+'.',10);
+   C.lines(section,pack).forEach((line,index)=>{
+    const evidence=line.startsWith('Evidência oficial · ');
+    text(line,index===0?12:10,false,false,evidence?muted:ink);
+   });
+   if(section.refs.length)text('Referências: '+section.refs.join('; ')+'.',9,false,false,muted);
    yield {stage:'diagnosis',processed:number,total:draft.sections.length};
   }
   heading(`${++number} Resultados e evidências`,true);
@@ -96,14 +158,14 @@ window.ReportPdf={
    heading('APÊNDICE B — Referências de evidências',true);
    for(const item of pack.items){heading(item.key+' — '+item.name);text(C.project(item.key,pack),10);}
   }
-  const pdf=yield* finishPdf(authoredTocPage,executive?null:4,authoredTocY);pdf.reportLayout.authored=true;pdf.reportLayout.editorialSectionIds=draft.sections.map(s=>s.id);return pdf;
+  const pdf=yield* finishPdf(authoredContents,executive?null:4);pdf.reportLayout.authored=true;pdf.reportLayout.editorialSectionIds=draft.sections.map(s=>s.id);return pdf;
  }
  if(executive){
   const e=window.ReportExecutive.build(r),byId=id=>r.indicators.find(i=>i.id===id),dimension=id=>V?.dimensions.find(d=>d.indicatorId===id),name=id=>byId(id)?.indicador??String(id);
-  heading('D’GRANEL — Relatório Executivo');text(`${e.scope} · ${r.sector==='TODOS'?'Todos os setores':r.sector}`,10);text(`Emissão: ${date} (Brasília) · Tipo: ${r.type} · Uso interno`,10);
+  cover('Relatório executivo de segurança viária');text(e.scope,10);
   heading('Síntese para decisão');text(e.paragraph);
   for(const [label,ids] of [['Avanços',e.advances],['Pontos de atenção',e.challenges],['Prioridades sugeridas',e.priorities]])text(label+': '+(ids.length?ids.map(name).join('; '):'nenhum resultado identificado por esses critérios.')+'.',10);
-  ensure(75);heading('Conteúdo');const executiveTocY=y,executiveTocPage=page();newPage();
+  const executiveContents=contents();newPage();
   heading('1 Resultados para a reunião',true);
   if(!e.detailIds.length)text('Não há dados suficientes no recorte. Conferir a seleção e os registros antes de avaliar resultados.');
   for(const [n,id] of e.detailIds.entries()){const i=byId(id);text(window.ReportExecutive.narrative(i,dimension(id)));yield {stage:'diagnosis',processed:n+1,total:e.detailIds.length+e.chartIds.length};}
@@ -122,17 +184,14 @@ window.ReportPdf={
   const methodLines=[...e.limitations,'Criticidade operacional só é afirmada quando há critério aprovado; as demais classificações permanecem pendentes. Histórico e evidências integrais podem ser exportados no formato Completo.',`Fonte: snapshot autorizado do Supabase (${r.snapshotUpdatedAt??'data não informada'}). Base de conferência: ${r.basis??'não informada'}. `];
   font(10);ensure(Math.min(247,18+methodLines.reduce((h,line)=>h+doc.splitTextToSize(line,W).length*4.056947+2,0)));
   heading(`${context?5:4} Base e limites da análise`,true);methodLines.forEach(line=>text(line,10));
-  return yield* finishPdf(executiveTocPage,null,executiveTocY);
+  return yield* finishPdf(executiveContents);
  }
- heading("D'GRANEL",false,true);text('Dashboard operacional • Relatórios gerenciais',12,false,true);y+=8;
- heading(`Relatório gerencial ${r.type}`,false,true);text(E.focus,12,false,true);y+=8;
- text(`Período: ${period}`);text(`Setor: ${r.sector==='TODOS'?'Todos os setores':r.sector??'Não informado'}`);text(`Emissão: ${date} (Brasília)`);
- text('Autor-entidade: D’Granel');text('Classificação: uso interno');text('Local institucional: não informado no cadastro.');
+ cover('Relatório gerencial de segurança viária');text(E.focus);
  text('Documento de apoio à decisão. As propostas dependem de avaliação e aprovação das áreas responsáveis.');
  newPage();heading('RESUMO',false,true);
  text(`Este relatório apresenta ${E.scope} Seu objetivo é apoiar ${E.focus.toLowerCase()}. O método utiliza valores validados do snapshot do Supabase e estatísticas determinísticas, respeitando unidades, metas, direções e valores ausentes. Foram identificados ${r.criticalCount} indicadores com atenção pelos critérios configurados. O corpo executivo apresenta as prioridades e propostas de acompanhamento; os apêndices preservam o histórico do recorte e o conteúdo gerencial validado. As competências permanecem sujeitas a revisão. A análise é descritiva e não estabelece causalidade nem comprova ausência de risco quando não há sinalização. As iniciativas apresentadas são sugestões para avaliação, sem garantia de resultados. A leitura relaciona a situação observada às evidências disponíveis, à avaliação de desempenho e aos encaminhamentos sugeridos. O acompanhamento exige conferir a qualidade dos registros e pactuar responsáveis e prazos. A comparação temporal deve respeitar o escopo de cada indicador e as limitações documentadas.`);
  text('Palavras-chave: desempenho operacional; indicadores; gestão preventiva; acompanhamento.');
- newPage();const tocPage=page();heading('SUMÁRIO',false,true);newPage();
+ const completeContents=contents();newPage();
  if(V){
  let sectionNumber=0;
  for(const section of window.ReportContent.v6Sections(r)){
@@ -188,7 +247,6 @@ window.ReportPdf={
  unique(E.limitations).forEach(l=>text(l));text(E.selection);text(`Snapshot: ${r.snapshotUpdatedAt??'não informado'}; emissão ${date} (Brasília). Base: ${r.basis??'não informada'}.`,10);
  }
  heading('REFERÊNCIAS',true,true);text(`D’GRANEL. Dashboard operacional: snapshot de indicadores. Dados internos; atualização ${r.snapshotUpdatedAt??'não informada'}; consulta na emissão ${date}.`);
- text('Sem fontes externas para inferências operacionais. Referências de normalização e adaptações editoriais: RELATORIOS-V5-ABNT-EXECUTIVO.md.');
  heading('APÊNDICE A – Cadastro e estatísticas',true,true);text('Indisp. = indisponível; N/A = soma não aplicável. As tabelas preservam o cadastro e as estatísticas exibidas na versão anterior.');
  if(V&&r.indicators.length>15)table('Panorama gerencial completo',['Indicador / setor / unidade','Recente / meta atual','Desempenho / tendência','Criticidade operacional'],window.ReportContent.v6Overview(r,fmt),[47,34,51,28]);
  if(V&&V.charts.excluded.length){for(const reason of new Set(V.charts.excluded.map(x=>x.reason)))text(reason+' — IDs: '+V.charts.excluded.filter(x=>x.reason===reason).map(x=>String(x.id)).join('; ')+'. Dados integrais nas tabelas.',10);}
@@ -236,6 +294,6 @@ window.ReportPdf={
  if(V)ensure(65); // Manter o formulário curto inteiro, sem uma última linha isolada.
  heading('FORMULÁRIO DE IDENTIFICAÇÃO',true,true);text(`Título: Relatório gerencial ${r.type}. Autor-entidade e instituição executora: D’Granel. Projeto: Dashboard operacional. Classificação: uso interno. Data: ${date}. Edição editorial: ${V?'V6':'V5'}. Período: ${period}.`);
  text('Endereço institucional, local de publicação, instituição patrocinadora e identificadores bibliográficos: não informados no cadastro. Não foram inferidos.');text('Resumo e palavras-chave: elementos iniciais. Distribuição interna eletrônica.');
- return yield* finishPdf(tocPage,historyColumns);
+ return yield* finishPdf(completeContents,historyColumns);
  }
 };

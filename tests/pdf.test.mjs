@@ -1,5 +1,6 @@
 import {readFileSync,writeFileSync} from 'node:fs';
 import {buildReport} from '../supabase/functions/seguranca-viaria-ia/reports.js';
+import {report as sampleReport} from './report-fixtures.mjs';
 const m={exports:{}};new Function('module','exports',readFileSync('public/vendor/jspdf-4.2.1.umd.min.js','utf8'))(m,m.exports);
 const table={exports:{}};new Function('module','exports','require',readFileSync('public/vendor/jspdf-autotable-5.0.8.min.js','utf8'))(table,table.exports,()=>m.exports);table.exports.applyPlugin(m.exports.jsPDF);
 const source=readFileSync('public/reports.js','utf8');
@@ -32,3 +33,26 @@ const singleProgress=[];
 const singleDoc=await win.ReportPdf.buildAsync(single,[],event=>singleProgress.push(event),()=>Promise.resolve());
 if(!singleDoc.output('arraybuffer').byteLength||singleProgress.filter(e=>e.stage==='compose').length!==1)throw Error('PDF individual inválido');
 console.log('PASS PDF individual com um indicador e callback correspondente');
+
+new Function('window',readFileSync('public/report-executive.js','utf8'))(win);
+new Function('globalThis',readFileSync('public/report-evidence.js','utf8'))(win);
+const logo=new Uint8Array(readFileSync('public/report-logo-dgranel.png'));
+const sample={...sampleReport(8),basis:'dados-ficticios'};
+const refs=win.ReportEvidence.evidence(sample).items.slice(0,2).map(item=>item.key);
+sample.authored={reviewed:true,basis:sample.basis,snapshotUpdatedAt:sample.snapshotUpdatedAt,evidenceKeys:refs,
+    document:{title:'Relatório gerencial de segurança viária',sections:[
+        {id:'section-0',order:1,priority:'primary',type:'summary',title:'Síntese executiva',
+            text:'Avaliar a rotina de conferência dos registros de autuação e investigar as pendências com a equipe de operações.',refs,days:0},
+        {id:'section-1',order:2,priority:'supporting',type:'action',title:'Revisar a conferência de autuações',
+            text:'Mapear os pontos de espera na triagem e revisar a passagem de informações entre as equipes.',refs,days:30,
+            owner:'Segurança Viária e Operações',followUp:'Conferir o fechamento das pendências com as equipes responsáveis.'},
+    ]}};
+for(const exportFormat of ['executive','complete']){
+    const branded=win.ReportPdf.build({...sample,exportFormat},[],{logo});
+    const pages=branded.getNumberOfPages(),layout=branded.reportLayout;
+    if(layout.format!==exportFormat||layout.toc.length<4||layout.toc.some(entry=>entry.page<=layout.tocPage))throw Error('Sumário fora de ordem');
+    for(let p=1;p<=pages;p++)if(!branded.internal.pages[p].some(command=>/^\/I\d+ Do$/.test(command)))throw Error('Logo ausente na página '+p);
+    if(!layout.blocks.some(block=>block.text?.includes('Como acompanhar')))throw Error('Acompanhamento ausente na edição '+exportFormat);
+    if(exportFormat==='executive')writeFileSync('.validation-tools/DGranel-relatorio-executivo-demonstracao.pdf',new Uint8Array(branded.output('arraybuffer')));
+}
+console.log('PASS logo em todas as páginas, sumário e plano de ação nos PDFs Executivo e Completo.');
