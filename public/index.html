@@ -31,6 +31,28 @@
         <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
     <link rel="stylesheet" href="workspace-ui.css?v=visual-4">
+    <!-- Painéis: aproveitar toda a largura disponível sem alterar a barra lateral. -->
+    <style id="dashboard-full-width-fix">
+        body main:has(> #view-dashboard:not(.hidden)) {
+            width: auto !important;
+            max-width: none !important;
+            min-width: 0;
+            margin-inline-end: 0 !important;
+            align-self: stretch;
+            box-sizing: border-box;
+        }
+
+        body main > #view-dashboard,
+        body main > #dashboardWorkspaceSection {
+            width: 100% !important;
+            max-width: none !important;
+            min-width: 0;
+            margin-inline: 0 !important;
+            align-self: stretch;
+            justify-self: stretch;
+            box-sizing: border-box;
+        }
+    </style>
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
