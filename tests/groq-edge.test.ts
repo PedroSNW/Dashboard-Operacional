@@ -11,6 +11,7 @@ let groqStatus = 200;
 let completion = 'stop';
 let groqCalls = 0;
 let captured: any;
+let requestBytes = 0;
 const fetcher: typeof fetch = async (url, init) => {
     const endpoint = new URL(String(url));
     const headers = new Headers(init?.headers);
@@ -22,6 +23,7 @@ const fetcher: typeof fetch = async (url, init) => {
     }
     assert(endpoint.href === 'https://api.groq.com/openai/v1/chat/completions' && headers.get('Authorization') === 'Bearer mock-groq', 'Transporte Groq');
     groqCalls++;
+    requestBytes = new TextEncoder().encode(String(init?.body)).length;
     captured = JSON.parse(String(init?.body));
     const input = JSON.parse(captured.messages[1].content);
     assert(!JSON.stringify(input).includes('indice:'), 'Identificador interno enviado ao provedor');
@@ -95,6 +97,39 @@ const chat = (await invoke({ action: 'chat', question: 'Acidentes' })).result;
 assert(chat.coverage.sent <= 6 && chat.response.includes('competências') && !captured.response_format, 'Central');
 assert(JSON.parse(captured.messages[1].content).indicators[0].name.startsWith('Acidentes'), 'Recorte da pergunta');
 assert(chat.evidence[0].startsWith('Acidentes') && chat.evidence.length === chat.coverage.sent, 'Evidências oficiais da consulta');
+const originalIndicators = structuredClone(database.indicadores);
+try {
+    for (const item of database.indicadores) {
+        item.indicador += ' “Prevenção” e revisão das ocorrências'.repeat(5);
+        item.setor = '"Operações" e gestão de riscos'.repeat(5);
+        item.und = '"Ocorrências" por competência'.repeat(3);
+    }
+    const detail = '"Conferir pendências e revisar as ações". '.repeat(4);
+    const largeContext = { ...context(true), actionsTaken: detail, difficulties: detail, achievements: detail,
+        priorities: detail, goals: detail, observations: detail };
+    const largePreview = (await invoke({ action: 'preview', selection, managementContext: largeContext })).result.report;
+    const largeBasis = { selection, managementContext: largeContext, expectedUpdatedAt: updatedAt, expectedReportBasis: largePreview.basis };
+    const large = (await invoke({ action: 'generate', ...largeBasis })).result;
+    const sent = JSON.parse(captured.messages[1].content);
+    assert(requestBytes<=6500 && large.coverage.sent===sent.indicators.length && large.coverage.sent>0
+        && large.coverage.selected===largePreview.indicators.length && large.coverage.partial,'Orçamento ou cobertura do relatório longo');
+    const checked = (await invoke({ action: 'review', ...largeBasis, document: large.document, reviewAcknowledged: true })).result;
+    assert(JSON.stringify(checked.evidenceKeys)===JSON.stringify(large.evidenceKeys),'Revisão perdeu referências após compactação');
+    for (const item of database.indicadores) {
+        item.indicador = 'Acidentes ' + '界'.repeat(120);
+        item.setor = '点'.repeat(70);
+        item.und = '件'.repeat(30);
+    }
+    // Keep legacy identities distinct while exercising the UTF-8 byte limit.
+    database.indicadores.forEach((item, index) => { item.indicador += ' ' + index; });
+    const longQuestion = 'Acidentes. ' + '"Compare a evolução das ocorrências no período". '.repeat(20);
+    const longChat = (await invoke({ action: 'chat', question: longQuestion })).result;
+    assert(requestBytes<=6500 && longChat.coverage.sent>0 && longChat.evidence.length===longChat.coverage.sent,'Orçamento ou evidências da consulta longa');
+    const chatInput = JSON.parse(captured.messages[1].content);
+    assert(chatInput.indicators.length<6 || chatInput.indicators.some((item: { series?: unknown }) => !item.series),'Consulta longa não exercitou a compactação');
+} finally {
+    database.indicadores = originalIndicators;
+}
 await invoke({ action: 'chat', question: 'Contato pessoa@example.test' }, 422);
 completion = 'length';
 await invoke({ action: 'generate', ...basis }, 502);

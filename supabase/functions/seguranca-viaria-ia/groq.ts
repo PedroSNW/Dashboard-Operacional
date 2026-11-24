@@ -33,6 +33,23 @@ export async function readJson(response: Request | Response, limit: number, inva
 
 const supportedModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 const invalidResponse = () => new ApiError(502, 'invalid_groq_response', 'A Groq retornou uma resposta incompleta ou incompatível.');
+const encoder = new TextEncoder();
+const maxRequestBytes = 6500;
+
+function buildBody(model: string, system: string, input: unknown, schema?: object) {
+    return JSON.stringify({
+        model, reasoning_effort: schema ? 'medium' : 'low', include_reasoning: false, max_completion_tokens: schema ? 3200 : 1800,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(input) }],
+        ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'management_report', strict: true, schema } } } : {}),
+    });
+}
+
+const bodyFits = (body: string) => encoder.encode(body).length <= maxRequestBytes;
+
+export function groqRequestFits(system: string, input: unknown, schema?: object) {
+    // The longer supported model name keeps evidence selection independent of the model setting.
+    return bodyFits(buildBody(supportedModels[0], system, input, schema));
+}
 
 export function createGroq(env: Env, fetcher: typeof fetch) {
     let running = false;
@@ -47,12 +64,8 @@ export function createGroq(env: Env, fetcher: typeof fetch) {
         const wait = Math.ceil((retryAt - Date.now()) / 1000);
         if (wait > 0) throw new ApiError(429, 'groq_rate_limit', 'Aguarde a próxima janela da Groq.', wait);
         if (running) throw new ApiError(429, 'groq_busy', 'Já há uma consulta à Groq em andamento.', 2);
-        const body = JSON.stringify({
-            model, reasoning_effort: schema ? 'medium' : 'low', include_reasoning: false, max_completion_tokens: schema ? 3200 : 1800,
-            messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(input) }],
-            ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'management_report', strict: true, schema } } } : {}),
-        });
-        if (new TextEncoder().encode(body).length > 6500) {
+        const body = buildBody(model, system, input, schema);
+        if (!bodyFits(body)) {
             throw new ApiError(422, 'context_too_large', 'O contexto é muito grande. Reduza o recorte ou a pergunta.');
         }
 
