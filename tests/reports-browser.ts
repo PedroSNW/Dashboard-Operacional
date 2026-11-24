@@ -12,7 +12,7 @@ const generated = await generateReport(preview, async (_instruction, input: any)
         summary: { text: 'A gestão deve conferir as pendências antes de ampliar a intervenção.', refs: [input.indicators[0].key] },
         findings: [{ type: 'integrated', title: 'Lacuna de tratamento', text: 'Conferir os registros que ficaram pendentes pode orientar a decisão.', refs: [input.indicators[0].key] }],
         actions: [{ title: 'Revisar o fluxo de conferência', text: 'Analisar as pendências com a operação.', refs: [input.indicators[0].key],
-            owner: 'Segurança Viária', followUp: 'Acompanhar o fechamento dos registros.', days: 30 }],
+            method:'post',audience:'Equipes de operação',owner: 'Segurança Viária', followUp: 'Acompanhar o fechamento dos registros.', days: 30 }],
     }),
     model: 'mock',
 }));
@@ -83,6 +83,12 @@ addEventListener('load',async()=>{
         fail=false;await ReportAuthoring.generate();
         assert(node('reportExport').disabled&&!node('reportEditorial').hidden,'Revisão obrigatória');
         assert(node('reportEditorial').textContent.includes('Síntese executiva')&&node('reportEditorial').textContent.includes('Evidências oficiais'),'Leitura da análise');
+        const sections=[...node('reportEditorial').querySelectorAll('nav button')];
+        sections.at(-1).click();
+        const format=[...node('reportEditorial').querySelectorAll('select')].find(field=>field.value==='post');
+        assert(format&&node('reportEditorial').textContent.includes('Público'),'Revisão de formato e público');
+        format.value='stories';format.dispatchEvent(new Event('change'));
+        node('reportEditorial').querySelector('nav button').click();
         const input=document.querySelector('#reportEditorial textarea');
         input.value='Houve 999 acidentes.';input.dispatchEvent(new Event('input'));
         node('reportEditorialAck').click();
@@ -94,6 +100,7 @@ addEventListener('load',async()=>{
             const pdf=window.buildManagementPdf({...managementReport,exportFormat});
             assert(pdf.reportLayout.authored&&pdf.reportLayout.format===exportFormat&&pdf.output('arraybuffer').byteLength>1000,'PDF '+exportFormat);
             assert(pdf.reportLayout.blocks.some(block=>block.text?.includes('Como acompanhar')),'Acompanhamento no PDF');
+            assert(pdf.reportLayout.blocks.some(block=>block.text?.includes('Formato · Stories')),'Formato revisado no PDF');
         }
         reportPdfLibraries=Promise.resolve();
         let downloaded=false;

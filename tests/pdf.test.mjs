@@ -45,7 +45,10 @@ sample.authored={reviewed:true,basis:sample.basis,snapshotUpdatedAt:sample.snaps
             text:'Avaliar a rotina de conferência dos registros de autuação e investigar as pendências com a equipe de operações.',refs,days:0},
         {id:'section-1',order:2,priority:'supporting',type:'action',title:'Revisar a conferência de autuações',
             text:'Mapear os pontos de espera na triagem e revisar a passagem de informações entre as equipes.',refs,days:30,
-            owner:'Segurança Viária e Operações',followUp:'Conferir o fechamento das pendências com as equipes responsáveis.'},
+            method:'checklist',audience:'Equipes de triagem',owner:'Segurança Viária e Operações',followUp:'Conferir o fechamento das pendências com as equipes responsáveis.'},
+        {id:'section-2',order:3,priority:'supporting',type:'action',title:'Orientar o envio de documentos',
+            text:'Publicar no canal interno um exemplo de envio completo e indicar onde tirar dúvidas.',refs,days:30,
+            method:'post',audience:'Motoristas e líderes de turno',owner:'Segurança Viária',followUp:'Acompanhar as devoluções por falta de documentação.'},
     ]}};
 for(const exportFormat of ['executive','complete']){
     const branded=win.ReportPdf.build({...sample,exportFormat},[],{logo});
@@ -53,6 +56,8 @@ for(const exportFormat of ['executive','complete']){
     if(layout.format!==exportFormat||layout.toc.length<4||layout.toc.some(entry=>entry.page<=layout.tocPage))throw Error('Sumário fora de ordem');
     for(let p=1;p<=pages;p++)if(!branded.internal.pages[p].some(command=>/^\/I\d+ Do$/.test(command)))throw Error('Logo ausente na página '+p);
     if(!layout.blocks.some(block=>block.text?.includes('Como acompanhar')))throw Error('Acompanhamento ausente na edição '+exportFormat);
+    if(!layout.blocks.filter(block=>block.page===1).map(block=>block.text).join(' ').includes('SEGURANÇA VIÁRIA'))throw Error('Título da capa');
+    if(!layout.blocks.some(block=>block.text?.includes('Formato · Post'))||!layout.blocks.some(block=>block.text?.includes('Público · Motoristas')))throw Error('Formato ou público ausente');
     if(exportFormat==='executive')writeFileSync('.validation-tools/DGranel-relatorio-executivo-demonstracao.pdf',new Uint8Array(branded.output('arraybuffer')));
 }
 console.log('PASS logo em todas as páginas, sumário e plano de ação nos PDFs Executivo e Completo.');

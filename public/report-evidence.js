@@ -18,6 +18,10 @@
         && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
     const types = ['summary','integrated','hypothesis','action','conclusion'];
     const horizons = [30,60,90];
+    const actionMethods = Object.freeze({
+        post:'Post', stories:'Stories', campanha:'Campanha', flyer:'Flyer',
+        dds:'DDS', comunicado:'Comunicado interno', checklist:'Checklist', processo:'Ajuste de processo',
+    });
     function evidence(report, allowed = null) {
         const facts = Object.create(null), items = [];
         const dimensions = new Map((report.intelligence?.dimensions ?? []).map(item => [item.indicatorId, item]));
@@ -72,12 +76,14 @@
     function validate(document, pack) {
         const issues = [], add = (section, codes, severity='blocking') => { if(codes.length) issues.push({section,codes:[...new Set(codes)],severity}); };
         const sectionShape = ['id','type','title','text','refs','order','priority','days'];
+        const actionShape = [...sectionShape,'owner','followUp'];
         const str = (value, max) => typeof value==='string' && value.trim().length>0 && value.length<=max;
+        const hasActionFields = section => section?.type==='action' && str(section.owner,100) && str(section.followUp,420)
+            && (objectKeys(section,actionShape) || objectKeys(section,[...actionShape,'method','audience'])
+                && typeof section.method==='string' && Object.hasOwn(actionMethods,section.method) && str(section.audience,100));
         const shape = objectKeys(document,['title','sections'])
             && str(document.title,100) && Array.isArray(document.sections) && document.sections.length>0 && document.sections.length<=16
-            && document.sections.every(section=>(objectKeys(section,sectionShape)
-                    || section?.type==='action' && objectKeys(section,[...sectionShape,'owner','followUp'])
-                        && str(section.owner,100) && str(section.followUp,420)) && types.includes(section.type)
+            && document.sections.every(section=>(objectKeys(section,sectionShape)||hasActionFields(section)) && types.includes(section.type)
                 && str(section.title,90) && str(section.text,1800) && typeof section.id==='string' && /^section-\d{1,2}$/.test(section.id)
                 && ['primary','supporting'].includes(section.priority)
                 && (section.type==='action' ? [0,...horizons].includes(section.days) : section.days===0)
@@ -90,7 +96,7 @@
             seen.add(s.id);
             const badRefs = s.refs.some(key=>!Object.hasOwn(pack.facts,key));
             if(badRefs || new Set(s.refs).size!==s.refs.length || ['integrated','hypothesis'].includes(s.type)&&!s.refs.length)add(s.id,['evidencia_inexistente']);
-            const texts = [s.title,s.text,...(s.owner ? [s.owner,s.followUp] : [])];
+            const texts = [s.title,s.text,...(s.owner ? [s.owner,s.followUp] : []),...(s.audience ? [s.audience] : [])];
             add(s.id,texts.flatMap(text=>inspectText(text,s.refs,pack)));
             if(/\b(?:houve|registrou|registraram|aumentou|aumentaram|reduziu|reduziram|diminuiu|diminuiram|melhorou|melhoraram|piorou|pioraram|ficou|atingiu|observad\w*)\b/i.test(normalize(s.text)))
                 add(s.id,['verificar_interpretacao'],'review');
@@ -100,10 +106,11 @@
     }
     function lines(section, pack) {
         return [(section.type==='hypothesis' ? 'Hipótese a verificar · ' : '')+section.text,
+            ...(section.method ? ['Formato · '+actionMethods[section.method], 'Público · '+section.audience] : []),
             ...(section.owner ? ['Área sugerida · '+section.owner] : []),
             ...(section.days ? ['Prazo sugerido · '+section.days+' dias'] : section.type==='action' ? ['Prazo a pactuar'] : []),
             ...(section.followUp ? ['Como acompanhar · '+section.followUp] : []),
             ...section.refs.map(key=>project(key,pack)).filter(Boolean).map(line=>'Evidência oficial · '+line)];
     }
-    globalThis.ReportEvidence = {evidence,validate,project,lines,clone,privateData};
+    globalThis.ReportEvidence = {evidence,validate,project,lines,clone,privateData,actionMethods};
 })();

@@ -36,8 +36,16 @@ const fetcher: typeof fetch = async (url, init) => {
             { type: 'integrated', title: 'Dado inventado', text: 'Houve 999 acidentes.', refs },
             { type: 'integrated', title: 'Fora do recorte', text: 'Conferir os registros.', refs: ['inventado'] },
         ],
-        actions: [{ title: 'Conciliar registros operacionais', text: 'Começar pelos registros pendentes e registrar o motivo das divergências.', refs,
-            owner: 'Segurança Viária e Operações', followUp: 'Verificar as pendências no próximo fechamento.', days: 30 }],
+        actions: [
+            { method: 'post', title: 'Como registrar uma ocorrência', text: 'Publicar no canal interno um guia com os dados necessários para abrir uma ocorrência.', refs,
+                audience:'Motoristas e líderes de turno', owner: 'Segurança Viária e Operações', followUp: 'Verificar as pendências no próximo fechamento.', days: 30 },
+            { method: 'post', title: 'Material redundante', text: 'Repetir o guia no mesmo canal.', refs,
+                audience:'Motoristas', owner: 'Operações', followUp: 'Conferir a publicação.', days: 30 },
+            { method: 'flyer', title: 'Guia de conferência no pátio', text: 'Distribuir um guia curto nas áreas de entrega de documentos.', refs,
+                audience:'Equipes de pátio', owner: 'Operações', followUp: 'Conferir se as entregas chegam completas.', days: 30 },
+            { method: 'campanha', title: 'Material excedente', text: 'Lançar uma campanha no mesmo ciclo.', refs,
+                audience:'Equipes de pátio', owner: 'Operações', followUp: 'Conferir o alcance.', days: 60 },
+        ],
     });
     return Response.json({ choices: [{ finish_reason: completion, message: { content: answer } }] });
 };
@@ -75,7 +83,10 @@ await invoke({ action: 'generate', ...basis, expectedReportBasis: 'incorreto' },
 const generated = (await invoke({ action: 'generate', ...basis })).result;
 assert(groqCalls === 1 && captured.response_format.json_schema.strict, 'Contrato Groq');
 assert(!JSON.stringify(captured).includes(managementContext.observations), 'Contexto sem consentimento enviado');
-assert(generated.evidenceKeys.length === 8 && generated.coverage.partial && generated.document.sections.length === 3, 'Cobertura ou conteúdo');
+assert(generated.evidenceKeys.length === 8 && generated.coverage.partial && generated.document.sections.length === 4, 'Cobertura ou conteúdo');
+const suggestions=generated.document.sections.filter((section: {type: string})=>section.type==='action');
+assert(suggestions.map((section: {method: string})=>section.method).join(',')==='post,flyer'
+    && suggestions[0].audience==='Motoristas e líderes de turno','Limite, formatos distintos e público');
 assert(generated.validation.removed===2 && generated.document.sections[1].type==='hypothesis' && generated.document.sections[2].owner==='Segurança Viária e Operações', 'Elaboração parcial ou plano');
 assert(!/inventado|999 acidentes/.test(JSON.stringify(generated.document)), 'Conteúdo arbitrário do provedor aceito');
 const review = { action: 'review', ...basis, document: generated.document, reviewAcknowledged: true };

@@ -32,7 +32,7 @@ window.ReportPdf={
  function cover(title){
   const label=executive?'EDIÇÃO EXECUTIVA':'EDIÇÃO COMPLETA';
   const size=28,step=12; font(size,true,white);
-  const lines=doc.splitTextToSize(title,W-25),height=29+step*lines.length;
+  const lines=doc.splitTextToSize(title.replace(/segurança viária/giu,'SEGURANÇA VIÁRIA'),W-25),height=29+step*lines.length;
   doc.setFillColor(...navy);doc.rect(30,y,W,height,'F');
   doc.setFillColor(...blue);doc.triangle(190,y+height-35,190,y+height,153,y+height,'F');
   doc.setFillColor(...gold);doc.rect(42,y+8,19,1.1,'F');font(9,true,gold);doc.text(label,42,y+15);

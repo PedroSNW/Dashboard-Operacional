@@ -89,6 +89,12 @@
         const s=state.draft.sections.find(s=>s.id===activeId)??state.draft.sections[0];activeId=s?.id;
         const editor=el('section','','report-review-body');if(s){const title=field('Título da seção',s.title,value=>s.title=value,false);title.querySelector('input').dataset.sectionTitle='true';editor.append(title,field(s.type==='action'?'O que fazer':'Texto da análise',s.text,value=>s.text=value));
             if(s.type==='action'){
+                if(Object.hasOwn(s,'method')){
+                    const methodLabel=el('label','Formato','report-editor-field'),method=el('select');
+                    for(const [value,label] of Object.entries(C.actionMethods))method.add(new Option(label,value));
+                    method.value=s.method;method.onchange=()=>{s.method=method.value;changed();};
+                    methodLabel.append(method);editor.append(methodLabel,field('Público',s.audience,value=>s.audience=value,false,100));
+                }
                 const wrap=el('label','Horizonte sugerido'),days=el('select');
                 for(const d of [0,30,60,90])days.add(new Option(d?`${d} dias`:'A pactuar',String(d)));
                 days.value=String(s.days);days.onchange=()=>{s.days=Number(days.value);changed();};wrap.append(days);editor.append(wrap);
