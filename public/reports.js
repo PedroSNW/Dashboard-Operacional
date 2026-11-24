@@ -116,12 +116,29 @@ async function requestManagementReport(interpret=false) {
     if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Faça login novamente.');
     const v8=reportUsesV8();
     if(v8&&interpret)throw Error('Use o editor do relatório Groq.');
-    const response=await fetch(v8?reportV8Endpoint():SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},
+    const response=await fetchReportEdge(v8?reportV8Endpoint():SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${data.session.access_token}`,'Content-Type':'application/json'},
         body:JSON.stringify(v8?{action:'preview',selection,managementContext}:{action:'report',selection,interpret,provider,managementContext,...(interpret?{expectedUpdatedAt:managementReport.snapshotUpdatedAt,expectedReportBasis:managementReport.basis}:{})})});
     const body=await response.json().catch(()=>null);
-    if(!response.ok||!body?.success)throw Error(body?.error||`Relatório indisponível (HTTP ${response.status}).`);
+    if(!response.ok||!body?.success)throw reportEdgeError(response,body,'Relatório indisponível.');
     if(managementContext&&!interpret&&body.report?.intelligence?.version!==6)throw Error('Atualize a Edge Function para usar o contexto gerencial V6.');
     return body;
+}
+async function fetchReportEdge(endpoint,options) {
+    try {
+        return await fetch(endpoint,options);
+    } catch {
+        throw Error('Não foi possível conectar ao serviço de relatórios. Verifique a conexão e tente novamente.');
+    }
+}
+function reportEdgeError(response,body,fallback) {
+    const message=typeof body?.error==='string'&&body.error.trim()?body.error:fallback;
+    const code=body?.errorCode??body?.code;
+    const id=body?.diagnosticId??response.headers?.get('X-DGranel-Diagnostic-Id');
+    const details=[];
+    if(!response.ok)details.push(`HTTP ${response.status}`);
+    if(typeof code==='string'&&/^[a-z0-9_:-]{1,80}$/i.test(code))details.push(code);
+    if(typeof id==='string'&&/^[a-z0-9_-]{1,80}$/i.test(id))details.push(`diagnóstico ${id}`);
+    return Error(details.length?`${message} (${details.join(' · ')})`:message);
 }
 const reportUsesV8=()=>document.querySelector('meta[name="dgranel-report-engine"]')?.content==='v8';
 const reportV8Endpoint=()=>new URL('seguranca-viaria-groq-v2',SUPABASE_AI_FUNCTION_ENDPOINT).href;

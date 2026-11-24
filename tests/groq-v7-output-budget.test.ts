@@ -34,8 +34,41 @@ try{
   let sent=0;const source=fixture(1);source.management.actionPlan=[];const result=await generateAuthoredReport(source,'groq',createGroqGuard(),env({REPORT_V7_TOKEN_MARGIN:'400'}),async(_url,init)=>{sent=JSON.parse(String(init?.body)).max_completion_tokens;return Response.json({usage:usage(),choices:[{finish_reason:'stop',message:{content:JSON.stringify(wireDocument(authored(1)))}}]});});assert(sent===5120&&result.meta.effectiveCompletionLimit===5120&&result.meta.budgetAdjustmentReason==='none','5120 descartado');
  });
  await test('consumo real conciliado+800; raciocínio não duplicado; JSON insuficiente bloqueia',async()=>{
-  const guard=createGroqGuard();await generateAuthoredReport(r,'groq',guard,env(),async()=>success());assert(guard.budget().availableTokenBudget===8000-(4583+800),'Uso+800');let calls=0;
-  const e=await fails(()=>generateAuthoredReport(r,'groq',guard,env(),async()=>{calls++;return success();}),429);assert(calls===0&&e.diagnostic.code==='insufficient_json_budget'&&e.diagnostic.completion?.effectiveCompletionLimit===null,'Janela');
+  let now=0,calls=0;const guard=createGroqGuard(()=>now);
+  await generateAuthoredReport(r,'groq',guard,env(),async()=>success('stop',3010));
+  now=22_000;
+  const e=await fails(()=>generateAuthoredReport(r,'groq',guard,env(),async()=>{calls++;return success();}),429);
+  assert(calls===0&&e.retryAfter===38&&e.diagnostic.code==='insufficient_json_budget'&&e.diagnostic.completion?.availableTokenBudget===2607&&e.diagnostic.completion?.effectiveCompletionLimit===null,'Janela parcial');
+  now+=e.retryAfter!*1000;
+  await generateAuthoredReport(r,'groq',guard,env(),async()=>{calls++;return success();});
+  assert(calls===1,'Uma nova tentativa após a janela deveria alcançar a Groq');
+ });
+ await test('janela parcial aproveita contexto menor e contabiliza os bloqueios combinados',async()=>{
+  let now=0,calls=0;
+  const source=fixture(40),guard=createGroqGuard(()=>now);
+  const full=authorPayload(source,'groq','openai/gpt-oss-120b',authorConfig(env()));
+  const available=full.estimatedTokens+4096+800-120;
+  guard.observe(new Headers({'x-ratelimit-remaining-tokens':String(available),'x-ratelimit-reset-tokens':'25s'}));
+  const plan=prepareAuthoringDiagnostic(source,env(),guard);
+  if(!('inputEstimatedTokens' in plan)||typeof plan.inputEstimatedTokens!=='number')throw Error('Pré-verificação indisponível');
+  const effective=plan.effectiveCompletionLimit;
+  assert(plan.available&&plan.inputEstimatedTokens<full.estimatedTokens,'A prévia deve encontrar um contexto menor');
+  const result=await generateAuthoredReport(source,'groq',guard,env(),async(_url,init)=>{
+   calls++;
+   const payload=JSON.parse(String(init?.body));
+   assert(payload.max_completion_tokens===effective&&payload.max_completion_tokens>=4096,'Reserva mínima');
+   return Response.json({usage:usage(2200),choices:[{finish_reason:'stop',message:{content:JSON.stringify(wireDocument(authored(1)))}}]});
+  },'',effective);
+  assert(calls===1&&result.coverage.sent<source.indicators.length&&C.validate(result.document,result.evidence).valid,'Relatório compacto');
+
+  const overlap=createGroqGuard(()=>now);
+  for(const tokenCount of [300,5500]){
+   const reservation=overlap.reserve(tokenCount);
+   assert(reservation.allowed,'Reserva de teste');overlap.finish(reservation.ticket);
+   now+=15_000;
+  }
+  overlap.observe(new Headers({'x-ratelimit-remaining-tokens':'2000','x-ratelimit-reset-tokens':'10s'}));
+  assert(planAuthoringBudget(built(),overlap).retryAfter===45,'A primeira expiração e o reset remoto não liberam saldo suficiente');
  });
  await test('reserva exclusiva entre chamadas concorrentes',async()=>{
   const guard=createGroqGuard();let release:any,started:any,calls=0;const hold=new Promise(resolve=>release=resolve),start=new Promise(resolve=>started=resolve);
