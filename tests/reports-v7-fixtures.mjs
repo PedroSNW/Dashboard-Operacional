@@ -14,5 +14,5 @@ export function authored(count=8){const document={authoredReportVersion:1,title:
 // Test-only inverse adapter. Production never accepts the old editor schema as a wire response.
 export function wireDocument(document){
  if(!document||document.authoredReportVersion!==1||!Array.isArray(document.sections))return document;
- return {title:document.title,sections:document.sections.filter(s=>!s.proposal).map(s=>({type:s.type,title:s.title,text:s.text,refs:s.refs,claims:s.claims.map(c=>c.ref+'|'+c.relation)})),recommendations:document.sections.filter(s=>s.proposal).map(s=>({type:s.type,title:s.title,text:s.text,refs:s.refs,...s.proposal})),chartIds:document.chartIds,limitations:document.limitations};
+ return {title:document.title,sections:document.sections.filter(s=>!s.proposal).map(s=>({type:s.type,title:s.title,text:s.text,refs:s.refs,claims:s.claims.map(c=>({...c}))})),recommendations:document.sections.filter(s=>s.proposal).map(s=>({type:s.type,title:s.title,text:s.text,refs:s.refs,...s.proposal})),chartIds:document.chartIds,limitations:document.limitations};
 }

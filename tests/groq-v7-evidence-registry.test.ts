@@ -13,8 +13,9 @@ assert(keys[0]!=='E0'&&keys.includes('E0')&&!keys.includes(omitted),'Fixture pre
 assert(!context.columns.includes('id')&&built.coverage.partial,'Identidade ambígua');
 assert(built.pack.facts['E0.latest'].indicatorId!==built.pack.facts['E1.latest'].indicatorId,'Nomes iguais confundiram IDs');
 assert(JSON.stringify(built.allowedRefs)===JSON.stringify(keys.flatMap(key=>context.columns.map((field:string)=>key+'.'+field).filter((ref:string)=>Object.hasOwn(built.pack.facts,ref)))),'Registro diverge do payload');
-const section=(refs:string[],claims:string[]=[],text='Orientação para avaliar os registros disponíveis.',type='summary')=>({type,title:'Síntese gerencial',text,refs,claims});
-const good=section(['E0.latest','E0.delta'],['E0.delta|decrease'],'Houve redução no indicador do recorte. Consulte {{E0.latest}}.');
+const section=(refs:string[],claims:{ref:string;relation:string}[]=[],text='Orientação para avaliar os registros disponíveis.',type='summary')=>({type,title:'Síntese gerencial',text,refs,claims});
+const decrease={ref:'E0.delta',relation:'decrease'};
+const good=section(['E0.latest','E0.delta'],[decrease],'Houve redução no indicador do recorte. Consulte {{E0.latest}}.');
 const response=(sections:any[],chartIds:string[]=['E0'])=>({title:'Análise gerencial',sections,recommendations:[],chartIds,limitations:[]});
 async function generate(document:any){
     return await generateAuthoredReport(report,'groq',createGroqGuard(),k=>k==='GROQ_API_KEY'?'mock-key':undefined,async()=>{
@@ -32,17 +33,17 @@ try{
     assert(all.validation.acceptedSectionsCount===5&&!all.validation.partial,'Cinco seções válidas');
     const errors=[
         section(['E0']),section(['E0.invalidField']),section([omitted+'.latest']),
-        section(['E1.latest'],['E0.delta|decrease']),section(['E0.delta'],['E0.delta|inventada']),
+        section(['E1.latest'],[decrease]),section(['E0.latest'],[{ref:'E0.latest',relation:'decrease'}]),
     ];
     const invalid=await reject(response(errors));
     const diagnostics=invalid.sectionEvidenceDiagnostics;
-    const expected=['invalid_ref_format','unknown_ref','ref_not_sent','claim_ref_not_in_section','claim_relation_unsupported'];
+    const expected=['invalid_ref_format','unknown_ref','ref_not_sent','claim_ref_not_in_section','claim_field_mismatch'];
     assert(invalid.rejectedSectionsCount===5&&invalid.acceptedSectionsCount===0,'Descarte coletivo');
     assert(diagnostics.every((entry:any,index:number)=>entry.sectionIndex===index&&entry.sectionType==='summary'&&entry.codes[0]===expected[index]),'Classificação por seção');
     assert(diagnostics[0].malformedReferenceCount===1&&diagnostics[1].unknownReferenceCount===1&&diagnostics[2].outOfScopeReferenceCount===1&&diagnostics[3].invalidClaimsCount===1,'Contagens');
     const partial=await generate(response([good,...errors]));
     assert(partial.validation.partial&&partial.document.sections.length===1,'Mistura factual');
-    assert((await reject(response([section(['E0.delta'],['E0.delta|increase'])]))).validationCode==='claim_relation_factually_false','Relação falsa');
+    assert((await reject(response([section(['E0.delta'],[{ref:'E0.delta',relation:'increase'}])]))).validationCode==='claim_relation_factually_false','Relação falsa');
     const without=await generate(response([section([],[],'Hipótese para avaliar a qualidade dos registros.','hypothesis')]));
     assert(without.validation.sectionEvidenceDiagnostics[0].codes[0]==='qualitative_section_without_ref','Hipótese sem referências');
     assert((await reject(response([section([],[],'Houve redução no resultado.','hypothesis')]))).validationCode==='missing_refs','Fato sem refs');
@@ -51,7 +52,8 @@ try{
     assert((await reject(response([missing]))).sectionEvidenceDiagnostics[0].referenceState==='missing','Campo ausente');
     assert((await reject(response([section(['Nome duplicado fictício'])]))).validationCode==='invalid_ref_format','Nome aceito');
     assert((await reject(response([section(['E999.latest'])]))).validationCode==='unknown_ref','Indicador inventado');
-    assert((await reject(response([good],[omitted]))).validationCode==='grafico_inexistente','Gráfico omitido');
+    const withoutChart=await generate(response([good],[omitted]));
+    assert(withoutChart.validation.partial&&withoutChart.validation.validationCode==='grafico_inexistente'&&!withoutChart.document.chartIds.length,'Gráfico omitido');
     assert((await reject(response([section(['E0.latest'],[],'Avaliar {{E999.latest}}.')]))).validationCode==='referencia_textual','Placeholder externo');
     const misleadingPosition=keys.findIndex((_,index)=>!keys.includes('E'+index));
     assert(misleadingPosition>=0,'Fixture precisa de posição que aponte para chave omitida');

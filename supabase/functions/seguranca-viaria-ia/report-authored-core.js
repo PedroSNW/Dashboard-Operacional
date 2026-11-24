@@ -108,11 +108,11 @@
         .replace(/^(\s*(?:proposta de\s+)?)(?:reduzir|diminuir|aumentar|melhorar)\b/,'$1atuar')
         .replace(/\b(?:avaliar|investigar|verificar) se (?:houve|ocorreu) (?:uma )?(?:reducao|aumento|queda|melhora|piora)\b/g,'investigar a evolução');
     const tentative=text=>/^(?:\s*)(?:propoe-se|sugere-se|recomenda-se|se aprov)/.test(normalize(text))&&!/foi |houve |observad|registrou|apresentou/.test(normalize(text));
-    function referenceDiagnostic(section, index, pack, allowed, wireIssues=[]) {
+    function referenceDiagnostic(section, index, pack, allowed) {
         const diagnostic={sectionIndex:index,sectionType:types.includes(section.type)?section.type:null,
             referenceCount:section.refs.length,recognizedReferenceCount:0,unknownReferenceCount:0,
-            outOfScopeReferenceCount:0,malformedReferenceCount:0,invalidClaimsCount:wireIssues.length,
-            referenceState:section.refs.length?'present':'empty',codes:wireIssues.map(issue=>issue.code),claimIssues:[]};
+            outOfScopeReferenceCount:0,malformedReferenceCount:0,invalidClaimsCount:0,
+            referenceState:section.refs.length?'present':'empty',codes:[],claimIssues:[]};
         const classify=ref=>{
             if(!/^E(?:0|[1-9]\d*)\.[a-zA-Z][a-zA-Z0-9_]*$/.test(ref))return 'invalid_ref_format';
             if(!Object.hasOwn(pack.facts,ref))return 'unknown_ref';
@@ -123,8 +123,6 @@
             claimIndex,referenceExists:ref!==null&&Object.hasOwn(pack.facts,ref),
             referenceSent:ref!==null&&allowed.has(ref),inSection:ref!==null&&section.refs.includes(ref),codes
         });
-        const invalidIndices=new Set(wireIssues.map(issue=>issue.claimIndex));
-        for(const issue of wireIssues)addClaimIssue(issue.claimIndex,issue.ref,[issue.code]);
         for(const ref of section.refs){
             const code=classify(ref);
             if(code==='invalid_ref_format')diagnostic.malformedReferenceCount++;
@@ -133,9 +131,7 @@
             else diagnostic.recognizedReferenceCount++;
             if(code)diagnostic.codes.push(code);
         }
-        let claimIndex=0;
-        for(const claim of section.claims){
-            while(invalidIndices.has(claimIndex))claimIndex++;
+        for(const [claimIndex,claim] of section.claims.entries()){
             const scopeIssue=classify(claim.ref);
             const inSection=section.refs.includes(claim.ref);
             const factualIssue=scopeIssue?null:claimIssue(claim,pack);
@@ -145,18 +141,18 @@
                 diagnostic.codes.push(...codes);
                 addClaimIssue(claimIndex,claim.ref,codes);
             }
-            claimIndex++;
         }
-        diagnostic.claimIssues.sort((a,b)=>a.claimIndex-b.claimIndex);
         return diagnostic;
     }
-    function validate(document, pack, allowedRefs=null, wireIssues={}, repairClaimRefs=false) {
+    function validate(document, pack, allowedRefs=null, {groqGeneration=false}={}) {
         const structural=checkSchema(document),issues=[];
         const add=(section,codes,severity,path,stage)=>{if(codes.length)issues.push({section,codes:[...new Set(codes)],severity,path:safePath(path),stage});};
         if(structural.length){add(null,['schema_invalido'],'blocking',structural[0],'internal_schema_validation');return {valid:false,document:null,issues,structural:structural.map(safePath),acceptedSectionsCount:0,rejectedSectionsCount:Array.isArray(document?.sections)?document.sections.length:0,reviewableIssuesCount:0,fatalIssuesCount:1};}
         const result=clone(document),ids=new Set(),seen=new Set(),seenActions=new Set(),originalCount=result.sections.length;
         const allowed=new Set(allowedRefs??Object.keys(pack.facts)),sectionEvidenceDiagnostics=[];
-        add(null,textIssues(result.title,[],pack),'blocking','$.title','evidence_validation');
+        const titleIssues=textIssues(result.title,[],pack);
+        add(null,titleIssues,'blocking','$.title','evidence_validation');
+        if(groqGeneration&&titleIssues.length)result.title='Relatório gerencial';
         if(!result.title.trim()||result.title.length>100){add(null,['titulo_invalido'],'editorial','$.title','editorial_validation');if(!result.title.trim())result.title='Relatório gerencial';}
         if(!originalCount)add(null,['quantidade_secoes'],'blocking','$.sections','internal_schema_validation');
         else if(originalCount>10)add(null,['quantidade_secoes'],'review','$.sections','editorial_validation');
@@ -169,7 +165,7 @@
             // The claim already names an exact fact. Attach it only when the same
             // indicator is already cited and the independent claim check passes.
             let repairedClaimRefs=0;
-            if(repairClaimRefs&&refs.length){
+            if(groqGeneration&&refs.length){
                 const citedKeys=new Set(refs.filter(ref=>allowed.has(ref)).map(ref=>ref.split('.')[0]));
                 for(const claim of s.claims){
                     if(!refs.includes(claim.ref)&&refs.length<40&&allowed.has(claim.ref)&&citedKeys.has(claim.ref.split('.')[0])&&checkClaim(claim,pack)){
@@ -179,7 +175,7 @@
                 }
             }
             if(repairedClaimRefs)editorial.push('claim_ref_attached');
-            const evidenceDiagnostic=referenceDiagnostic(s,index,pack,allowed,wireIssues[index]);
+            const evidenceDiagnostic=referenceDiagnostic(s,index,pack,allowed);
             codes.push(...evidenceDiagnostic.codes);
             if(new Set(refs).size!==refs.length)editorial.push('referencia_repetida');
             const fields=[s.title,s.text,...(s.proposal?[s.proposal.problem,s.proposal.objective,...s.proposal.actions,s.proposal.owner,s.proposal.monitoring,s.proposal.completion]:[])];
@@ -222,9 +218,18 @@
             return !codes.length;
         });
         const chartKeys=new Set([...allowed].map(ref=>ref.split('.')[0]));
-        if(result.chartIds.some(key=>!chartKeys.has(key)))add(null,['grafico_inexistente'],'blocking','$.chartIds','evidence_validation');
-        result.limitations.forEach((text,index)=>{const unsupported=comparisons.some(([pattern])=>pattern.test(comparisonText(text))&&!tentative(text));add(null,[...textIssues(text,[],pack,'limitation'),...(unsupported?['afirmacao_sem_evidencia']:[])],'blocking','$.limitations.'+index,'evidence_validation');if(text.length>1800)add(null,['texto_longo'],'review','$.limitations.'+index,'editorial_validation');});
-        const blocking=issues.filter(i=>i.severity==='blocking'),fatal=blocking.some(i=>i.section===null)||!result.sections.length;
+        const validCharts=result.chartIds.filter(key=>chartKeys.has(key));
+        if(validCharts.length!==result.chartIds.length)add(null,['grafico_inexistente'],'blocking','$.chartIds','evidence_validation');
+        if(groqGeneration)result.chartIds=validCharts;
+        const validLimitations=result.limitations.filter((text,index)=>{
+            const unsupported=comparisons.some(([pattern])=>pattern.test(comparisonText(text))&&!tentative(text));
+            const codes=[...textIssues(text,[],pack,'limitation'),...(unsupported?['afirmacao_sem_evidencia']:[])];
+            add(null,codes,'blocking','$.limitations.'+index,'evidence_validation');
+            if(text.length>1800)add(null,['texto_longo'],'review','$.limitations.'+index,'editorial_validation');
+            return !codes.length;
+        });
+        if(groqGeneration)result.limitations=validLimitations;
+        const blocking=issues.filter(i=>i.severity==='blocking'),fatal=!result.sections.length||!groqGeneration&&blocking.some(i=>i.section===null);
         result.sections.forEach((s,index)=>s.order=index+1);
         return {valid:!blocking.length&&!fatal,document:fatal?null:result,issues,structural:[],sectionEvidenceDiagnostics,acceptedSectionsCount:result.sections.length,rejectedSectionsCount:originalCount-result.sections.length,reviewableIssuesCount:issues.filter(i=>i.severity!=='blocking').length,fatalIssuesCount:blocking.length,reviewRequired:issues.some(i=>i.severity!=='blocking')};
     }

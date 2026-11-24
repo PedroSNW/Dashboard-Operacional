@@ -1,7 +1,7 @@
 // Safe V7 contract diagnostics. Never log provider messages or failed_generation.
 import {groqUsage,safeFinishReason} from './groq-policy.js';
 import {GROQ_PROPOSAL_TYPES} from './groq-authoring-wire.ts';
-export const GROQ_AUTHORING_REVISION='v7-authoring-budget-9';
+export const GROQ_AUTHORING_REVISION='v7-authoring-claims-10';
 export function validationDiagnostic(result:any,stage?:string,code?:string,path?:string){
     const first=result?.issues?.find((i:any)=>i.severity==='blocking')??result?.issues?.[0];
     const safe=(globalThis as any).ReportAuthoredCore.safePath;

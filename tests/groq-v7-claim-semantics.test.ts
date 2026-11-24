@@ -15,7 +15,7 @@ async function generate(wire:any){
     };
     return generateAuthoredReport(report,'groq',createGroqGuard(),key=>key==='GROQ_API_KEY'?'mock-key':undefined,transport);
 }
-async function firstClaimError(refs:string[],claim:string){
+async function firstClaimError(refs:string[],claim:{ref:string;relation:string}){
     const wire=synthetic();
     wire.sections=[{...wire.sections[0],text:'Conferir os registros disponíveis.',refs,claims:[claim]}];
     wire.recommendations=[];
@@ -37,9 +37,9 @@ try{
         [['E1.latest'],'E0.delta|decrease','claim_ref_not_in_section'],
         [['E2.latest'],'E2.latest|within_target','claim_direction_not_validated'],
         [['E2.delta'],'E2.delta|improved','claim_direction_not_validated'],
-        [['E0.delta'],'E0.delta|PRIVATE_RELATION','claim_relation_unsupported'],
     ] as const){
-        const issue=await firstClaimError([...refs],claim);
+        const [ref,relation]=claim.split('|');
+        const issue=await firstClaimError([...refs],{ref,relation});
         assert(issue.referenceExists&&issue.referenceSent&&issue.claimIndex===0&&issue.codes.includes(code),code);
     }
     const gap=fixture(1);

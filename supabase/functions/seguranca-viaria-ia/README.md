@@ -1,6 +1,6 @@
 # Supabase Edge Function: seguranca-viaria-ia
 
-> Revisão atual da V7: `v7-integrated-validation-5`. Auditoria, diferenças de contrato, resultados e homologação: [AUDITORIA-CORRECAO-EDGE-V7.md](../../../AUDITORIA-CORRECAO-EDGE-V7.md). O HTTP 200 da Groq não substitui a validação da aplicação.
+> Revisão atual da V7 `v7-authoring-claims-10`. O histórico da validação está na [auditoria da Edge Function V7](../../../AUDITORIA-CORRECAO-EDGE-V7.md).
 D'Granel Transportes — Central de Inteligência Artificial Multiprovedor (Gemini, OpenAI & Groq)
 
 Esta função realiza a ponte segura entre o Dashboard Operacional da D'Granel e os provedores oficiais de Inteligência Artificial: **Google Gemini API**, **OpenAI Responses API** e **Groq Chat Completions API**.
@@ -44,7 +44,7 @@ Não publicar apenas `index.ts`. `supabase/functions/deno.json` permanece a conf
 
 ### Validação e logs V7
 
-O schema WireV2 e `strict:true` foram preservados. O schema interno inclui IDs, ordem, prioridade e propostas aninhadas gerados pelo conversor. Claims usam apenas relações enumeradas e referências efetivamente fornecidas; espaços em torno de `|` podem ser normalizados, mas referências não são inventadas. Gráficos também ficam restritos aos indicadores enviados ao modelo.
+O schema `authored_report_wire_v3` usa `strict:true` e recebe cada claim como objeto com `ref` e `relation`. As relações são enumeradas e as referências são conferidas com os dados enviados. O conversor gera IDs, ordem e prioridade para o editor V7. Gráficos ficam restritos aos indicadores enviados ao modelo. Na geração Groq, um título inválido recebe um título padrão e gráficos, limitações e seções inválidos são removidos com indicação de resultado parcial. A geração exige ao menos uma seção validada e todo resultado segue para revisão humana.
 
 Estrutura perigosa/incompatível, referências inexistentes, números factuais livres, claims contraditórios e riscos de segurança são bloqueantes. Partes inválidas são removidas com marcação explícita de parcialidade; nada aproveitável gera erro. Repetição, recomendação genérica, proposta recuperável, extensão e títulos são avisos de revisão/editoria, sem descarte automático. Toda geração continua exigindo confirmação humana antes da revisão local/exportação. Uma seção estritamente qualitativa identificada pode ter refs/claims vazias, desde que não afirme resultados factuais. Horizontes propostos30/60/90 dias são permitidos em limitações/propostas; isso não libera números de indicadores.
 

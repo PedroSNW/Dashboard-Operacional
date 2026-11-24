@@ -14,10 +14,10 @@ for(const kind of ['A','B','C']){
  console.log('PASS contrato '+kind+': schema/serialização, mesmo modelo/prompt/dados/orçamento, resposta simulada válida');
 }
 assert(calls===3,'Chamadas extras');
-const audit=auditAuthoringSchema(GROQ_AUTHORING_WIRE_SCHEMA);assert(audit.valid&&audit.objects===3&&audit.maxObjectDepth===2&&audit.unions===0,'Contrato não foi simplificado');
+const audit=auditAuthoringSchema(GROQ_AUTHORING_WIRE_SCHEMA);assert(audit.valid&&audit.objects===4&&audit.maxObjectDepth===3&&audit.unions===0,'Contrato estrito com claim tipado');
 const expanded=expandGroqAuthoring(documents.C),pack=C.evidence(fixture(2));assert(C.validate(expanded,pack).valid&&expanded.authoredReportVersion===1&&JSON.stringify(expanded.sections.filter((s:any)=>s.proposal).map((s:any)=>s.proposal.days))==='[30,60,90]','Editor/plano/evidências');
-for(const mutate of [(wire:any)=>wire.sections[0].claims=['E0.delta|increase'],(wire:any)=>wire.sections[0].refs=['E999.latest'],(wire:any)=>wire.sections[0].text='Houve 999 acidentes.']){const wire=structuredClone(documents.C);mutate(wire);assert(!C.validate(expandGroqAuthoring(wire),pack).valid,'Validação factual removida');}
-const bad=structuredClone(documents.C);bad.sections[0].claims=['not_a_structured_claim'];let rejected=false;try{expandGroqAuthoring(bad);}catch{rejected=true;}assert(rejected,'Afirmação inválida normalizada silenciosamente');
+for(const mutate of [(wire:any)=>wire.sections[0].claims=[{ref:'E0.delta',relation:'increase'}],(wire:any)=>wire.sections[0].refs=['E999.latest'],(wire:any)=>wire.sections[0].text='Houve 999 acidentes.']){const wire=structuredClone(documents.C);mutate(wire);assert(!C.validate(expandGroqAuthoring(wire),pack).valid,'Validação factual removida');}
+const bad=structuredClone(documents.C);bad.sections[0].claims=['not_a_structured_claim'];assert(C.checkSchema(bad,GROQ_AUTHORING_WIRE_SCHEMA).includes('$.sections.0.claims.0:objeto'),'Schema aceitou claim em texto');
 console.log('PASS contrato completo: expansão sem inventar fatos, editor V7, planos30/60/90 e rejeição factual');
 for(const kind of ['A','B','C']){
  const error=await runProbeCase(cases[kind],'FAKE_KEY',async()=>Response.json({error:{code:'json_validate_failed',type:'invalid_request_error',message:'Failed to validate JSON',failed_generation:'{"SECRET_CORPORATE":'}},{status:400}));assert(error.httpStatus===400&&error.detail.failedJson==='invalid'&&!JSON.stringify(error).includes('SECRET_CORPORATE'),'400 privado');
