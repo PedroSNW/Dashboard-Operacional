@@ -5,7 +5,7 @@ const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w6wowhTeTPXuDiZTgSjCgA_pw_5UuQO';
 const SUPABASE_STATE_ENDPOINT = `${SUPABASE_URL}/rest/v1/dashboard_state`;
 const SUPABASE_AI_FUNCTION_ENDPOINT = `${SUPABASE_URL}/functions/v1/seguranca-viaria-ia`;
-const DEFAULT_LOGO_SRC = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&s=10.png';
+const DEFAULT_LOGO_SRC = 'report-logo-dgranel.png';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
@@ -486,7 +486,10 @@ async function signOutUser() {
 
 async function handleAuthSession(session) {
     if(currentSession?.user?.id!==session?.user?.id||!session){sessionEpoch++;pendingTracker.clear();appInitialized=false;window.PendingChangesUI?.clear();}
-    if(currentSession?.user?.id!==session?.user?.id)window.resetAIConversation?.();
+    if(currentSession?.user?.id!==session?.user?.id){
+        window.resetAIConversation?.();
+        window.closeWorkspaceSearch?.();
+    }
     currentSession = session;
     document.body.classList.toggle('authenticated', Boolean(session));
 

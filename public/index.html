@@ -7,7 +7,7 @@
     <script src="theme-preference.js?v=3.1"></script>
     <title>Dashboard DGranel - Sistema Operacional de Segurança Viária</title>
     <meta name="description" content="Painel de controle e monitoramento operacional de segurança viária do sistema DGranel.">
-    <link rel="icon" type="image/png" href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&amp;s=10.png">
+    <link rel="icon" type="image/png" href="report-logo-dgranel.png">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -21,12 +21,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=analysis">
+        <link rel="stylesheet" href="style.css?v=interface">
     <link rel="stylesheet" href="workspace-v3.css?v=ux3.2">
     <link rel="stylesheet" href="motion-v3-1.css?v=3.1">
     <link rel="stylesheet" href="pending-changes.css?v=1">
         <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
+    <link rel="stylesheet" href="workspace-ui.css?v=1">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
@@ -34,7 +35,8 @@
         <div class="glass-card w-full max-w-md rounded-2xl p-7">
             <div class="mb-6">
                 <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">Acesso corporativo</p>
-                <h2 class="mt-2 text-2xl font-black text-white">D'GRANEL</h2>
+                <img class="workspace-login-logo" src="report-logo-dgranel.png" alt="D’Granel" width="150" height="62">
+                <h2 class="mt-2 text-2xl font-bold text-white">Acesse o dashboard</h2>
                 <p class="mt-2 text-sm text-slate-400">Entre com seu e-mail corporativo para acessar o painel.</p>
             </div>
             <form id="authForm" class="space-y-4">
@@ -60,7 +62,7 @@
             <div class="flex w-full flex-col items-start gap-3 lg:w-auto lg:justify-start">
                 <div class="flex items-center gap-3">
                     <div id="developerModeTrigger" onclick="handleDeveloperModeClick()" title="Logo D'Granel" class="relative flex h-12 w-12 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500 to-amber-700 p-0.5 shadow-md transition-all hover:opacity-90">
-                        <img id="dashboardLogo" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1dNCR2-JnxH8MXB-2umhVPO385SbK0cg5Yy1-nk7tmg&amp;s=10.png" alt="D'Granel Logo" onerror="handleLogoError(this)" class="h-full w-full rounded-[10px] object-cover">
+                        <img id="dashboardLogo" src="report-logo-dgranel.png" alt="D’Granel" onerror="handleLogoError(this)" class="h-full w-full rounded-[10px] object-cover">
                     </div>
                     <input type="file" id="logoInput" accept="image/*" class="hidden" onchange="handleLogoUpload(event)">
                     <div>
@@ -76,7 +78,7 @@
                 <button onclick="switchTab('home')" id="tab-home" title="Início" aria-label="Início" class="tab-btn active flex shrink-0 items-center justify-center rounded-lg px-3.5 py-2 text-base text-slate-300 transition hover:text-white"><i class="fa-solid fa-house text-amber-400" aria-hidden="true"></i></button>
                 <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-chart-pie text-amber-400"></i> Executive Dashboard</button>
                 <button onclick="switchTab('datagrid')" id="tab-datagrid" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-table"></i> Consulta &amp; Repositório</button>
-                <button onclick="switchTab('intelligence')" id="tab-intelligence" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-chart-line text-amber-400"></i> Inteligência de Indicadores</button>
+                <button onclick="switchTab('intelligence')" id="tab-intelligence" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-chart-line text-amber-400"></i> Análises e alertas</button>
                 <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-file-pdf text-amber-400"></i> Relatórios Gerenciais</button>
                 <button onclick="switchTab('governance')" id="tab-governance" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-sliders text-amber-400"></i> Governança</button>
                 <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i id="developerModeLockIcon" class="fa-solid fa-lock text-rose-400" aria-hidden="true"></i><span>Auditoria &amp; JSON Raw</span></button>
@@ -89,8 +91,8 @@
                     <span id="headerAlertsBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-md shadow-rose-500/40">0</span>
                 </button>
                 <button id="saveStateButton" title="Salvar todas as alterações" aria-label="Salvar todas as alterações" class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"><i id="saveStateButtonIcon" class="fa-solid fa-floppy-disk text-sm" aria-hidden="true"></i></button>
-                <button onclick="openChartModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-bold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-chart-line text-amber-400"></i> + Criar Gráfico</button>
-                <button onclick="openNewIndicatorModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-plus text-amber-400"></i> Novo Indicador</button>
+                <button onclick="openChartModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-bold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-chart-line text-amber-400"></i> Criar gráfico</button>
+                <button onclick="openNewIndicatorModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-plus text-amber-400"></i> Novo indicador</button>
                 <input type="file" id="csvFileInput" accept=".csv" class="hidden">
                 <details id="headerToolsMenu" class="relative">
                     <summary aria-label="Opções secundárias" title="Opções secundárias" class="flex h-10 cursor-pointer list-none items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">
@@ -159,10 +161,10 @@
         </section>
 
         <div id="view-dashboard" class="page-view hidden space-y-6">
-            <section class="glass-card flex flex-col items-start justify-between gap-4 rounded-2xl border-l-4 border-l-amber-500 p-5 lg:flex-row lg:items-center"><div class="space-y-1"><div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400"><i class="fa-solid fa-bullhorn"></i> Resumo D'Granel Operacional</div><h2 class="text-lg font-bold text-white">Panorama de Performance e Análise de Risco Viário</h2><p class="max-w-5xl text-xs leading-relaxed text-slate-300">A base monitora <span class="font-bold text-amber-400" id="kpiTotalCount">0</span> indicadores ao longo de <span class="font-bold text-amber-400" id="kpiMonthsCount">0</span> meses.</p></div><div class="flex items-center gap-4 border-t border-slate-800 pt-3 lg:border-l lg:border-t-0 lg:pt-0 lg:pl-6"><div><div class="text-[10px] font-semibold uppercase text-slate-400">Última modificação</div><div class="text-xs font-bold text-slate-200" id="lastUpdatedTag">Hoje</div></div><div class="border-l border-slate-800 pl-4"><div class="text-[10px] font-semibold uppercase text-slate-400">Último salvamento</div><div class="text-xs font-bold text-emerald-400" id="lastSavedTag">Ainda não sincronizado</div></div></div></section>
+            <section class="glass-card flex flex-col items-start justify-between gap-4 rounded-2xl border-l-4 border-l-amber-500 p-5 lg:flex-row lg:items-center"><div class="space-y-1"><div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400"><i class="fa-solid fa-bullhorn"></i> Resumo D'Granel Operacional</div><h2 class="text-lg font-bold text-white">Desempenho operacional</h2><p class="max-w-5xl text-xs leading-relaxed text-slate-300">A base monitora <span class="font-bold text-amber-400" id="kpiTotalCount">0</span> indicadores ao longo de <span class="font-bold text-amber-400" id="kpiMonthsCount">0</span> meses.</p></div><div class="flex items-center gap-4 border-t border-slate-800 pt-3 lg:border-l lg:border-t-0 lg:pt-0 lg:pl-6"><div><div class="text-[10px] font-semibold uppercase text-slate-400">Última modificação</div><div class="text-xs font-bold text-slate-200" id="lastUpdatedTag">Hoje</div></div><div class="border-l border-slate-800 pl-4"><div class="text-[10px] font-semibold uppercase text-slate-400">Último salvamento</div><div class="text-xs font-bold text-emerald-400" id="lastSavedTag">Ainda não sincronizado</div></div></div></section>
             <section id="kpiContainer" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"></section>
-            <div class="flex justify-end"><button onclick="openKpiModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-plus text-amber-400"></i> Adicionar Balão</button></div>
-            <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-[#0A1329]/80 p-3.5"><div class="flex items-center gap-2 text-xs font-bold text-slate-300"><i class="fa-solid fa-chart-column text-amber-400"></i> Painel Visual de Indicadores Frota D'Granel</div><div class="flex w-full items-center gap-3 sm:w-auto"><details id="dashboardMonthPicker" class="relative"><summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200"><i class="fa-solid fa-calendar-days text-amber-400"></i><span>Meses:</span><span id="dashboardMonthSummary" class="font-semibold">Todos os meses</span></summary><div class="absolute right-0 top-full z-30 mt-2 w-64 rounded-lg border border-slate-700 bg-[#111C38] p-3 shadow-xl"><div class="mb-2 flex items-center justify-between border-b border-slate-700 pb-2"><span class="text-[11px] font-semibold text-slate-300">Meses exibidos</span><div class="flex gap-2"><button type="button" id="selectAllDashboardMonths" class="text-[10px] font-semibold text-amber-400">Todos</button><button type="button" id="clearDashboardMonths" class="text-[10px] font-semibold text-slate-400">Limpar</button></div></div><div id="dashboardMonthOptions" class="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto"></div></div></details><button onclick="openChartModal()" class="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950"><i class="fa-solid fa-plus"></i> Novo Gráfico</button></div></section>
+            <div class="flex justify-end"><button onclick="openKpiModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-plus text-amber-400"></i> Adicionar card</button></div>
+            <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-[#0A1329]/80 p-3.5"><div class="flex items-center gap-2 text-xs font-bold text-slate-300"><i class="fa-solid fa-chart-column text-amber-400"></i> Gráficos da operação</div><div class="flex w-full items-center gap-3 sm:w-auto"><details id="dashboardMonthPicker" class="relative"><summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200"><i class="fa-solid fa-calendar-days text-amber-400"></i><span>Meses:</span><span id="dashboardMonthSummary" class="font-semibold">Todos os meses</span></summary><div class="absolute right-0 top-full z-30 mt-2 w-64 rounded-lg border border-slate-700 bg-[#111C38] p-3 shadow-xl"><div class="mb-2 flex items-center justify-between border-b border-slate-700 pb-2"><span class="text-[11px] font-semibold text-slate-300">Meses exibidos</span><div class="flex gap-2"><button type="button" id="selectAllDashboardMonths" class="text-[10px] font-semibold text-amber-400">Todos</button><button type="button" id="clearDashboardMonths" class="text-[10px] font-semibold text-slate-400">Limpar</button></div></div><div id="dashboardMonthOptions" class="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto"></div></div></details><button onclick="openChartModal()" class="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950"><i class="fa-solid fa-plus"></i> Novo Gráfico</button></div></section>
             <section class="grid grid-cols-1 gap-6 lg:grid-cols-12">
                 <article id="defaultChartCard1" class="glass-card flex min-h-[320px] flex-col rounded-2xl p-5 lg:col-span-8"><div class="mb-4 flex items-center justify-between"><h3 class="text-sm font-bold text-white">Evolução de Documentação, Score vs Acidentes &amp; Multas</h3><div class="flex gap-1"><button onclick="downloadChart('chart1','Evolucao_Documentacao')" title="Baixar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-download"></i></button><button onclick="openDefaultChartModal('chart1')" title="Editar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-pen"></i></button><button onclick="deleteDefaultChart('chart1')" title="Excluir gráfico" class="p-1.5 text-rose-400"><i class="fa-solid fa-trash"></i></button></div></div><div class="relative min-h-[260px] flex-1"><canvas id="chart1"></canvas></div></article>
                 <article id="defaultChartCard3" class="glass-card flex min-h-[320px] flex-col rounded-2xl p-5 lg:col-span-4"><div class="mb-4 flex items-center justify-between"><div><h3 class="text-sm font-bold text-white">Matriz de Eficiência (%)</h3><p id="radarSubTitle" class="text-xs text-slate-400">Comparativo Mês Inicial vs Mais Recente</p></div><div class="flex gap-1"><button onclick="downloadChart('chart3','Matriz_Eficiencia')" title="Baixar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-download"></i></button><button onclick="openDefaultChartModal('chart3')" title="Editar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-pen"></i></button><button onclick="deleteDefaultChart('chart3')" title="Excluir gráfico" class="p-1.5 text-rose-400"><i class="fa-solid fa-trash"></i></button></div></div><div class="relative flex min-h-[260px] flex-1 items-center justify-center"><canvas id="chart3"></canvas></div></article>
@@ -176,7 +178,7 @@
             <section class="glass-card flex flex-col justify-between gap-4 rounded-2xl p-5 lg:flex-row lg:items-center">
                 <div class="space-y-1">
                     <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400"><i class="fa-solid fa-brain"></i> Núcleo Analítico D'Granel</div>
-                    <h2 class="text-xl font-bold text-white">Inteligência de Indicadores</h2>
+                    <h2 class="text-xl font-bold text-white">Análises e alertas</h2>
                     <p class="max-w-3xl text-xs leading-relaxed text-slate-300">Análises automáticas e acompanhamento estratégico dos indicadores de Segurança Viária.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
@@ -684,7 +686,7 @@
     <div id="modalKpiConfig" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="glass-card w-full max-w-xl rounded-2xl p-6 border border-slate-700 space-y-4">
             <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-                <h3 id="modalKpiHeading" class="text-base font-bold text-white"><i class="fa-solid fa-chart-simple text-amber-400"></i> Configurar Balão</h3>
+                <h3 id="modalKpiHeading" class="text-base font-bold text-white"><i class="fa-solid fa-chart-simple text-amber-400"></i> Configurar card</h3>
                 <button onclick="closeModal('modalKpiConfig')" class="text-slate-400 hover:text-white p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
             <form onsubmit="saveKpiConfig(event)" class="space-y-4">
@@ -724,17 +726,17 @@
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
         <script src="pending-state.js?v=1"></script>
-        <script src="main.js?v=groq"></script>
+        <script src="main.js?v=interface"></script>
         <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=6.1"></script>
         <script src="report-executive.js?v=6.1"></script>
         <script src="report-evidence.js?v=propostas"></script>
         <script src="reports.js?v=propostas"></script>
-    <script src="workspace-v3.js?v=analysis"></script>
+    <script src="workspace-v3.js?v=interface"></script>
     <script src="motion-v3-1.js?v=3.1"></script>
     <script src="pending-changes.js?v=ux3.2"></script>
-    <script src="workspace-v3-2.js?v=analysis"></script>
+    <script src="workspace-v3-2.js?v=interface"></script>
         <script src="report-authoring.js?v=propostas"></script>
 </body>
 </html>

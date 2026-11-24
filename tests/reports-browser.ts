@@ -42,9 +42,11 @@ addEventListener('load',async()=>{
         supabaseStateLoaded=supabaseReady=true;
         currentSession={access_token:'mock',user:{id:'reviewer',email:'teste@dgranel.com.br'}};
         window.__session=currentSession;
+        document.body.classList.add('authenticated');
         confirmPersistedSnapshot(projectPersistedState(),smokeReport.snapshotUpdatedAt);
         let fail=true,logoLoaded=false;const actions=[];
         window.fetch=async(url,options)=>{
+            if(String(url).includes('/rest/v1/audit_logs?'))return Response.json([]);
             if(url==='report-logo-dgranel.png'){
                 logoLoaded=true;
                 return new Response(Uint8Array.from(atob(smokeLogo),ch=>ch.charCodeAt(0)));
@@ -67,7 +69,14 @@ addEventListener('load',async()=>{
         node('aiQuestionForm').requestSubmit();
         await new Promise(resolve=>setTimeout(resolve,50));
         assert(node('aiResponseBody').firstChild.textContent==='<b>Resposta como texto</b>'&&!node('aiResponseBody').querySelector('b')&&node('aiResponseBody').querySelector('details').textContent.includes('Resultado oficial do teste.'),'Central - '+node('aiStatusText').textContent+' - '+node('aiResponseBody').textContent+' - '+actions.join(','));
-        switchTab('reports');
+        window.refreshOperationalUI();
+        assert(node('workspacePerformanceLegend').textContent.includes('Na meta')&&node('v3Count').textContent==='4','Panorama operacional');
+        document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true,cancelable:true}));
+        const search=node('workspaceSearch'),query=search.querySelector('input');
+        assert(search.open&&!search.textContent.includes('Auditoria'),'Busca global e acesso à auditoria');
+        query.value='relatorios';query.dispatchEvent(new Event('input'));
+        query.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+        assert(!search.open&&!node('view-reports').classList.contains('hidden'),'Navegação pelo teclado');
         node('reportType').value='mensal';
         node('reportType').dispatchEvent(new Event('change'));
         assert(node('reportStart').value===node('reportEnd').value&&node('reportEnd').disabled,'Período mensal');
@@ -109,21 +118,43 @@ addEventListener('load',async()=>{
         window.requestAnimationFrame=callback=>setTimeout(()=>callback(performance.now()),0);
         try{await exportManagementReport();}finally{window.requestAnimationFrame=scheduleFrame;}
         assert(logoLoaded&&downloaded,'Exportação do PDF com a logo: '+node('reportStatus').textContent);
+        if(PdfProgress.dialog.open)PdfProgress.dialog.close();
+        node('workspaceSearchTrigger').click();
+        query.value='autuacoes';query.dispatchEvent(new Event('input'));
+        assert(search.querySelector('.workspace-search-result')?.textContent.includes('Autuações'),'Busca de indicador sem acentos');
+        search.close();
+        document.body.classList.add('developer-mode');
+        for(const module of ['home','dashboard','datagrid','intelligence','reports','governance','audit']){
+            switchTab(module);
+            await new Promise(resolve=>setTimeout(resolve,20));
+            assert(!node('view-'+module).classList.contains('hidden')&&node('tab-'+module).getAttribute('aria-current')==='page','Abertura de '+module);
+            assert(document.documentElement.scrollWidth<=innerWidth+2,'Rolagem horizontal em '+module+' com '+innerWidth+' px');
+        }
+        document.body.classList.remove('developer-mode');
         assert(!hasUnsavedChanges&&!window.__errors.length,window.__errors.join('; ')||'IA alterou o dashboard');
-        status.textContent='PASS Central, prévia sem IA, fallback, revisão e PDFs Executivo e Completo na função única.';
+        if(location.hash==='#visual'){
+            applyTheme('light');
+            switchTab('home');
+            node('v3Overview').querySelector('img').src=smokeFleet;
+            document.querySelectorAll('img[src="report-logo-dgranel.png"]').forEach(img=>{img.src='data:image/png;base64,'+smokeLogo;});
+        }
+        status.textContent='PASS sete módulos, busca, Central, revisão e download dos relatórios.';
     }catch(error){status.textContent='FAIL '+error.message+' '+window.__errors.join('; ');}
 });
 `
 ].join('\n');
 
 const optionalChart = await read('.validation-tools/chart.js').catch(() => '');
-const scripts = [setup, optionalChart,
+const optionalTailwind = await read('.validation-tools/tailwind.js').catch(() => '');
+const fleetBytes = await Deno.readFile('public/maxresdefault.jpg');
+const fleet = 'data:image/jpeg;base64,'+btoa(Array.from(fleetBytes, byte=>String.fromCharCode(byte)).join(''));
+const scripts = [setup, optionalTailwind, optionalChart, 'const smokeFleet='+JSON.stringify(fleet)+';',
     ...await Promise.all(localScripts.map(file => read('public/' + file))),
     await read('public/vendor/jspdf-4.2.1.umd.min.js'),
     await read('public/vendor/jspdf-autotable-5.0.8.min.js'),
     await read('public/report-pdf.js'), checks];
-const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css'].map(file => read('public/' + file)));
-html = html.replace('<head>', () => "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:\"><style>" + styles.join('\n') + '</style>');
+const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css','workspace-ui.css'].map(file => read('public/' + file)));
+html = html.replace('<head>', () => "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:\"><style>" + styles.join('\n') + '</style>');
 html = html.replace('</body>', () => scripts.map(script => '<script>'+script.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n')+'</body>');
 await Deno.mkdir('.validation-tools', { recursive: true });
 await Deno.writeTextFile('.validation-tools/reports-browser.html', html);
