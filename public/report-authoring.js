@@ -5,25 +5,45 @@
     const $=id=>document.getElementById(id),el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;n.className=cls;return n;};
     const provider=()=>v8?'groq':$('reportProvider').value;
     const packFor=(source,keys)=>C.evidence(source,v8?keys:undefined);
-    let state=null,root=null,activeId=null,mode='deterministic',cooldown=0,phase='Sem dados';
+    const cooldowns=new Map();
+    let state=null,root=null,activeId=null,mode='deterministic',phase='Sem dados';
+    const waitSeconds=()=>Math.max(0,Math.ceil(((cooldowns.get(provider())??0)-Date.now())/1000));
     const owner=()=>currentSession?.user?.id;
     const key=()=>JSON.stringify([owner(),managementSignature,managementReport?.basis,managementReport?.snapshotUpdatedAt]);
     const compatible=()=>state&&state.key===key()&&managementSignature===reportSignature()&&supabaseStateLoaded&&supabaseReady&&!hasUnsavedChanges&&!(managementReport.snapshotUpdatedAt&&lastSupabaseSavedAt>Date.parse(managementReport.snapshotUpdatedAt));
     function reset(){if(managementReport)delete managementReport.authored;state=null;activeId=null;mode='deterministic';phase='Sem dados';root?.replaceChildren();if(root)root.hidden=true;}
     const status=text=>{phase=text;reportMessage(text);if($('reportEditorialState'))$('reportEditorialState').textContent=text;};
     async function request(extra){
-        reportReady();const {data,error}=await supabaseClient.auth.getSession();if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Entre novamente.');
+        reportReady();const selectedProvider=provider();
+        const {data,error}=await supabaseClient.auth.getSession();if(error||!data?.session?.access_token)throw Error('Sessão indisponível. Entre novamente.');
         const base={selection:reportSelection(),managementContext:reportContextValue(),expectedUpdatedAt:managementReport.snapshotUpdatedAt,expectedReportBasis:managementReport.basis};
         const payload=v8
             ? extra.author?{...base,action:'generate'}:{...base,action:'review',document:extra.reviewDocument,reviewAcknowledged:true}
-            : {...base,action:'report',provider:provider(),...extra};
-        const response=await fetch(v8?reportV8Endpoint():SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:'Bearer '+data.session.access_token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
-        const body=await response.json().catch(()=>null);if(!response.ok||!body?.success){if(response.status===429){const raw=response.headers?.get('retry-after');const seconds=Number(body?.retryAfter??raw);cooldown=Date.now()+(Number.isFinite(seconds)&&seconds>0?seconds:60)*1000;}throw Error(body?.error||'Elaboração indisponível. A base foi preservada.');}return body;
+            : {...base,action:'report',provider:selectedProvider,...extra};
+        const response=await fetchReportEdge(v8?reportV8Endpoint():SUPABASE_AI_FUNCTION_ENDPOINT,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:'Bearer '+data.session.access_token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const body=await response.json().catch(()=>null);
+        if(!response.ok||!body?.success){
+            const failure=reportEdgeError(response,body,'Operação do relatório indisponível.');
+            if(response.status===429&&extra.author){
+                const seconds=Number(body?.retryAfter??response.headers?.get('retry-after'));
+                const delay=Number.isFinite(seconds)&&seconds>0?Math.ceil(seconds):60;
+                const expires=Date.now()+delay*1000;
+                cooldowns.set(selectedProvider,expires);
+                setTimeout(()=>{
+                    if(cooldowns.get(selectedProvider)===expires)cooldowns.delete(selectedProvider);
+                    reportUpdateActions();
+                },delay*1000);
+                failure.message+=` Tente novamente em ${delay} s.`;
+            }
+            throw failure;
+        }
+        return body;
     }
     async function generate(){
         if(managementBusy)return;
-        try{reportReady();if(!managementReport||managementSignature!==reportSignature())throw Error('Gere uma base validada para os filtros atuais.');if(Date.now()<cooldown)throw Error('Aguarde o intervalo informado pelo provedor antes de tentar novamente.');
+        try{reportReady();if(!managementReport||managementSignature!==reportSignature())throw Error('Gere uma base validada para os filtros atuais.');
             if(compatible()&&state.provider===provider()){mode='authored';render();status('Pronto para revisão. A elaboração existente foi preservada, sem nova chamada.');return;}
+            const wait=waitSeconds();if(wait)throw Error(`Tente novamente em ${wait} s.`);
             reportSetBusy(true);const source=managementReport,signature=key();status('Análise solicitada — gerando texto pelo provedor…');
             const body=await request({author:true});
             if(body.authoredReportVersion!==(v8?8:1)||!body.document)throw Error('Versão da elaboração incompatível. Use a base sem IA.');
@@ -103,7 +123,13 @@
     function update({consistent,ready}){
         if(!root)return;if(state&&(!owner()||state.key!==key()||!consistent)){reset();phase='Conteúdo desatualizado — gere novamente a base.';}
         if(!state&&phase==='Sem dados'&&managementReport&&consistent)phase='Base pronta';
-        const ai=$('reportAI');if(ai){ai.textContent=v8?'Gerar relatório com Groq':'Gerar relatório com IA';ai.disabled=managementBusy||!ready||!managementReport?.indicators.length;ai.setAttribute('aria-disabled',String(ai.disabled));ai.title=v8?'Gerar análise gerencial para revisão':'Redação autoral opcional pelo provedor selecionado';}
+        const ai=$('reportAI');if(ai){
+            const coolingDown=waitSeconds()>0&&!(compatible()&&state.provider===provider());
+            ai.textContent=coolingDown?'Aguardando disponibilidade da IA':v8?'Gerar relatório com Groq':'Gerar relatório com IA';
+            ai.disabled=managementBusy||!ready||!managementReport?.indicators.length||coolingDown;
+            ai.setAttribute('aria-disabled',String(ai.disabled));
+            ai.title=coolingDown?'A geração será liberada após o intervalo informado.':v8?'Gerar análise gerencial para revisão':'Redação autoral opcional pelo provedor selecionado';
+        }
         if($('reportGenerate'))$('reportGenerate').textContent='Gerar base sem IA';
         if(state&&root&&!root.hidden)render();updateExportState();
     }

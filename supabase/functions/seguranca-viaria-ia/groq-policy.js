@@ -29,9 +29,35 @@ export function createGroqGuard(now=()=>Date.now(),limits=GROQ_LIMITS){
         const minuteBudget=tokenCeiling-sum(minute,'tokens'),dailyBudget=limits.tokensPerDay-sum(events,'tokens'),remoteBudget=tokenReset>time&&tokenRemaining!==null?tokenRemaining:Infinity;
         const availableTokenBudget=Math.max(0,Math.min(minuteBudget,dailyBudget,remoteBudget));
         const reason=time<blockedUntil?'provider_cooldown':active?'concurrent_request':minute.length>=limits.requestsPerMinute?'minute_budget':events.length>=requestCeiling?'daily_budget':requestReset>time&&requestRemaining===0?'provider_requests':null;
-        const tokenUntil=dailyBudget<=minuteBudget&&dailyBudget<=remoteBudget?(events[0]?.at??time)+86400000:remoteBudget<minuteBudget?tokenReset:(minute[0]?.at??time)+60000;
-        const until=time<blockedUntil?blockedUntil:reason==='daily_budget'?(events[0]?.at??time)+86400000:reason==='provider_requests'?requestReset:reason==='concurrent_request'?time+1000:tokenUntil;
-        return {availableTokenBudget,availableInputTokenBudget:options.inputTpm==null?null:Math.max(0,options.inputTpm-sum(minute,'inputTokens')),availableOutputTokenBudget:options.outputTpm==null?null:Math.max(0,options.outputTpm-sum(minute,'outputTokens')),reason,retryAfter:Math.max(1,Math.ceil((until-time)/1000))};
+        const untilEnough=(list,key,available,required,ceiling,windowMs)=>{
+            if(required==null||required<=available)return time;
+            if(required>ceiling)return time+windowMs;
+            for(const event of list){
+                available+=event[key]??event.tokens;
+                if(available>=required)return event.at+windowMs;
+            }
+            return time+windowMs;
+        };
+        const inputBudget=options.inputTpm==null?null:options.inputTpm-sum(minute,'inputTokens');
+        const outputBudget=options.outputTpm==null?null:options.outputTpm-sum(minute,'outputTokens');
+        const tokenUntil=options.requiredTokens==null
+            ? dailyBudget<=minuteBudget&&dailyBudget<=remoteBudget?(events[0]?.at??time)+86400000:remoteBudget<minuteBudget?tokenReset:(minute[0]?.at??time)+60000
+            : Math.max(
+                untilEnough(minute,'tokens',minuteBudget,options.requiredTokens,tokenCeiling,60000),
+                untilEnough(events,'tokens',dailyBudget,options.requiredTokens,limits.tokensPerDay,86400000),
+                options.requiredTokens>remoteBudget?tokenReset:time,
+                untilEnough(minute,'inputTokens',inputBudget??Infinity,options.requiredInput,options.inputTpm,60000),
+                untilEnough(minute,'outputTokens',outputBudget??Infinity,options.requiredOutput,options.outputTpm,60000)
+            );
+        const requestUntil=Math.max(blockedUntil,
+            active?time+1000:time,
+            minute.length>=limits.requestsPerMinute?minute[minute.length-limits.requestsPerMinute].at+60000:time,
+            requestCeiling>0&&events.length>=requestCeiling?events[events.length-requestCeiling].at+86400000:time,
+            requestRemaining===0?requestReset:time);
+        const until=Math.max(active?time:tokenUntil,requestUntil);
+        return {availableTokenBudget,availableInputTokenBudget:inputBudget===null?null:Math.max(0,inputBudget),
+            availableOutputTokenBudget:outputBudget===null?null:Math.max(0,outputBudget),
+            reason,retryAfter:Math.max(1,Math.ceil((until-time)/1000))};
     };
     return {
         budget,

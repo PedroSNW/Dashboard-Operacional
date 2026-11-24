@@ -34,7 +34,7 @@ async function runReportV8Checks(fixtures,results){
         assert(body.expectedReportBasis===sample.basis&&body.expectedUpdatedAt===sample.snapshotUpdatedAt,'Snapshot não vinculado');
         if(body.action==='generate'){
             generationCalls++;
-            if(rejectGeneration)return Response.json({success:false,error:'Groq indisponível no teste.'},{status:400});
+            if(rejectGeneration)return Response.json({success:false,error:'Groq indisponível no teste.',code:'provider_400'},{status:400,headers:{'X-DGranel-Diagnostic-Id':'teste-groq-v8'}});
             return Response.json({success:true,authoredReportVersion:8,reportBasis:sample.basis,snapshotUpdatedAt:sample.snapshotUpdatedAt,...results[sample.indicators.length]});
         }
         assert(body.action==='review'&&body.reviewAcknowledged===true,'Revisão sem confirmação');
@@ -56,6 +56,7 @@ async function runReportV8Checks(fixtures,results){
             if(count===1){
                 rejectGeneration=true;await ReportAuthoring.generate();
                 assert(managementReport&&!managementReport.authored&&!document.getElementById('reportExport').disabled,'Fallback indisponível após erro');
+                assert(document.getElementById('reportStatus').textContent.includes('HTTP 400 · provider_400 · diagnóstico teste-groq-v8'),'Diagnóstico da Edge ausente');
                 rejectGeneration=false;
             }
             await ReportAuthoring.generate();
