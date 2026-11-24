@@ -33,7 +33,13 @@
         update:render,
         clear(){reviewed=null;if(dialog?.open)dialog.close();if($('pendingChangesList'))$('pendingChangesList').replaceChildren();},
         open(){if(!dialog)return;origin=document.activeElement;if(!dialog.open)dialog.showModal();$('pendingSaveMessage').textContent='';render(inspectPendingState());$('pendingClose').focus();},
-        result(message){if($('pendingSaveMessage'))$('pendingSaveMessage').textContent=message;render(inspectPendingState());}
+        result(message){
+            const status = $('pendingSaveMessage');
+            if (status) status.textContent = message;
+            render(inspectPendingState());
+            const success = message.startsWith('Salvamento confirmado.');
+            window.DGranelPresentation?.toast(success ? 'Salvamento confirmado' : 'Salvamento não concluído', dialog?.open ? '' : message, success ? 'success' : 'error', dialog?.open ? dialog : document.body);
+        }
     };
     document.addEventListener('DOMContentLoaded',()=>{
         trigger=node('button');trigger.id='pendingChangesButton';trigger.className='pending-changes-trigger';trigger.type='button';trigger.setAttribute('aria-haspopup','dialog');trigger.onclick=()=>PendingChangesUI.open();$('saveStateButton').before(trigger);

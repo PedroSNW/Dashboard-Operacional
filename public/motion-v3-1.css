@@ -11,7 +11,7 @@ body.workspace-v3{overflow-x:clip}
 .workspace-v3 .v3-topbar button:hover:not(:disabled){border-color:var(--ds-brand);background:var(--ds-surface)}
 .workspace-v3 #themeToggleBtn{color:var(--ds-brand);background:var(--ds-raised)}
 .theme-current-icon{display:inline-flex;align-items:center;justify-content:center;color:var(--ds-brand)}
-.theme-current-icon::before{content:none!important}
+.theme-current-icon::before{content:none}
 .workspace-v3.theme-transition,.workspace-v3.theme-transition :is(.v3-sidebar,.v3-topbar,.glass-card,.v3-priority-card,.v3-metric-grid article,.v3-indicator-picker,.v3-pdf-dialog){transition:background-color var(--motion-medium) var(--ease-productive),border-color var(--motion-medium),color var(--motion-medium)}
 .v3-nav .tab-btn{position:relative;min-height:46px;overflow:hidden;white-space:nowrap}
 .v3-nav .tab-btn i{flex:0 0 20px}
@@ -42,7 +42,7 @@ body.workspace-v3{overflow-x:clip}
 .workspace-v3 .swal2-hide{animation:motion-out var(--motion-micro) var(--ease-exit)}
 .workspace-v3 details[open]>:not(summary){animation:motion-surface var(--motion-short) var(--ease-enter)}
 .motion-ai-skeleton{display:grid;gap:10px;padding:12px 0}.motion-ai-skeleton span{height:8px;background:var(--ds-border);border-radius:4px}.motion-ai-skeleton span:last-child{width:64%}
-.motion-visual-exit *{animation:none!important;transition:none!important}
+.motion-visual-exit *{animation:none;transition:none}
 .workspace-v3 #aiResponseContainer[aria-busy=true] .motion-ai-skeleton{animation:motion-breathe 1.4s ease-in-out infinite}
 @keyframes motion-spin{to{transform:rotate(360deg)}}
 @keyframes motion-surface{from{opacity:.85;transform:translateY(3px)}to{opacity:1;transform:none}}
@@ -69,5 +69,5 @@ body.workspace-v3{overflow-x:clip}
 }
 @media(prefers-reduced-motion:reduce){
  :root{--motion-micro:0ms;--motion-short:0ms;--motion-medium:0ms;--motion-long:0ms}
- .workspace-v3,.workspace-v3 *,.workspace-v3 *::before,.workspace-v3 *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+ .workspace-v3,.workspace-v3 *,.workspace-v3 *::before,.workspace-v3 *::after{animation:none;transition:none;scroll-behavior:auto}
 }

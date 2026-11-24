@@ -5,5 +5,20 @@ const before=["authScreen","authForm","authEmail","authPassword","authMessage","
 assert(before.every(id=>after.includes(id)),'ID existente removido');assert(new Set(after).size===after.length,'ID duplicado');
 for(const file of ['public/main.js','public/reports.js','public/report-pdf.js','public/workspace-v3.js','public/pdf-progress.js','public/motion-v3-1.js','public/theme-preference.js','public/pending-state.js','public/pending-changes.js','public/report-content.js'])new Function(readFileSync(file,'utf8'));
 const luminance=hex=>{const channels=hex.match(/\w\w/g).map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return .2126*channels[0]+.7152*channels[1]+.0722*channels[2];};
-for(const [text,surface] of [['edf2f8','111d2e'],['9aabc0','111d2e'],['e9ad3a','111d2e'],['172b43','ffffff'],['52657b','ffffff'],['9a6200','ffffff']]){const a=luminance(text),b=luminance(surface);assert((Math.max(a,b)+.05)/(Math.min(a,b)+.05)>=4.5,'Contraste semântico '+text);}
-console.log(`PASS ${before.length} IDs preservados, sem duplicação, sintaxe de dez arquivos e seis pares semânticos com contraste >= 4,5:1`);
+const css = readFileSync('public/workspace-ui.css', 'utf8');
+const tokens = block => Object.fromEntries([...block.matchAll(/--ds-([\w-]+):\s*(?:#([0-9a-f]{6})\b|var\(--ds-([\w-]+)\))/gi)].map(([, name, value, alias]) => [name, value ?? { alias }]));
+const light = tokens(css.match(/:root\s*\{([^}]+)\}/)[1]);
+const dark = { ...light, ...tokens(css.match(/:root\[data-theme="dark"\]\s*\{([^}]+)\}/)[1]) };
+for (const theme of [light, dark]) {
+    const color = name => typeof theme[name] === 'string' ? theme[name] : theme[theme[name].alias];
+    for (const [foreground, background, minimum] of [
+        ['text', 'bg', 4.5], ['muted', 'surface', 4.5], ['subtle', 'raised', 4.5],
+        ['brand', 'surface', 4.5], ['on-primary', 'primary', 4.5],
+        ['success', 'success-bg', 4.5], ['warning', 'warning-bg', 4.5], ['error', 'error-bg', 4.5],
+        ['control-border', 'surface', 3]
+    ]) {
+        const a = luminance(color(foreground)), b = luminance(color(background));
+        assert((Math.max(a, b) + .05) / (Math.min(a, b) + .05) >= minimum, `Contraste ${foreground}/${background}`);
+    }
+}
+console.log(`PASS ${before.length} IDs preservados, sintaxe e contraste dos componentes nos dois temas`);

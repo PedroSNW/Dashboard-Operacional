@@ -6,10 +6,59 @@
     const paths={home:'M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10',dashboard:'M3 3h7v7H3zM14 3h7v11h-7zM3 14h7v7H3zM14 18h7v3h-7z',datagrid:'M3 4h18v16H3zM3 10h18M9 4v16',intelligence:'M4 20V10m8 10V4m8 16v-7M2 20h20',reports:'M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7',governance:'M4 7h16M4 17h16M9 4v6M15 14v6',audit:'M5 3h14v18H5zM8 8h8M8 12h8M8 16h5',bell:'M6 9a6 6 0 0 1 12 0v7l2 2H4l2-2zm4 12h4',save:'M4 3h13l4 4v14H3V3zM7 3v6h9V3M7 21v-8h10v8',theme:'M12 3a9 9 0 1 0 0 18z'};
     paths.search='M15.5 15.5 21 21M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0';
     paths.attention='M3 6l6 6 4-4 7 8m-6 0h6v-6';
+    paths.menu='M3 5h18v14H3zM9 5v14';
     function icon(node,name){if(!node)return;node.innerHTML=`<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name]}"></path></svg>`;}
     let sidebar,header,main,toggle,lastFocus,drawer=false;
     const mobile=()=>matchMedia('(max-width: 1023px)').matches;
     const resizeCharts=()=>requestAnimationFrame(()=>Object.values(Chart.instances||{}).forEach(chart=>chart.resize()));
+    window.DGranelPresentation = {
+        setReading(reading) {
+            const loading = $('workspaceLoading');
+            if (!loading) return;
+            document.body.toggleAttribute('data-reading', reading);
+            for (const view of loading.parentElement.querySelectorAll('.page-view')) {
+                view.inert = reading;
+                view.setAttribute('aria-busy', String(reading));
+            }
+            loading.hidden = !reading;
+        },
+        toast(title, detail, state = 'success', host = document.body) {
+            let stack = host.querySelector(':scope > .workspace-toasts');
+            if (!stack) {
+                stack = element('div', '', 'workspace-toasts');
+                host.append(stack);
+            }
+            const notice = element('div', '', 'workspace-toast');
+            notice.dataset.state = state;
+            notice.setAttribute('role', state === 'error' ? 'alert' : 'status');
+            const copy = element('div');
+            copy.append(element('strong', title));
+            if (detail) copy.append(element('p', detail));
+            const close = element('button', '×', 'visual-button-ghost');
+            close.type = 'button';
+            close.setAttribute('aria-label', 'Fechar notificação');
+            notice.append(copy, close);
+            stack.append(notice);
+            const dismiss = () => notice.remove();
+            let timer = setTimeout(dismiss, state === 'success' ? 6500 : 12000);
+            const pause = () => clearTimeout(timer);
+            const resume = () => {
+                if (notice.matches(':hover, :focus-within')) return;
+                pause();
+                timer = setTimeout(dismiss, 5000);
+            };
+            close.onclick = () => { pause(); dismiss(); };
+            notice.addEventListener('pointerenter', pause);
+            notice.addEventListener('pointerleave', resume);
+            notice.addEventListener('focusin', pause);
+            notice.addEventListener('focusout', () => requestAnimationFrame(resume));
+        }
+    };
+    window.DGranelTheme?.scheme?.addEventListener('change', () => {
+        if (window.DGranelTheme.stored()) return;
+        applyTheme(window.DGranelTheme.preferred());
+        Object.values(Chart.instances || {}).forEach(chart => chart.update('none'));
+    });
     function closeDrawer(){drawer=false;document.body.classList.remove('v3-drawer-open');if(main)main.inert=false;if(header)header.inert=false;sidebar?.removeAttribute('aria-modal');sidebar?.removeAttribute('role');toggle?.setAttribute('aria-expanded',String(!mobile()&&!document.body.classList.contains('v3-sidebar-collapsed')));if(mobile())sidebar.inert=true;lastFocus?.focus();}
     function menu(){if(mobile()){lastFocus=toggle;drawer=true;sidebar.inert=false;sidebar.setAttribute('role','dialog');sidebar.setAttribute('aria-modal','true');document.body.classList.add('v3-drawer-open');main.inert=true;header.inert=true;toggle.setAttribute('aria-expanded','true');sidebar.querySelector('button').focus();}else{const previousLeft=main.getBoundingClientRect().left;document.body.classList.toggle('v3-sidebar-collapsed');window.DGranelMotion?.shellChanged(previousLeft);toggle.setAttribute('aria-expanded',String(!document.body.classList.contains('v3-sidebar-collapsed')));resizeCharts();}}
     window.onWorkspaceNavigation=tab=>{
@@ -125,6 +174,7 @@
         document.addEventListener('focusin',e=>{if(!e.target.closest('[role="dialog"],dialog'))outsideFocus=e.target;});
         for(const modal of document.querySelectorAll('div.fixed[id^="modal"]')){
             modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');const heading=modal.querySelector('h2[id],h3[id]');if(heading)modal.setAttribute('aria-labelledby',heading.id);
+            for (const close of modal.querySelectorAll('button:not([aria-label]):has(.fa-xmark)')) close.setAttribute('aria-label', 'Fechar janela');
             let visible=!modal.classList.contains('hidden');
             new MutationObserver(()=>{const next=!modal.classList.contains('hidden');if(next&&!visible){origins.set(modal,outsideFocus);requestAnimationFrame(()=>{if(modal.classList.contains('hidden'))return;const target=modal.querySelector('input:not([type=hidden]):not([disabled]),select:not([disabled]),textarea:not([disabled])')||modal.querySelector('button');target?.focus();});}if(!next&&visible)origins.get(modal)?.focus();visible=next;}).observe(modal,{attributes:true,attributeFilter:['class']});
         }
@@ -182,7 +232,7 @@
         const closeSettings=()=>{if(settings.open){settings.open=false;restoreSettingsPanel();}};
         window.addEventListener('resize',closeSettings);
         new MutationObserver(()=>{if(!document.body.classList.contains('authenticated')||(mobile()&&!drawer)||settingsPanel.classList.contains('v3-settings-floating')&&!document.body.classList.contains('v3-sidebar-collapsed'))closeSettings();}).observe(document.body,{attributes:true,attributeFilter:['class']});
-        toggle=element('button','☰','v3-menu-toggle');toggle.id='v3MenuToggle';toggle.setAttribute('aria-label','Expandir ou recolher navegação');toggle.setAttribute('aria-controls','v3Sidebar');toggle.setAttribute('aria-expanded','true');toggle.onclick=menu;
+        toggle=element('button','','v3-menu-toggle');icon(toggle,'menu');toggle.id='v3MenuToggle';toggle.setAttribute('aria-label','Expandir ou recolher navegação');toggle.setAttribute('aria-controls','v3Sidebar');toggle.setAttribute('aria-expanded','true');toggle.onclick=menu;
         const titles=element('div','','v3-page-title');const breadcrumb=element('small','Segurança viária');breadcrumb.id='v3Breadcrumb';const title=element('h1','Visão geral');title.id='v3Title';title.tabIndex=-1;titles.append(breadcrumb,title);
         const sync=element('span','Aguardando dados','v3-sync');sync.id='v3Sync';sync.setAttribute('role','status');
         header.className='v3-topbar';header.replaceChildren(toggle,titles,sync,actions);document.body.prepend(sidebar);

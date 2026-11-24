@@ -25,9 +25,8 @@ let showDataLabels = false;
 let selectedDashboardMonths = null;
 let currentTheme = 'dark';
 let sharedTheme = 'dark'; // Compatibilidade do snapshot: preferência pessoal não altera este campo.
-function preferredTheme(fallback='dark') {
-    try { const value=localStorage.getItem('dgranel.theme');if(value==='light'||value==='dark')return value; } catch {}
-    return fallback==='light'?'light':'dark';
+function preferredTheme() {
+    return window.DGranelTheme?.preferred() ?? 'light';
 }
 let customLogoSrc = null;
 let lastSupabaseSavedAt = null;
@@ -494,6 +493,7 @@ async function handleAuthSession(session) {
     document.body.classList.toggle('authenticated', Boolean(session));
 
     if (!session) {
+        window.DGranelPresentation?.setReading(false);
         window.resetManagementReport?.();
         appInitialized = false;
         supabaseStateLoaded = false;
@@ -519,7 +519,13 @@ async function handleAuthSession(session) {
     customLogoSrc = null;
     applyTheme(currentTheme);
     setupDragAndDrop();
-    await carregarDadosCompartilhados();
+    const readingEpoch = sessionEpoch;
+    window.DGranelPresentation?.setReading(true);
+    try {
+        await carregarDadosCompartilhados();
+    } finally {
+        if (readingEpoch === sessionEpoch) window.DGranelPresentation?.setReading(false);
+    }
     updateSaveButton();
 }
 
@@ -533,20 +539,23 @@ function escapeHtml(value) {
 }
 
 function fireThemedAlert(options) {
-    const isLight = document.body.classList.contains('light-theme');
     return Swal.fire({
         ...options,
-        background: isLight ? '#ffffff' : '#111C38',
-        color: isLight ? '#1e293b' : '#f8fafc'
+        background: 'var(--ds-surface)',
+        color: 'var(--ds-text)',
+        confirmButtonColor: options.icon === 'error' ? 'var(--ds-error)' : 'var(--ds-primary)'
     });
 }
 
 function showAlert(title, text, icon = 'info') {
+    if (window.DGranelPresentation && (icon === 'success' || /^(Cabeçalho não encontrado|Nenhum dado válido|Erro na validação)$/.test(title))) {
+        window.DGranelPresentation.toast(title, text, icon);
+        return;
+    }
     return fireThemedAlert({
         title,
         text,
-        icon,
-        confirmButtonColor: '#EAB308'
+        icon
     });
 }
 
@@ -2821,37 +2830,42 @@ function renderKPIs() {
         const monthly = getMonthlyData(indicator);
         const last = getLastValid(monthly.values, monthly.labels);
         const unit = c.unit || indicator.und || '';
-        const color = ['emerald', 'amber', 'rose', 'sky', 'violet'].includes(c.color) ? c.color : 'sky';
+        const tone = ['emerald', 'amber', 'rose', 'sky', 'violet'].includes(c.color) ? c.color : 'sky';
         const emojiDisplay = escapeHtml(c.emoji || '📊');
         const el = document.createElement('div');
-        el.className = 'glass-card page-load-item rounded-2xl p-5 flex flex-col justify-between';
+        el.className = 'glass-card kpi-card page-load-item';
+        const previous = last.idx > 0 ? monthly.values[last.idx - 1] : null;
+        const delta = last.val !== null && previous !== null && previous !== undefined && Number.isFinite(Number(previous)) ? Number(last.val) - Number(previous) : null;
+        const direction = getIntelligenceDirection(indicator);
+        const favorable = direction === 'maior_melhor' ? delta > 0 : delta < 0;
+        const directional = direction === 'maior_melhor' || direction === 'menor_melhor';
+        const deltaState = Number.isFinite(delta) && delta !== 0 && directional ? (favorable ? 'favorable' : 'unfavorable') : 'neutral';
+        const deltaText = Number.isFinite(delta) ? `${delta > 0 ? '+' : ''}${fmtVal(delta, unit === '%' ? '' : unit)}${unit === '%' ? ' p.p.' : ''}` : 'Sem comparação mensal';
+        const deltaArrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
         const valueMarkup = last.val !== null && last.val !== undefined && Number.isFinite(Number(last.val))
             ? `<span data-count-to="${Number(last.val)}" data-count-unit="${unit === '%' ? '%' : ''}">${fmtVal(last.val,unit === '%' ? '%' : '')}</span>`
             : '-';
         el.innerHTML = `
             <div class="flex items-start justify-between">
                 <div>
-                    <span class="text-xs text-slate-400 font-medium">${escapeHtml(c.title)}</span>
-                    <div class="text-2xl font-extrabold text-white mt-1">${valueMarkup}${unit && unit !== '%' && valueMarkup !== '-' ? ` ${unit}` : ''}</div>
+                    <span class="kpi-label">${escapeHtml(c.title)}</span>
+                    <div class="kpi-value">${valueMarkup}${unit && unit !== '%' && valueMarkup !== '-' ? ` ${escapeHtml(unit)}` : ''}</div>
                 </div>
-                <div class="p-2.5 rounded-xl bg-${color}-500/10 border border-${color}-500/20 flex items-center justify-center text-2xl">
-                    <span>${emojiDisplay}</span>
-                </div>
+                <span class="kpi-symbol" data-tone="${tone}" aria-hidden="true">${emojiDisplay}</span>
             </div>
-            <div class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center gap-2 text-xs">
+            <p class="kpi-monthly"><span class="kpi-delta" data-state="${deltaState}">${Number.isFinite(delta) ? `<span aria-hidden="true">${deltaArrow}</span> ` : ''}${escapeHtml(deltaText)}</span>${Number.isFinite(delta) ? ` <span>vs. ${escapeHtml(monthly.labels[last.idx - 1])}</span>` : ''}</p>
+            <div class="kpi-meta">
                 <span class="text-slate-400">Último: ${escapeHtml(last.month)}</span>
-                <span class="text-slate-300">Meta: ${fmtVal(indicator.meta, unit === '%' ? '%' : '')}${unit && unit !== '%' && indicator.meta !== null && indicator.meta !== undefined ? ` ${unit}` : ''}</span>
+                <span class="text-slate-300">Meta: ${fmtVal(indicator.meta, unit === '%' ? '%' : '')}${unit && unit !== '%' && indicator.meta !== null && indicator.meta !== undefined ? ` ${escapeHtml(unit)}` : ''}</span>
             </div>
-            <div class="flex justify-end gap-1 mt-3">
-                <button onclick="openKpiModal(${escapeHtml(JSON.stringify(c.id))})" title="Editar Balão" class="p-1.5 bg-slate-800 hover:bg-amber-500 text-slate-300 hover:text-slate-950 rounded-lg transition text-xs"><i class="fa-solid fa-pen"></i></button>
-                <button onclick="deleteKpi(${escapeHtml(JSON.stringify(c.id))})" title="Excluir Balão" class="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-rose-400 rounded-lg transition text-xs"><i class="fa-solid fa-trash"></i></button>
+            <div class="kpi-actions">
+                <button type="button" onclick="openKpiModal(${escapeHtml(JSON.stringify(c.id))})" title="Editar KPI" aria-label="Editar KPI" class="visual-button-ghost"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+                <button type="button" onclick="deleteKpi(${escapeHtml(JSON.stringify(c.id))})" title="Excluir KPI" aria-label="Excluir KPI" class="visual-button-ghost"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
             </div>
         `;
         const directionInfo = document.createElement('p');
         directionInfo.className = 'v3-help';
-        const previous = last.idx > 0 ? monthly.values[last.idx - 1] : null;
-        const delta = last.val !== null && previous !== null && previous !== undefined && Number.isFinite(Number(previous)) ? Number(last.val) - Number(previous) : null;
-        directionInfo.textContent = `Direção: ${getIntelligenceDirection(indicator) || 'não definida'} • Variação absoluta mensal: ${delta === null ? 'indisponível' : fmtVal(delta, unit)}`;
+        directionInfo.textContent = `Direção: ${INTELLIGENCE_DIRECTION_LABELS[direction] || 'não definida'}`;
         el.appendChild(directionInfo);
         kpiContainer.appendChild(el);
     });

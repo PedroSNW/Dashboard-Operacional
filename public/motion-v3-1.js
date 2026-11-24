@@ -46,16 +46,62 @@
         const sync=document.getElementById('v3Sync'),save=document.getElementById('saveStateButton');
         if(sync&&save){const update=()=>{save.dataset.state=sync.dataset.state;save.setAttribute('aria-busy',String(sync.dataset.state==='loading'));};new MutationObserver(update).observe(sync,{attributes:true,attributeFilter:['data-state']});update();}
         for(const modal of document.querySelectorAll('div.fixed[id^="modal"]')){let visible=!modal.classList.contains('hidden');new MutationObserver(()=>{const next=!modal.classList.contains('hidden');if(next&&!visible)enter(modal.firstElementChild);if(!next)active.get(modal.firstElementChild)?.cancel();visible=next;}).observe(modal,{attributes:true,attributeFilter:['class']});}
-        // Aparência interativa do Chart.js; PDF usa canvas destacado e animation:false.
-        const chartAppearance=chart=>{
-            if(!chart.canvas.closest('main'))return;
-            const light=document.body.classList.contains('light-theme'),text=light?'#52657b':'#9aabc0';
-            const tooltip=chart.options.plugins.tooltip;
-            if(tooltip){Object.assign(tooltip,{backgroundColor:light?'#ffffff':'#17263a',titleColor:light?'#172b43':'#edf2f8',bodyColor:light?'#52657b':'#edf2f8',borderColor:light?'#d8e0e9':'#2a3b50',borderWidth:1,padding:12,cornerRadius:8});}
-            if(chart.options.plugins.legend?.labels)chart.options.plugins.legend.labels.color=text;
-            for(const axis of Object.values(chart.options.scales||{})){if(axis.ticks)axis.ticks.color=text;if(axis.pointLabels)axis.pointLabels.color=text;if(axis.grid)axis.grid.color=light?'#172b4317':'#edf2f817';}
-            if(chart.options.elements.point)chart.options.elements.point.hoverRadius=5;
-        };
-        Chart.register({id:'dgranel-motion-presentation',beforeInit:chartAppearance,beforeUpdate:chartAppearance});
+        Chart.register({ id: 'dgranel-motion-presentation', beforeUpdate: styleChart });
     });
+
+    function styleChart(chart) {
+        if (!chart.canvas.closest('main, #modalDetail')) return;
+
+        const theme = getComputedStyle(document.body);
+        const token = name => theme.getPropertyValue(name).trim();
+        const text = token('--ds-muted');
+        const grid = token('--ds-chart-grid');
+        const palette = ['--ds-series-1', '--ds-series-2', '--ds-series-3', '--ds-series-4'].map(token);
+        const font = { family: 'Inter, sans-serif', size: 12, weight: 500 };
+        const { legend, tooltip } = chart.options.plugins;
+        if (legend?.labels) Object.assign(legend.labels, { color: text, font, boxWidth: 12, boxHeight: 8 });
+        if (tooltip) {
+            Object.assign(tooltip, {
+                backgroundColor: '#18181B', titleColor: '#FAFAFA', bodyColor: '#E4E4E7',
+                borderColor: '#3F3F46', borderWidth: 1, padding: 8, cornerRadius: 8,
+                titleFont: { ...font, weight: 600 }, bodyFont: font, boxWidth: 8, boxHeight: 8
+            });
+        }
+
+        for (const [id, axis] of Object.entries(chart.options.scales || {})) {
+            const orientation = axis.axis || chart.scales[id]?.axis || id[0];
+            if (axis.ticks) Object.assign(axis.ticks, { color: text, font });
+            if (axis.title) Object.assign(axis.title, { color: text, font });
+            if (axis.pointLabels) Object.assign(axis.pointLabels, { color: text, font });
+            if (axis.angleLines) axis.angleLines.color = grid;
+            if (axis.border) axis.border.display = false;
+            if (axis.grid) {
+                Object.assign(axis.grid, { color: grid, lineWidth: 1, drawTicks: false });
+                if (orientation === 'x') axis.grid.drawOnChartArea = false;
+            }
+        }
+
+        chart.data.datasets.forEach((dataset, index) => {
+            const color = palette[index % palette.length];
+            const type = dataset.type || chart.config.type;
+            if (type === 'doughnut' || type === 'pie' || type === 'polarArea') {
+                dataset.backgroundColor = dataset.data.map((_, index) => palette[index % palette.length]);
+                dataset.borderColor = token('--ds-surface');
+                return;
+            }
+            dataset.borderColor = color;
+            if (type === 'line' || type === 'radar') dataset.borderWidth = 2;
+            dataset.backgroundColor = type === 'line' && dataset.fill
+                ? ({ chart }) => {
+                    const area = chart.chartArea;
+                    if (!area) return `${color}22`;
+                    const fade = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+                    fade.addColorStop(0, `${color}2E`);
+                    fade.addColorStop(1, `${color}03`);
+                    return fade;
+                }
+                : type === 'radar' ? `${color}22` : type === 'bar' ? `${color}AA` : color;
+        });
+        if (chart.options.elements.point) chart.options.elements.point.hoverRadius = 5;
+    }
 })();

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="google-site-verification" content="ircvyqk4rwH7m8yiF1NCZsCASmjMhBAjjF308aFIvgc">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="theme-preference.js?v=3.1"></script>
+    <script src="theme-preference.js?v=visual-4"></script>
     <title>Dashboard DGranel - Sistema Operacional de Segurança Viária</title>
     <meta name="description" content="Painel de controle e monitoramento operacional de segurança viária do sistema DGranel.">
     <link rel="icon" type="image/png" href="report-logo-dgranel.png">
@@ -21,13 +21,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Supabase Auth / Database client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <link rel="stylesheet" href="style.css?v=interface">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&amp;display=swap">
+    <link rel="stylesheet" href="style.css?v=visual-4">
     <link rel="stylesheet" href="workspace-v3.css?v=ux3.2">
-    <link rel="stylesheet" href="motion-v3-1.css?v=3.1">
+    <link rel="stylesheet" href="motion-v3-1.css?v=visual-4">
     <link rel="stylesheet" href="pending-changes.css?v=1">
         <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
-    <link rel="stylesheet" href="workspace-ui.css?v=1">
+    <link rel="stylesheet" href="workspace-ui.css?v=visual-4">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
@@ -112,6 +115,11 @@
     </header>
 
     <main class="w-full px-4 sm:px-8 pt-6 space-y-6 flex-1">
+        <section id="workspaceLoading" class="workspace-loading" role="status" hidden>
+            <p>Carregando indicadores</p>
+            <div class="workspace-loading-grid" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            <div class="workspace-loading-panel" aria-hidden="true"><span></span><span></span><span></span></div>
+        </section>
         <div id="view-home" class="page-view space-y-6">
             <section class="home-unified-canvas relative overflow-hidden rounded-3xl p-6 shadow-2xl sm:p-10">
                 <div class="relative z-10 grid grid-cols-1 items-center gap-8 lg:grid-cols-12">
@@ -163,15 +171,17 @@
         <div id="view-dashboard" class="page-view hidden space-y-6">
             <section class="glass-card flex flex-col items-start justify-between gap-4 rounded-2xl border-l-4 border-l-amber-500 p-5 lg:flex-row lg:items-center"><div class="space-y-1"><div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400"><i class="fa-solid fa-bullhorn"></i> Resumo D'Granel Operacional</div><h2 class="text-lg font-bold text-white">Desempenho operacional</h2><p class="max-w-5xl text-xs leading-relaxed text-slate-300">A base monitora <span class="font-bold text-amber-400" id="kpiTotalCount">0</span> indicadores ao longo de <span class="font-bold text-amber-400" id="kpiMonthsCount">0</span> meses.</p></div><div class="flex items-center gap-4 border-t border-slate-800 pt-3 lg:border-l lg:border-t-0 lg:pt-0 lg:pl-6"><div><div class="text-[10px] font-semibold uppercase text-slate-400">Última modificação</div><div class="text-xs font-bold text-slate-200" id="lastUpdatedTag">Hoje</div></div><div class="border-l border-slate-800 pl-4"><div class="text-[10px] font-semibold uppercase text-slate-400">Último salvamento</div><div class="text-xs font-bold text-emerald-400" id="lastSavedTag">Ainda não sincronizado</div></div></div></section>
             <section id="kpiContainer" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"></section>
+            <p class="ux-empty dashboard-empty-kpis">Este painel ainda não tem KPIs. Use Adicionar card para acompanhar um indicador.</p>
             <div class="flex justify-end"><button onclick="openKpiModal()" class="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"><i class="fa-solid fa-plus text-amber-400"></i> Adicionar card</button></div>
             <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-[#0A1329]/80 p-3.5"><div class="flex items-center gap-2 text-xs font-bold text-slate-300"><i class="fa-solid fa-chart-column text-amber-400"></i> Gráficos da operação</div><div class="flex w-full items-center gap-3 sm:w-auto"><details id="dashboardMonthPicker" class="relative"><summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-700 bg-[#070D1E] px-3 py-2 text-xs text-slate-200"><i class="fa-solid fa-calendar-days text-amber-400"></i><span>Meses:</span><span id="dashboardMonthSummary" class="font-semibold">Todos os meses</span></summary><div class="absolute right-0 top-full z-30 mt-2 w-64 rounded-lg border border-slate-700 bg-[#111C38] p-3 shadow-xl"><div class="mb-2 flex items-center justify-between border-b border-slate-700 pb-2"><span class="text-[11px] font-semibold text-slate-300">Meses exibidos</span><div class="flex gap-2"><button type="button" id="selectAllDashboardMonths" class="text-[10px] font-semibold text-amber-400">Todos</button><button type="button" id="clearDashboardMonths" class="text-[10px] font-semibold text-slate-400">Limpar</button></div></div><div id="dashboardMonthOptions" class="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto"></div></div></details><button onclick="openChartModal()" class="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950"><i class="fa-solid fa-plus"></i> Novo Gráfico</button></div></section>
-            <section class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <section class="dashboard-default-charts grid grid-cols-1 gap-6 lg:grid-cols-12">
                 <article id="defaultChartCard1" class="glass-card flex min-h-[320px] flex-col rounded-2xl p-5 lg:col-span-8"><div class="mb-4 flex items-center justify-between"><h3 class="text-sm font-bold text-white">Evolução de Documentação, Score vs Acidentes &amp; Multas</h3><div class="flex gap-1"><button onclick="downloadChart('chart1','Evolucao_Documentacao')" title="Baixar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-download"></i></button><button onclick="openDefaultChartModal('chart1')" title="Editar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-pen"></i></button><button onclick="deleteDefaultChart('chart1')" title="Excluir gráfico" class="p-1.5 text-rose-400"><i class="fa-solid fa-trash"></i></button></div></div><div class="relative min-h-[260px] flex-1"><canvas id="chart1"></canvas></div></article>
                 <article id="defaultChartCard3" class="glass-card flex min-h-[320px] flex-col rounded-2xl p-5 lg:col-span-4"><div class="mb-4 flex items-center justify-between"><div><h3 class="text-sm font-bold text-white">Matriz de Eficiência (%)</h3><p id="radarSubTitle" class="text-xs text-slate-400">Comparativo Mês Inicial vs Mais Recente</p></div><div class="flex gap-1"><button onclick="downloadChart('chart3','Matriz_Eficiencia')" title="Baixar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-download"></i></button><button onclick="openDefaultChartModal('chart3')" title="Editar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-pen"></i></button><button onclick="deleteDefaultChart('chart3')" title="Excluir gráfico" class="p-1.5 text-rose-400"><i class="fa-solid fa-trash"></i></button></div></div><div class="relative flex min-h-[260px] flex-1 items-center justify-center"><canvas id="chart3"></canvas></div></article>
                 <article id="defaultChartCard2" class="glass-card min-h-[280px] rounded-2xl p-5 lg:col-span-6"><div class="mb-4 flex items-center justify-between"><div><h3 class="text-sm font-bold text-white">Dimensionamento da Frota</h3><p class="text-xs text-slate-400">Evolução do volume de frota ativa</p></div><div class="flex gap-1"><button onclick="downloadChart('chart2','Dimensionamento_Frota')" title="Baixar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-download"></i></button><button onclick="openDefaultChartModal('chart2')" title="Editar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-pen"></i></button><button onclick="deleteDefaultChart('chart2')" title="Excluir gráfico" class="p-1.5 text-rose-400"><i class="fa-solid fa-trash"></i></button></div></div><div class="relative min-h-[220px]"><canvas id="chart2"></canvas></div></article>
                 <article id="defaultChartCard4" class="glass-card min-h-[280px] rounded-2xl p-5 lg:col-span-6"><div class="mb-4 flex items-center justify-between"><div><h3 class="text-sm font-bold text-white">Evolução comparativa: sinistros e velocidade</h3><p class="text-xs text-slate-400">Séries descritivas; não demonstram causalidade.</p></div><div class="flex gap-1"><button onclick="downloadChart('chart4','Sinistros_Excesso_Velocidade')" title="Baixar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-download"></i></button><button onclick="openDefaultChartModal('chart4')" title="Editar gráfico" class="p-1.5 text-slate-300"><i class="fa-solid fa-pen"></i></button><button onclick="deleteDefaultChart('chart4')" title="Excluir gráfico" class="p-1.5 text-rose-400"><i class="fa-solid fa-trash"></i></button></div></div><div class="relative min-h-[220px]"><canvas id="chart4"></canvas></div></article>
             </section>
             <section id="dynamicChartsContainer" class="grid grid-cols-1 gap-6 lg:grid-cols-12"></section>
+            <p class="ux-empty dashboard-empty-charts">Este painel ainda não tem gráficos. Use Novo gráfico ou adicione um gráfico pelo menu do painel.</p>
         </div>
 
         <div id="view-intelligence" class="page-view hidden space-y-6">
@@ -709,9 +719,9 @@
                         <input type="text" id="kpiConfigUnit" placeholder="Ex: pts, %, ocorrências" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
                     </div>
                     <div>
-                        <label for="kpiConfigColor" class="block text-xs text-slate-400 mb-1">Cor</label>
+                        <label for="kpiConfigColor" class="block text-xs text-slate-400 mb-1">Intensidade do realce</label>
                         <select id="kpiConfigColor" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
-                            <option value="emerald">Verde</option><option value="amber">Âmbar</option><option value="rose">Vermelho</option><option value="sky">Azul</option><option value="violet">Violeta</option>
+                            <option value="emerald">Muito suave</option><option value="amber">Suave</option><option value="rose">Médio</option><option value="sky">Pronunciado</option><option value="violet">Intenso</option>
                         </select>
                     </div>
                 </div>
@@ -726,16 +736,16 @@
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
         <script src="pending-state.js?v=1"></script>
-        <script src="main.js?v=interface"></script>
+        <script src="main.js?v=visual-4"></script>
         <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=6.1"></script>
         <script src="report-executive.js?v=6.1"></script>
         <script src="report-evidence.js?v=propostas"></script>
         <script src="reports.js?v=propostas"></script>
-    <script src="workspace-v3.js?v=interface"></script>
-    <script src="motion-v3-1.js?v=3.1"></script>
-    <script src="pending-changes.js?v=ux3.2"></script>
+    <script src="workspace-v3.js?v=visual-4"></script>
+    <script src="motion-v3-1.js?v=visual-4"></script>
+    <script src="pending-changes.js?v=visual-4"></script>
     <script src="workspace-v3-2.js?v=interface"></script>
         <script src="report-authoring.js?v=propostas"></script>
 </body>
