@@ -31,7 +31,7 @@
         <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
     <link rel="stylesheet" href="workspace-ui.css?v=visual-4">
-    <!-- Painéis: aproveitar toda a largura disponível sem alterar a barra lateral. -->
+    <!-- Painéis: largura integral e alinhamento com a barra lateral. -->
     <style id="dashboard-full-width-fix">
         body main:has(> #view-dashboard:not(.hidden)) {
             width: auto !important;
@@ -40,6 +40,21 @@
             margin-inline-end: 0 !important;
             align-self: stretch;
             box-sizing: border-box;
+        }
+
+        /* No desktop, reservar apenas a largura real prevista para o menu. */
+        @media (min-width: 1024px) {
+            body.workspace-v3 main:has(> #view-dashboard:not(.hidden)) {
+                margin-inline-start: var(--ds-sidebar, 248px) !important;
+                padding-inline: clamp(20px, 2vw, 40px) !important;
+            }
+        }
+
+        /* No celular, o menu é uma gaveta e não reserva espaço lateral. */
+        @media (max-width: 1023px) {
+            body.workspace-v3 main:has(> #view-dashboard:not(.hidden)) {
+                margin-inline-start: 0 !important;
+            }
         }
 
         body main > #view-dashboard,
