@@ -15,7 +15,9 @@
     <!-- FontAwesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <!-- PapaParse for CSV Parsing -->
@@ -95,7 +97,7 @@
 
             <div class="order-2 flex w-full flex-wrap items-center justify-end gap-2 lg:order-2 lg:ml-auto lg:w-auto">
                 <button id="headerAlertsBtn" onclick="navigateToAlerts()" title="Central de Notificações & Alertas Operacionais" aria-label="Central de Notificações & Alertas Operacionais" class="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition hover:border-amber-500/40 hover:bg-slate-700 hover:text-white">
-                    <i class="fa-solid fa-bell text-sm" aria-hidden="true"></i>
+                    <i data-lucide="bell" aria-hidden="true"></i>
                     <span id="headerAlertsBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-md shadow-rose-500/40">0</span>
                 </button>
                 <button id="saveStateButton" title="Salvar todas as alterações" aria-label="Salvar todas as alterações" class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"><i id="saveStateButtonIcon" class="fa-solid fa-floppy-disk text-sm" aria-hidden="true"></i></button>
@@ -749,14 +751,14 @@
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
         <script src="pending-state.js?v=1"></script>
-        <script src="main.js?v=inicio-1"></script>
+        <script src="main.js?v=bibliotecas-1"></script>
         <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=6.1"></script>
         <script src="report-executive.js?v=6.1"></script>
         <script src="report-evidence.js?v=propostas"></script>
         <script src="reports.js?v=propostas"></script>
-    <script src="workspace-v3.js?v=largura-1"></script>
+    <script src="workspace-v3.js?v=bibliotecas-1"></script>
     <script src="motion-v3-1.js?v=largura-1"></script>
     <script src="pending-changes.js?v=visual-4"></script>
     <script src="workspace-v3-2.js?v=hierarquia-1"></script>

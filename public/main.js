@@ -1376,6 +1376,11 @@ async function carregarDadosSupabase(silencioso = false) {
 
     if (!response.ok) throw new Error(`Supabase HTTP ${response.status}`);
     const rows = await response.json();
+    const { z } = await import('https://esm.run/zod@4.1.12').catch(() => ({}));
+    const validRows = z
+        ? z.array(z.record(z.string(), z.unknown())).safeParse(rows).success
+        : Array.isArray(rows) && rows.every(row => row !== null && typeof row === 'object' && !Array.isArray(row));
+    if (!validRows) throw new Error('Formato inválido na resposta do Supabase.');
     supabaseReady = true;
     return rows[0] || null;
 }
@@ -3590,6 +3595,25 @@ function openDetailModal(index) {
     refreshDetailModal(index);
 }
 
+function indicatorGoalAnnotations(item) {
+    const {meta}=item;
+    if ((typeof meta !== 'number' && typeof meta !== 'string') || (typeof meta === 'string' && !meta.trim())) return {};
+    const goal=Number(meta);
+    if (!Number.isFinite(goal)) return {};
+    const themeColor=token=>getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    return {goal: {
+        type: 'line',
+        yScaleID: 'y',
+        yMin: goal,
+        yMax: goal,
+        borderColor: () => themeColor('--ds-brand'),
+        borderWidth: 2,
+        borderDash: [5, 4],
+        label: {display: true, content: `Meta ${fmtVal(goal, item.und)}`, position: 'end',
+            color: () => themeColor('--ds-brand'), backgroundColor: () => themeColor('--ds-surface')},
+    }};
+}
+
 function refreshDetailModal(index) {
     const item = currentData[index];
     const modal = document.getElementById('modalDetail');
@@ -3624,6 +3648,7 @@ function refreshDetailModal(index) {
         modalChartInst.data.labels = chartLabels;
         modalChartInst.data.datasets[0].label = item.indicador;
         modalChartInst.data.datasets[0].data = chartMonthData.values;
+        modalChartInst.options.plugins.annotation.annotations = indicatorGoalAnnotations(item);
         modalChartInst.update('none');
         modalChartInst.resize();
         return;
@@ -3647,10 +3672,10 @@ function refreshDetailModal(index) {
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: { legend: { display: false }, annotation: { annotations: indicatorGoalAnnotations(item) } },
                 scales: {
                     x: { ticks: { color: '#94a3b8' } },
-                    y: { min: 0, beginAtZero: true, ticks: { color: '#94a3b8' } }
+                    y: { beginAtZero: true, ticks: { color: '#94a3b8' } }
                 }
             }
         });

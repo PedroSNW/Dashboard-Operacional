@@ -256,7 +256,9 @@
         const sync=element('span','Aguardando dados','v3-sync');sync.id='v3Sync';sync.setAttribute('role','status');
         header.className='v3-topbar';header.replaceChildren(toggle,titles,sync,actions);document.body.prepend(sidebar);
         setupSearch(actions);
-        icon($('headerAlertsBtn').querySelector('i'),'bell');icon($('saveStateButtonIcon'),'save');applyTheme(currentTheme);
+        window.lucide?.createIcons();
+        icon($('headerAlertsBtn').querySelector('i'),'bell');
+        icon($('saveStateButtonIcon'),'save');applyTheme(currentTheme);
         const backdrop=element('button','','v3-drawer-backdrop');backdrop.tabIndex=-1;backdrop.setAttribute('aria-hidden','true');backdrop.setAttribute('aria-label','Fechar navegação');backdrop.onclick=closeDrawer;sidebar.after(backdrop);
         if(mobile()){sidebar.inert=true;toggle.setAttribute('aria-expanded','false');}
         document.addEventListener('keydown',e=>{if(!drawer)return;if(e.key==='Escape'){e.preventDefault();closeDrawer();}if(e.key==='Tab'){const focus=[...sidebar.querySelectorAll('button:not([disabled]),summary,a,input')].filter(e=>e.getClientRects().length);const a=focus[0],b=focus.at(-1);if(e.shiftKey&&document.activeElement===a){e.preventDefault();b.focus();}else if(!e.shiftKey&&document.activeElement===b){e.preventDefault();a.focus();}}});
