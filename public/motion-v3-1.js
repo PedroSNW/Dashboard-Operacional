@@ -3,6 +3,52 @@
     const reduced=matchMedia('(prefers-reduced-motion: reduce)');
     const active=new Map();let lastPage='home',themeTimer;
     const chartEntries=new Map();
+    const legendTransitions=new Map();
+    function clearLegendTransition(chart){
+        const transition=legendTransitions.get(chart);
+        if(!transition)return;
+        legendTransitions.delete(chart);
+        transition.overlay.remove();
+        transition.animation.cancel();
+    }
+    function capturePlot(chart){
+        const {canvas,chartArea:area,currentDevicePixelRatio:ratio}=chart;
+        if(!area?.width||!area.height||!canvas.offsetParent||!canvas.animate)return null;
+        const overlay=document.createElement('canvas');
+        overlay.className='chart-legend-transition';
+        overlay.width=Math.ceil(area.width*ratio);
+        overlay.height=Math.ceil(area.height*ratio);
+        const context=overlay.getContext('2d',{alpha:false});
+        if(!context)return null;
+        context.fillStyle=getComputedStyle(canvas).getPropertyValue('--ds-surface').trim();
+        context.fillRect(0,0,overlay.width,overlay.height);
+        context.drawImage(canvas,area.left*ratio,area.top*ratio,area.width*ratio,area.height*ratio,0,0,overlay.width,overlay.height);
+        overlay.setAttribute('aria-hidden','true');
+        Object.assign(overlay.style,{
+            position:'absolute',pointerEvents:'none',
+            left:`${canvas.offsetLeft+area.left}px`,top:`${canvas.offsetTop+area.top}px`,
+            width:`${area.width}px`,height:`${area.height}px`,
+        });
+        return overlay;
+    }
+    function animateLegendClicks(chart){
+        const onClick=chart.options.plugins.legend?.onClick;
+        if(typeof onClick!=='function'||!chart.canvas.closest('#view-dashboard'))return;
+        const plugins=chart.config.options.plugins;
+        const legend=plugins.legend??={};
+        legend.onClick=function(...args){
+            clearLegendTransition(chart);
+            finishChartEntry(chart);
+            const overlay=reduced.matches?null:capturePlot(chart);
+            // O canvas original já fica no estado final para o botão de download.
+            onClick.apply(this,args);
+            if(!overlay)return;
+            chart.canvas.offsetParent?.append(overlay);
+            const animation=overlay.animate([{opacity:1},{opacity:0}],{duration:200,easing:'ease-out'});
+            legendTransitions.set(chart,{overlay,animation});
+            animation.onfinish=()=>clearLegendTransition(chart);
+        };
+    }
     let visitedCanvases=new WeakSet();
     const chartEffects={
         chart2:{type:'bar',duration:420},
@@ -50,6 +96,7 @@
     }
     const chartEntryPlugin={
         id:'dgranel-chart-entry',
+        beforeInit:animateLegendClicks,
         afterInit(chart){
             const effect=chartEffects[chart.canvas.id];
             if(!chartObserver||!effect||chart.config.type!==effect.type||reduced.matches||visitedCanvases.has(chart.canvas))return;
@@ -79,6 +126,7 @@
             if(chartEntries.get(chart)?.progress>0)chart.ctx.restore();
         },
         afterDestroy(chart){
+            clearLegendTransition(chart);
             const state=chartEntries.get(chart);
             if(state)stopChartEntry(chart,state);
         },
@@ -110,13 +158,14 @@
         // Abas em segundo plano podem adiar animationfinish; nunca reter cópias visuais.
         deadline=setTimeout(cleanup,duration('--motion-micro')+50);
     }
-    reduced.addEventListener('change',()=>{if(reduced.matches){active.forEach(a=>a.cancel());active.clear();for(const chart of chartEntries.keys())finishChartEntry(chart);document.body.classList.remove('theme-transition');}});
+    reduced.addEventListener('change',()=>{if(reduced.matches){active.forEach(a=>a.cancel());active.clear();for(const chart of chartEntries.keys())finishChartEntry(chart);for(const chart of legendTransitions.keys())clearLegendTransition(chart);document.body.classList.remove('theme-transition');}});
     window.DGranelMotion={
         navigate(tab){
             if(tab===lastPage)return;
             cancelWithin(document.getElementById('view-'+lastPage));
             if(lastPage==='dashboard'){
                 for(const [chart,state] of chartEntries)if(!state.modal)stopChartEntry(chart,state);
+                for(const chart of legendTransitions.keys())clearLegendTransition(chart);
                 visitedCanvases=new WeakSet();
             }
             lastPage=tab;
@@ -150,6 +199,7 @@
 
     function styleChart(chart) {
         if (!chart.canvas.closest('main, #modalDetail')) return;
+        clearLegendTransition(chart);
 
         const theme = getComputedStyle(document.body);
         const token = name => theme.getPropertyValue(name).trim();
