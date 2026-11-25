@@ -90,7 +90,11 @@
                 return;
             }
             dataset.borderColor = color;
-            if (type === 'line' || type === 'radar') dataset.borderWidth = 2;
+            if (type === 'line' || type === 'radar') {
+                dataset.borderWidth = 2;
+                dataset.pointBackgroundColor = color;
+                dataset.pointBorderColor = color;
+            }
             dataset.backgroundColor = type === 'line' && dataset.fill
                 ? ({ chart }) => {
                     const area = chart.chartArea;

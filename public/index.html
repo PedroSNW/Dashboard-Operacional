@@ -5,9 +5,10 @@
     <meta name="google-site-verification" content="ircvyqk4rwH7m8yiF1NCZsCASmjMhBAjjF308aFIvgc">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="theme-preference.js?v=visual-4"></script>
+    <script src="accent-preference.js?v=1"></script>
     <title>Dashboard DGranel - Sistema Operacional de Segurança Viária</title>
     <meta name="description" content="Painel de controle e monitoramento operacional de segurança viária do sistema DGranel.">
-    <link rel="icon" type="image/png" href="report-logo-dgranel.png">
+    <link rel="icon" type="image/png" href="dgranel-mark.png">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -30,7 +31,7 @@
     <link rel="stylesheet" href="pending-changes.css?v=1">
         <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
-    <link rel="stylesheet" href="workspace-ui.css?v=visual-4">
+    <link rel="stylesheet" href="workspace-ui.css?v=paleta-1">
     <!-- Painéis: largura integral e alinhamento com a barra lateral. -->
     <style id="dashboard-full-width-fix">
         body main:has(> #view-dashboard:not(.hidden)) {
@@ -75,7 +76,7 @@
         <div class="glass-card w-full max-w-md rounded-2xl p-7">
             <div class="mb-6">
                 <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">Acesso corporativo</p>
-                <img class="workspace-login-logo" src="report-logo-dgranel.png" alt="D’Granel" width="150" height="62">
+                <span class="workspace-login-brand"><img class="workspace-login-logo" src="dgranel-mark.png" alt="D’Granel" width="50" height="50"></span>
                 <h2 class="mt-2 text-2xl font-bold text-white">Acesse o dashboard</h2>
                 <p class="mt-2 text-sm text-slate-400">Entre com seu e-mail corporativo para acessar o painel.</p>
             </div>
@@ -102,7 +103,7 @@
             <div class="flex w-full flex-col items-start gap-3 lg:w-auto lg:justify-start">
                 <div class="flex items-center gap-3">
                     <div id="developerModeTrigger" onclick="handleDeveloperModeClick()" title="Logo D'Granel" class="relative flex h-12 w-12 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500 to-amber-700 p-0.5 shadow-md transition-all hover:opacity-90">
-                        <img id="dashboardLogo" src="report-logo-dgranel.png" alt="D’Granel" onerror="handleLogoError(this)" class="h-full w-full rounded-[10px] object-cover">
+                        <img id="dashboardLogo" src="dgranel-mark.png" alt="D’Granel" onerror="handleLogoError(this)" class="h-full w-full rounded-[10px] object-cover">
                     </div>
                     <input type="file" id="logoInput" accept="image/*" class="hidden" onchange="handleLogoUpload(event)">
                     <div>
@@ -142,6 +143,13 @@
                         <button id="toggleDataLabelsBtn" onclick="toggleDataLabels(); document.getElementById('headerToolsMenu').removeAttribute('open')" title="Ativar rótulos de dados nos gráficos" aria-pressed="false" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-slate-200 transition hover:bg-slate-800"><i class="fa-solid fa-tags w-4 text-amber-400" aria-hidden="true"></i><span>Mostrar Rótulos</span></button>
                         <button onclick="exportToCSV(); document.getElementById('headerToolsMenu').removeAttribute('open')" title="Exportar dados em CSV" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-slate-200 transition hover:bg-slate-800"><i class="fa-solid fa-download w-4 text-emerald-400" aria-hidden="true"></i><span>Exportar CSV</span></button>
                         <button id="themeToggleBtn" onclick="toggleTheme(); document.getElementById('headerToolsMenu').removeAttribute('open')" title="Ativar tema claro" aria-label="Ativar tema claro" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-slate-200 transition hover:bg-slate-800"><i id="themeToggleIcon" class="fa-solid fa-sun w-4 text-amber-400" aria-hidden="true"></i><span>Alternar Tema</span></button>
+                        <fieldset id="accentPalette" class="accent-palette">
+                            <legend>Cor de destaque</legend>
+                            <label><input type="radio" name="accentPalette" value="purple" checked><span>Roxo</span></label>
+                            <label><input type="radio" name="accentPalette" value="gold"><span>Amarelo</span></label>
+                            <label><input type="radio" name="accentPalette" value="blue"><span>Azul</span></label>
+                            <label><input type="radio" name="accentPalette" value="red"><span>Vermelho</span></label>
+                        </fieldset>
                         <div class="my-1 border-t border-slate-800"></div>
                         <button onclick="resetData(); document.getElementById('headerToolsMenu').removeAttribute('open')" title="Restaurar dados padrões" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-rose-300 transition hover:bg-rose-950/50"><i class="fa-solid fa-rotate-left w-4" aria-hidden="true"></i><span>Restaurar Padrões</span></button>
                         <button onclick="signOutUser()" title="Encerrar sessão" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-slate-300 transition hover:bg-slate-800"><i class="fa-solid fa-right-from-bracket w-4" aria-hidden="true"></i><span>Sair</span></button>
@@ -773,7 +781,7 @@
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
         <script src="pending-state.js?v=1"></script>
-        <script src="main.js?v=visual-4"></script>
+        <script src="main.js?v=paleta-1"></script>
         <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=6.1"></script>
@@ -781,7 +789,7 @@
         <script src="report-evidence.js?v=propostas"></script>
         <script src="reports.js?v=propostas"></script>
     <script src="workspace-v3.js?v=visual-4"></script>
-    <script src="motion-v3-1.js?v=visual-4"></script>
+    <script src="motion-v3-1.js?v=paleta-1"></script>
     <script src="pending-changes.js?v=visual-4"></script>
     <script src="workspace-v3-2.js?v=interface"></script>
         <script src="report-authoring.js?v=propostas"></script>

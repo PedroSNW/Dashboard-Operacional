@@ -5,7 +5,7 @@ const SUPABASE_URL = 'https://hlasqurthnnhmszojrce.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w6wowhTeTPXuDiZTgSjCgA_pw_5UuQO';
 const SUPABASE_STATE_ENDPOINT = `${SUPABASE_URL}/rest/v1/dashboard_state`;
 const SUPABASE_AI_FUNCTION_ENDPOINT = `${SUPABASE_URL}/functions/v1/seguranca-viaria-ia`;
-const DEFAULT_LOGO_SRC = 'report-logo-dgranel.png';
+const DEFAULT_LOGO_SRC = 'dgranel-mark.png';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
@@ -884,7 +884,7 @@ function toggleTheme() {
     const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
     applyTheme(nextTheme);
     try { localStorage.setItem('dgranel.theme',nextTheme); } catch {}
-    Object.values(Chart.instances||{}).forEach(chart=>chart.update('none'));
+    Object.values(Chart.instances||{}).forEach(chart=>chart.update());
 }
 
 function handleDeveloperModeClick() {
