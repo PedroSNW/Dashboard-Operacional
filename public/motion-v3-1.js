@@ -2,11 +2,18 @@
 (() => {
     const reduced=matchMedia('(prefers-reduced-motion: reduce)');
     const active=new Map();let lastPage='home',themeTimer;
-    const duration=name=>parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name))||0;
+    const motionToken=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const duration=name=>parseFloat(motionToken(name))||0;
+    function cancelWithin(container){
+        if(!container)return;
+        for(const [node,animation] of active){
+            if(container.contains(node)){animation.cancel();active.delete(node);}
+        }
+    }
     function enter(node,frames=[{opacity:.88,transform:'translateY(4px)'},{opacity:1,transform:'none'}],shell=false){
         if(!node)return;active.get(node)?.cancel();active.delete(node);
         if(reduced.matches||!node.animate)return;
-        const animation=node.animate(frames,{duration:duration(shell?'--motion-medium':'--motion-short'),easing:shell?'cubic-bezier(.2,0,.38,.9)':'cubic-bezier(0,0,.3,1)'});
+        const animation=node.animate(frames,{duration:duration(shell?'--motion-medium':'--motion-short'),easing:motionToken(shell?'--ease-productive':'--ease-enter')||'ease-out'});
         active.set(node,animation);const clear=()=>{if(active.get(node)===animation)active.delete(node);};animation.onfinish=clear;animation.oncancel=clear;
     }
     function visualExit(node,frames){
@@ -24,12 +31,25 @@
     }
     reduced.addEventListener('change',()=>{if(reduced.matches){active.forEach(a=>a.cancel());active.clear();document.body.classList.remove('theme-transition');}});
     window.DGranelMotion={
-        navigate(tab){if(tab===lastPage)return;lastPage=tab;enter(document.getElementById('view-'+tab));},
+        navigate(tab){
+            if(tab===lastPage)return;
+            cancelWithin(document.getElementById('view-'+lastPage));
+            lastPage=tab;
+            enter(document.getElementById('view-'+tab));
+        },
+        panelChanged(previous,next){
+            cancelWithin(previous);
+            enter(next);
+        },
         shellChanged(previousLeft){
             if(reduced.matches)return;
             for(const node of [document.querySelector('main'),document.querySelector('.v3-topbar')]){active.get(node)?.cancel();const delta=previousLeft-node.getBoundingClientRect().left;enter(node,[{transform:`translateX(${delta}px)`},{transform:'none'}],true);}
         },
-        chartsChanged(){enter(document.querySelector('#view-dashboard .chart-scroll-box')?.parentElement);},
+        chartsChanged(){
+            for(const section of document.querySelectorAll('#view-dashboard :is(.dashboard-default-charts, #dynamicChartsContainer)')){
+                if(section.getClientRects().length)enter(section,[{opacity:.92},{opacity:1}]);
+            }
+        },
         retireAlert(id){
             if(reduced.matches||document.getElementById('alertFilterView')?.value!=='unread')return;
             const card=[...document.querySelectorAll('[data-alert-id]')].find(c=>c.dataset.alertId===id);if(!card)return;

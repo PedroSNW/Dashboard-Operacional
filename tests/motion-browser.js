@@ -1,5 +1,28 @@
 async function runMotionChecks(){
     const assert=(v,m)=>{if(!v)throw Error(m);},wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    switchTab('home');
+    const scene=document.querySelector('#v3Overview .fleet-scene');
+    const [night,day]=scene.querySelectorAll('img');
+    await Promise.all([day.decode(),night.decode()]);
+    assert(day.naturalWidth===1280&&night.naturalWidth===1024,'Fotos da abertura');
+    const frame=scene.getBoundingClientRect();
+    assert(frame.width>0&&frame.height>0,'Foto ausente neste viewport');
+    assert(getComputedStyle(day).objectPosition===getComputedStyle(night).objectPosition,'Enquadramentos diferentes');
+    const previousTheme=currentTheme;
+    applyTheme('dark');
+    await wait(reduce?0:450);
+    assert(getComputedStyle(day).opacity==='0','Tema escuro sem foto noturna');
+    applyTheme('light');
+    if(!reduce){
+        getComputedStyle(day).opacity;
+        assert(day.getAnimations().some(animation=>animation.transitionProperty==='opacity'),'Troca de foto sem dissolução');
+        await wait(450);
+    }
+    assert(getComputedStyle(day).opacity==='1','Tema claro sem foto diurna');
+    assert(Math.abs(frame.height-scene.getBoundingClientRect().height)<1,'A troca de tema mudou o tamanho do quadro');
+    if(reduce)assert(day.getAnimations().length===0,'Foto animada em movimento reduzido');
+    applyTheme(previousTheme);
     const data=JSON.stringify(currentData),revision=stateRevision,dirty=hasUnsavedChanges,shared=sharedTheme;
     const ids=Object.keys(Chart.instances).join(',');
     for(let n=0;n<8;n++){
@@ -12,10 +35,14 @@ async function runMotionChecks(){
     }
     assert(revision===stateRevision&&dirty===hasUnsavedChanges&&shared===sharedTheme&&data===JSON.stringify(currentData),'Tema alterou dados corporativos');
     assert(Object.keys(Chart.instances).join(',')===ids,'Tema recriou gráficos');
-    const current=currentTheme;localStorage.setItem('dgranel.theme','inválido');assert(preferredTheme('light')==='light','Preferência inválida');localStorage.setItem('dgranel.theme',current);
+    const current=currentTheme;
+    localStorage.setItem('dgranel.theme','inválido');
+    assert(DGranelTheme.stored()===null&&preferredTheme()===(DGranelTheme.scheme?.matches?'dark':'light'),'Preferência inválida deve seguir o sistema');
+    localStorage.setItem('dgranel.theme',current);
     for(let n=0;n<3;n++)for(const page of ['home','dashboard','datagrid','intelligence','reports','governance']){switchTab(page);assert(!document.getElementById('view-'+page).classList.contains('hidden'),'Página oculta');}
     await wait(340);assert(DGranelMotion.activeCount===0,'Animações sem limpeza');
-    switchTab('intelligence');switchIntelligenceSubtab('pilot');
+    switchTab('intelligence');switchIntelligenceSubtab('analyses');switchIntelligenceSubtab('pilot');
+    assert(document.getElementById('subtab-content-analyses').getAnimations().length===0,'Transição anterior não foi cancelada');
     const request=requestDashboardEdge,form=document.getElementById('aiQuestionForm');
     try{
         let release;requestDashboardEdge=()=>new Promise(resolve=>release=resolve);
@@ -35,5 +62,5 @@ async function runMotionChecks(){
     assert(document.activeElement.id==='v3MenuToggle','Restauração foco modal');
     await wait(340);if(matchMedia('(prefers-reduced-motion: reduce)').matches){assert(DGranelMotion.activeCount===0,'WAAPI em redução');assert(getComputedStyle(document.querySelector('.v3-sidebar')).transitionDuration==='0s','CSS em redução');}
     assert(window.__errors.length===0,window.__errors.join(';'));
-    return 'PASS tema/sol/lua/persistência, dados intactos, gráficos sem recriação, limpeza de animações, skeleton real, IA com falha, alertas, erro de salvamento e foco';
+    return 'PASS fotos por tema e enquadramento, tema/persistência, dados intactos, gráficos sem recriação, limpeza de animações, skeleton real, IA com falha, alertas, erro de salvamento e foco';
 }

@@ -251,7 +251,10 @@
                     <p id="v3OverviewStatus"></p>
                     <div id="v3QuickActions" class="v3-quick-actions"></div>
                 </div>
-                <img src="maxresdefault.jpg" alt="Comboio da D’Granel em uma rodovia" width="400" height="200">
+                <div class="fleet-scene" role="img" aria-label="Comboio de carretas D’Granel sobre uma ponte">
+                    <img src="maxresdefault.jpg" alt="" width="1024" height="576" loading="lazy" decoding="async">
+                    <img class="fleet-scene-day" src="comboio-dia.webp" alt="" width="1280" height="720" loading="lazy" decoding="async">
+                </div>
             </div>
             <div class="v3-metric-grid" aria-label="Resumo operacional">
                 <article data-metric="total"><i aria-hidden="true"></i><span>Indicadores disponíveis</span><strong id="v3Count">—</strong></article>

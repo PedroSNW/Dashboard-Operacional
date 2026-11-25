@@ -30,12 +30,17 @@ const checks = [
     'const smokeReport='+JSON.stringify(preview)+';',
     'const smokeGeneration='+JSON.stringify(generated)+';',
     'const smokeLogo='+JSON.stringify(btoa(String.fromCharCode(...await Deno.readFile('public/report-logo-dgranel.png'))))+';',
+    'const smokeBrand='+JSON.stringify('data:image/png;base64,'+btoa(Array.from(await Deno.readFile('public/dgranel-mark.png'),byte=>String.fromCharCode(byte)).join('')))+';',
     `
 addEventListener('load',async()=>{
     const status=document.createElement('pre');status.id='report-validation';document.body.append(status);
     const assert=(valid,message)=>{if(!valid)throw Error(message);};
     const node=id=>document.getElementById(id);
     try {
+        for(const image of document.querySelectorAll('.fleet-scene img')){
+            image.src=smokeFleet[image.getAttribute('src')];
+        }
+        document.querySelectorAll('img[src="dgranel-mark.png"]').forEach(image=>{image.srcset=smokeBrand;});
         currentData=smokeReport.indicators.map(i=>({...i,und:i.unidade}));
         mesesLabels=smokeReport.competencias;
         sectors=[...new Set(currentData.map(i=>i.setor))];
@@ -135,7 +140,6 @@ addEventListener('load',async()=>{
         if(location.hash==='#visual'){
             applyTheme('light');
             switchTab('home');
-            node('v3Overview').querySelector('img').src=smokeFleet;
             document.querySelectorAll('img[src="report-logo-dgranel.png"]').forEach(img=>{img.src='data:image/png;base64,'+smokeLogo;});
         }
         status.textContent='PASS sete módulos, busca, Central, revisão e download dos relatórios.';
@@ -146,8 +150,13 @@ addEventListener('load',async()=>{
 
 const optionalChart = await read('.validation-tools/chart.js').catch(() => '');
 const optionalTailwind = await read('.validation-tools/tailwind.js').catch(() => '');
-const fleetBytes = await Deno.readFile('public/maxresdefault.jpg');
-const fleet = 'data:image/jpeg;base64,'+btoa(Array.from(fleetBytes, byte=>String.fromCharCode(byte)).join(''));
+const fleet = Object.fromEntries(await Promise.all([
+    ['maxresdefault.jpg', 'image/jpeg'],
+    ['comboio-dia.webp', 'image/webp'],
+].map(async ([file, mime]) => {
+    const bytes = await Deno.readFile('public/' + file);
+    return [file, 'data:' + mime + ';base64,' + btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))];
+})));
 const scripts = [setup, optionalTailwind, optionalChart, 'const smokeFleet='+JSON.stringify(fleet)+';',
     ...await Promise.all(localScripts.map(file => read('public/' + file))),
     await read('public/vendor/jspdf-4.2.1.umd.min.js'),

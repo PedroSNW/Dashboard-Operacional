@@ -1,5 +1,5 @@
 /* D'Granel: movimento funcional. Sem animação de números, tabelas ou canvas. */
-:root{--motion-micro:120ms;--motion-short:190ms;--motion-medium:260ms;--motion-long:340ms;--ease-productive:cubic-bezier(.2,0,.38,.9);--ease-enter:cubic-bezier(0,0,.3,1);--ease-exit:cubic-bezier(.2,0,1,.9)}
+:root{--motion-micro:120ms;--motion-short:190ms;--motion-medium:260ms;--motion-long:340ms;--motion-scene:420ms;--ease-productive:cubic-bezier(.2,0,.38,.9);--ease-enter:cubic-bezier(0,0,.3,1);--ease-exit:cubic-bezier(.2,0,1,.9)}
 body.workspace-v3{overflow-x:clip}
 .workspace-v3 button,.workspace-v3 input,.workspace-v3 select,.workspace-v3 summary{transition:background-color var(--motion-short) var(--ease-productive),border-color var(--motion-short) var(--ease-productive),box-shadow var(--motion-short) var(--ease-productive),color var(--motion-short) var(--ease-productive)}
 .workspace-v3 button:hover:not(:disabled),.workspace-v3 label[for=csvFileInput]:hover{filter:none}
@@ -68,6 +68,6 @@ body.workspace-v3{overflow-x:clip}
  .v3-nav .tab-btn span{width:190px}.v3-sidebar-collapsed .v3-nav span{opacity:1}
 }
 @media(prefers-reduced-motion:reduce){
- :root{--motion-micro:0ms;--motion-short:0ms;--motion-medium:0ms;--motion-long:0ms}
+ :root{--motion-micro:0ms;--motion-short:0ms;--motion-medium:0ms;--motion-long:0ms;--motion-scene:0ms}
  .workspace-v3,.workspace-v3 *,.workspace-v3 *::before,.workspace-v3 *::after{animation:none;transition:none;scroll-behavior:auto}
 }

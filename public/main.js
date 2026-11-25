@@ -2531,6 +2531,7 @@ function generateDeterministicAlerts() {
 }
 
 function switchIntelligenceSubtab(subtabName) {
+    const previous = currentIntelligenceSubtab;
     currentIntelligenceSubtab = subtabName;
 
     // Atualiza botões
@@ -2558,6 +2559,12 @@ function switchIntelligenceSubtab(subtabName) {
         renderAlertsList();
     } else if (subtabName === 'analyses') {
         renderIntelligenceDashboard();
+    }
+    if (previous !== subtabName) {
+        window.DGranelMotion?.panelChanged(
+            document.getElementById(`subtab-content-${previous}`),
+            document.getElementById(`subtab-content-${subtabName}`)
+        );
     }
 }
 
