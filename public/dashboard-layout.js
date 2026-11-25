@@ -15,7 +15,8 @@
     let epoch, owner, cards = [], layout = new Map(), drag, resizeFrame;
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
     const order = (a, b) => a.y - b.y || a.x - b.x;
-    const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    const sharesColumns = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x;
+    const overlap = (a, b) => sharesColumns(a, b) && a.y < b.y + b.h && a.y + a.h > b.y;
     const height = slots => Math.max(0, ...Array.from(slots.values(), slot => slot.y + slot.h));
     const draft = () => drafts.get(owner);
     const sameSlot = (a, b) => a && b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
@@ -28,7 +29,7 @@
         return slot;
     }
 
-    function arrange(stored, priority) {
+    function arrange(stored, priority, movingDown = false) {
         const placed = new Map();
         const known = new Map(Object.entries(stored ?? {}));
         const fixed = [];
@@ -44,7 +45,12 @@
                 missing.push({ key, width, rows });
             }
         }
-        fixed.sort(([keyA, a], [keyB, b]) => keyA === priority ? -1 : keyB === priority ? 1 : order(a, b));
+        fixed.sort(([keyA, a], [keyB, b]) => {
+            if (movingDown && a.y !== b.y) return a.y - b.y;
+            if (keyA === priority) return movingDown ? 1 : -1;
+            if (keyB === priority) return movingDown ? -1 : 1;
+            return order(a, b);
+        });
         for (const [key, slot] of fixed) placed.set(key, fit(placed, slot));
         for (const { key, width, rows } of missing) {
             let slot = { x: 0, y: 0, w: width, h: rows };
@@ -53,7 +59,16 @@
             }
             placed.set(key, slot);
         }
-        return placed;
+        // Cada cartão sobe até o fim do último cartão que ocupa suas colunas.
+        const compact = new Map();
+        for (const [key, slot] of [...placed].sort(([, a], [, b]) => order(a, b))) {
+            let y = 0;
+            for (const above of compact.values()) {
+                if (sharesColumns(slot, above)) y = Math.max(y, above.y + above.h);
+            }
+            compact.set(key, { ...slot, y });
+        }
+        return compact;
     }
 
     function collect() {
@@ -151,11 +166,18 @@
         show();
     }
 
-    function change(key, next) {
-        if (sameSlot(layout.get(key), next)) return;
+    function projectChange(key, next) {
+        const current = layout.get(key);
+        if (sameSlot(current, next)) return layout;
         const slots = Object.fromEntries(layout);
         slots[key] = next;
-        layout = arrange(slots, key);
+        return arrange(slots, key, next.y > current.y);
+    }
+
+    function change(key, next) {
+        const projected = projectChange(key, next);
+        if ([...projected].every(([id, slot]) => sameSlot(layout.get(id), slot))) return;
+        layout = projected;
         draft().slots = Object.fromEntries(layout);
         draft().changed = true;
         show(true);
@@ -191,7 +213,12 @@
                 width: '100%', height: '4px',
             });
         } else {
-            const next = drag.next;
+            const requested = drag.next;
+            if (!sameSlot(drag.requested, requested)) {
+                drag.requested = requested;
+                drag.projected = projectChange(key, requested).get(key);
+            }
+            const next = drag.projected;
             Object.assign(drag.preview.style, {
                 left: `${desktop.matches ? next.x*column : 0}px`,
                 top: `${desktop.matches ? next.y*row : start.cardTop}px`,
@@ -248,7 +275,12 @@
         event.preventDefault();
         const [dx, dy] = delta, key = handle.closest('[data-layout-chart]').dataset.layoutChart;
         const action = handle.dataset.layoutAction;
-        if (desktop.matches || action === 'size') {
+        if (desktop.matches && action === 'move' && dy) {
+            const from = layout.get(key);
+            const neighbours = [...layout.values()].filter(slot => sharesColumns(from, slot) && (slot.y - from.y) * dy > 0);
+            const target = neighbours.sort((a, b) => (a.y - b.y) * dy)[0];
+            if (target) change(key, { ...from, y: target.y });
+        } else if (desktop.matches || action === 'size') {
             change(key, adjusted(layout.get(key), action, desktop.matches ? dx : 0, dy));
         } else if (dy) {
             const list = [...layout].sort(([,a], [,b]) => order(a,b));
