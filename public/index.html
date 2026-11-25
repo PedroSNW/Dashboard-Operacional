@@ -27,48 +27,11 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&amp;display=swap">
     <link rel="stylesheet" href="style.css?v=visual-4">
     <link rel="stylesheet" href="workspace-v3.css?v=ux3.2">
-    <link rel="stylesheet" href="motion-v3-1.css?v=inicio-1">
+    <link rel="stylesheet" href="motion-v3-1.css?v=largura-1">
     <link rel="stylesheet" href="pending-changes.css?v=1">
         <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
-    <link rel="stylesheet" href="workspace-ui.css?v=inicio-1">
-    <!-- Painéis: largura integral e alinhamento com a barra lateral. -->
-    <style id="dashboard-full-width-fix">
-        body main:has(> #view-dashboard:not(.hidden)) {
-            width: auto !important;
-            max-width: none !important;
-            min-width: 0;
-            margin-inline-end: 0 !important;
-            align-self: stretch;
-            box-sizing: border-box;
-        }
-
-        /* No desktop, reservar apenas a largura real prevista para o menu. */
-        @media (min-width: 1024px) {
-            body.workspace-v3 main:has(> #view-dashboard:not(.hidden)) {
-                margin-inline-start: var(--ds-sidebar, 248px) !important;
-                padding-inline: clamp(20px, 2vw, 40px) !important;
-            }
-        }
-
-        /* No celular, o menu é uma gaveta e não reserva espaço lateral. */
-        @media (max-width: 1023px) {
-            body.workspace-v3 main:has(> #view-dashboard:not(.hidden)) {
-                margin-inline-start: 0 !important;
-            }
-        }
-
-        body main > #view-dashboard,
-        body main > #dashboardWorkspaceSection {
-            width: 100% !important;
-            max-width: none !important;
-            min-width: 0;
-            margin-inline: 0 !important;
-            align-self: stretch;
-            justify-self: stretch;
-            box-sizing: border-box;
-        }
-    </style>
+    <link rel="stylesheet" href="workspace-ui.css?v=largura-1">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
@@ -793,8 +756,8 @@
         <script src="report-executive.js?v=6.1"></script>
         <script src="report-evidence.js?v=propostas"></script>
         <script src="reports.js?v=propostas"></script>
-    <script src="workspace-v3.js?v=inicio-1"></script>
-    <script src="motion-v3-1.js?v=inicio-1"></script>
+    <script src="workspace-v3.js?v=largura-1"></script>
+    <script src="motion-v3-1.js?v=largura-1"></script>
     <script src="pending-changes.js?v=visual-4"></script>
     <script src="workspace-v3-2.js?v=hierarquia-1"></script>
         <script src="report-authoring.js?v=propostas"></script>

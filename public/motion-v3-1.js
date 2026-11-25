@@ -10,10 +10,10 @@
             if(container.contains(node)){animation.cancel();active.delete(node);}
         }
     }
-    function enter(node,frames=[{opacity:.88,transform:'translateY(4px)'},{opacity:1,transform:'none'}],shell=false){
+    function enter(node,frames=[{opacity:.88,transform:'translateY(4px)'},{opacity:1,transform:'none'}]){
         if(!node)return;active.get(node)?.cancel();active.delete(node);
         if(reduced.matches||!node.animate)return;
-        const animation=node.animate(frames,{duration:duration(shell?'--motion-medium':'--motion-short'),easing:motionToken(shell?'--ease-productive':'--ease-enter')||'ease-out'});
+        const animation=node.animate(frames,{duration:duration('--motion-short'),easing:motionToken('--ease-enter')||'ease-out'});
         active.set(node,animation);const clear=()=>{if(active.get(node)===animation)active.delete(node);};animation.onfinish=clear;animation.oncancel=clear;
     }
     function visualExit(node,frames){
@@ -35,15 +35,11 @@
             if(tab===lastPage)return;
             cancelWithin(document.getElementById('view-'+lastPage));
             lastPage=tab;
-            enter(document.getElementById('view-'+tab));
+            enter(document.getElementById('view-'+tab),[{opacity:.78,transform:'translateY(5px)'},{opacity:1,transform:'none'}]);
         },
         panelChanged(previous,next){
             cancelWithin(previous);
             enter(next);
-        },
-        shellChanged(previousLeft){
-            if(reduced.matches)return;
-            for(const node of [document.querySelector('main'),document.querySelector('.v3-topbar')]){active.get(node)?.cancel();const delta=previousLeft-node.getBoundingClientRect().left;enter(node,[{transform:`translateX(${delta}px)`},{transform:'none'}],true);}
         },
         chartsChanged(){
             for(const section of document.querySelectorAll('#view-dashboard :is(.dashboard-default-charts, #dynamicChartsContainer)')){

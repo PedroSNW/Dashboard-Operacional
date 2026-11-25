@@ -39,7 +39,43 @@ async function runMotionChecks(){
     localStorage.setItem('dgranel.theme','inválido');
     assert(DGranelTheme.stored()===null&&preferredTheme()===(DGranelTheme.scheme?.matches?'dark':'light'),'Preferência inválida deve seguir o sistema');
     localStorage.setItem('dgranel.theme',current);
-    for(let n=0;n<3;n++)for(const page of ['home','dashboard','datagrid','intelligence','reports','governance']){switchTab(page);assert(!document.getElementById('view-'+page).classList.contains('hidden'),'Página oculta');}
+    const main=document.querySelector('main'),topbar=document.querySelector('.v3-topbar'),rail=document.getElementById('v3Sidebar');
+    const desktop=matchMedia('(min-width: 1024px)').matches;
+    const almost=(a,b)=>Math.abs(a-b)<1;
+    const checkEdges=()=>{
+        const bodyRight=document.documentElement.clientWidth;
+        const sidebarRight=desktop?rail.getBoundingClientRect().right:0;
+        for(const node of [main,topbar]){
+            const {left,right}=node.getBoundingClientRect();
+            assert(almost(left,sidebarRight)&&almost(right,bodyRight),'Bordas do layout fora de sincronia');
+        }
+        return sidebarRight;
+    };
+    if(desktop){
+        const toggle=document.getElementById('v3MenuToggle');
+        const widthBefore=checkEdges();
+        toggle.click();
+        const widths=[];
+        const start=performance.now();
+        while(performance.now()-start<300){
+            await new Promise(requestAnimationFrame);
+            widths.push(checkEdges());
+        }
+        const widthAfter=checkEdges();
+        assert(Math.abs(widthBefore-widthAfter)>100,'Recolher a barra não liberou espaço');
+        assert(reduce||widths.some(width=>width>Math.min(widthBefore,widthAfter)+1&&width<Math.max(widthBefore,widthAfter)-1),'Barra superior pulou sem deslizar');
+        toggle.click();
+        await wait(300);
+        assert(almost(checkEdges(),widthBefore),'A expansão não restaurou as bordas');
+    }
+    for(let n=0;n<3;n++)for(const page of ['home','dashboard','datagrid','intelligence','reports','governance']){
+        switchTab(page);
+        const view=document.getElementById('view-'+page);
+        assert(!view.classList.contains('hidden'),'Página oculta');
+        checkEdges();
+        const {right}=view.getBoundingClientRect();
+        assert(almost(right,main.getBoundingClientRect().right-parseFloat(getComputedStyle(main).paddingRight)),'Seção com margem lateral extra: '+page);
+    }
     await wait(340);assert(DGranelMotion.activeCount===0,'Animações sem limpeza');
     switchTab('intelligence');switchIntelligenceSubtab('analyses');switchIntelligenceSubtab('pilot');
     assert(document.getElementById('subtab-content-analyses').getAnimations().length===0,'Transição anterior não foi cancelada');

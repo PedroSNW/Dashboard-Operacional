@@ -12,7 +12,7 @@ body.workspace-v3{overflow-x:clip}
 .workspace-v3 #themeToggleBtn{color:var(--ds-brand);background:var(--ds-raised)}
 .theme-current-icon{display:inline-flex;align-items:center;justify-content:center;color:var(--ds-brand)}
 .theme-current-icon::before{content:none}
-.workspace-v3.theme-transition,.workspace-v3.theme-transition :is(.v3-sidebar,.v3-topbar,.glass-card,.v3-priority-card,.v3-metric-grid article,.v3-indicator-picker,.v3-pdf-dialog){transition:background-color var(--motion-medium) var(--ease-productive),border-color var(--motion-medium),color var(--motion-medium)}
+.workspace-v3.theme-transition :is(.v3-topbar,.glass-card,.v3-priority-card,.v3-metric-grid article,.v3-indicator-picker,.v3-pdf-dialog){transition:background-color var(--motion-medium) var(--ease-productive),border-color var(--motion-medium),color var(--motion-medium)}
 .v3-nav .tab-btn{position:relative;min-height:46px;overflow:hidden;white-space:nowrap}
 .v3-nav .tab-btn i{flex:0 0 20px}
 .v3-nav .tab-btn span{position:absolute;left:46px;width:174px;white-space:nowrap;opacity:1;transition:opacity var(--motion-short) var(--ease-productive)}
@@ -50,17 +50,6 @@ body.workspace-v3{overflow-x:clip}
 @keyframes motion-out{to{opacity:0;transform:scale(.99)}}
 @keyframes motion-backdrop{from{opacity:0}to{opacity:1}}
 @keyframes motion-breathe{50%{opacity:.6}}
-@media(min-width:1024px){
- .v3-sidebar{width:248px;overflow-x:hidden;clip-path:inset(0 calc(248px - var(--ds-sidebar)) 0 0);transition:clip-path var(--motion-medium) var(--ease-productive)}
- /* Main/topbar recebem translação FLIP; não redimensionar canvas a cada quadro. */
- .v3-sidebar-collapsed .v3-nav span{display:block;opacity:0;pointer-events:none}
- .v3-sidebar-collapsed .v3-nav .tab-btn{justify-content:flex-start;padding-left:12px;width:52px}
- .v3-sidebar-collapsed .v3-nav-group{display:block;visibility:hidden;opacity:0}
- .v3-brand{overflow:hidden}.v3-brand>div:last-child{flex-shrink:0;width:160px;transition:opacity var(--motion-short)}
- .v3-sidebar-collapsed .v3-brand>div:last-child{display:block;opacity:0;pointer-events:none}
- .v3-sidebar-collapsed .v3-brand{padding:0 6px 25px}
- .v3-brand>#developerModeTrigger{flex:0 0 48px}
-}
 @media(max-width:1023px){
  .v3-sidebar{transition:transform var(--motion-medium) var(--ease-enter)}
  body.authenticated .v3-drawer-backdrop{display:block;position:fixed;inset:0;z-index:55;background:#030b18a8;opacity:0;pointer-events:none;transition:opacity var(--motion-short)}

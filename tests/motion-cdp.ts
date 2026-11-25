@@ -8,7 +8,7 @@ try{
  if(!version)throw Error('CDP indisponível');ws=new WebSocket(version.webSocketDebuggerUrl);await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j;});
  let seq=0;const waiting=new Map();ws.onmessage=e=>{const m=JSON.parse(e.data);const p=waiting.get(m.id);if(p){waiting.delete(m.id);m.error?p.reject(Error(JSON.stringify(m.error))):p.resolve(m.result);}};
  const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;waiting.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});
- const cases=before?[[1440,'dark',false]]:keyboard?[[320,'dark',false],[1440,'light',true]]:[320,390,768,1024,1440,1920].flatMap(w=>[[w,'dark',false],[w,'light',false]]).concat([[1440,'dark',true]]);
+ const cases=before?[[1440,'dark',false]]:keyboard?[[320,'dark',false],[1440,'light',true]]:[320,390,768,1024,1440,1920,2560].flatMap(w=>[[w,'dark',false],[w,'light',false]]).concat([[1440,'dark',true]]);
  for(const [width,theme,reduce]of cases){
   const {targetId}=await call('Target.createTarget',{url:'about:blank'}),{sessionId}=await call('Target.attachToTarget',{targetId,flatten:true});
   const evaluate=async(expression,awaitPromise=false)=>{const r=await call('Runtime.evaluate',{expression,awaitPromise,returnByValue:true},sessionId);if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
