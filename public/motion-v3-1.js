@@ -2,6 +2,87 @@
 (() => {
     const reduced=matchMedia('(prefers-reduced-motion: reduce)');
     const active=new Map();let lastPage='home',themeTimer;
+    const chartEntries=new Map();
+    let visitedCanvases=new WeakSet();
+    const chartEffects={
+        chart2:{type:'bar',duration:420},
+        chart4:{type:'line',duration:450},
+        modalDetailChart:{type:'line',duration:300,modal:true},
+    };
+    const chartObserver=typeof IntersectionObserver==='function' ? new IntersectionObserver(entries=>{
+        for(const entry of entries){
+            const chart=Chart.getChart(entry.target);
+            const state=chartEntries.get(chart);
+            if(entry.isIntersecting&&state)startChartEntry(chart,state);
+        }
+    }) : null;
+    function stopChartEntry(chart,state){
+        if(state.frame!==undefined)cancelAnimationFrame(state.frame);
+        chartObserver.unobserve(state.target);
+        chartEntries.delete(chart);
+    }
+    function finishChartEntry(chart){
+        const state=chartEntries.get(chart);
+        if(!state)return;
+        stopChartEntry(chart,state);
+        if(!state.modal)visitedCanvases.add(chart.canvas);
+        chart.draw();
+    }
+    function finishVisibleCharts(){
+        for(const [chart,state] of chartEntries){
+            const rect=state.target.getBoundingClientRect();
+            if(state.frame!==undefined||(rect.width&&rect.height&&rect.bottom>0&&rect.top<innerHeight))finishChartEntry(chart);
+        }
+    }
+    function startChartEntry(chart,state){
+        if(reduced.matches){finishChartEntry(chart);return;}
+        chartObserver.unobserve(state.target);
+        if(!state.modal)visitedCanvases.add(chart.canvas);
+        const start=performance.now();
+        function frame(now){
+            const elapsed=Math.min(1,(now-start)/state.duration);
+            if(elapsed>=1){finishChartEntry(chart);return;}
+            state.progress=state.type==='bar'?1-(1-Math.max(0,elapsed))**3:Math.max(0,elapsed);
+            chart.draw();
+            state.frame=requestAnimationFrame(frame);
+        }
+        state.frame=requestAnimationFrame(frame);
+    }
+    const chartEntryPlugin={
+        id:'dgranel-chart-entry',
+        afterInit(chart){
+            const effect=chartEffects[chart.canvas.id];
+            if(!chartObserver||!effect||chart.config.type!==effect.type||reduced.matches||visitedCanvases.has(chart.canvas))return;
+            if(effect.type==='bar'&&chart.options.indexAxis==='y')return;
+            const target=chart.canvas;
+            chartEntries.set(chart,{...effect,target,progress:0});
+            chartObserver.observe(target);
+        },
+        beforeDatasetsDraw(chart){
+            const state=chartEntries.get(chart);
+            if(!state)return;
+            if(state.progress===0)return false;
+            // Recorta também o preenchimento das linhas, sem alterar escalas ou valores.
+            const {ctx,chartArea:{left,top,width,height}}=chart;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(left,top,width*(state.type==='line'?state.progress:1),height);
+            ctx.clip();
+            if(state.type==='bar'){
+                const base=chart.getDatasetMeta(0).vScale.getBasePixel();
+                ctx.translate(0,base);
+                ctx.scale(1,state.progress);
+                ctx.translate(0,-base);
+            }
+        },
+        afterDatasetsDraw(chart){
+            if(chartEntries.get(chart)?.progress>0)chart.ctx.restore();
+        },
+        afterDestroy(chart){
+            const state=chartEntries.get(chart);
+            if(state)stopChartEntry(chart,state);
+        },
+    };
     const motionToken=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     const duration=name=>parseFloat(motionToken(name))||0;
     function cancelWithin(container){
@@ -29,11 +110,15 @@
         // Abas em segundo plano podem adiar animationfinish; nunca reter cópias visuais.
         deadline=setTimeout(cleanup,duration('--motion-micro')+50);
     }
-    reduced.addEventListener('change',()=>{if(reduced.matches){active.forEach(a=>a.cancel());active.clear();document.body.classList.remove('theme-transition');}});
+    reduced.addEventListener('change',()=>{if(reduced.matches){active.forEach(a=>a.cancel());active.clear();for(const chart of chartEntries.keys())finishChartEntry(chart);document.body.classList.remove('theme-transition');}});
     window.DGranelMotion={
         navigate(tab){
             if(tab===lastPage)return;
             cancelWithin(document.getElementById('view-'+lastPage));
+            if(lastPage==='dashboard'){
+                for(const [chart,state] of chartEntries)if(!state.modal)stopChartEntry(chart,state);
+                visitedCanvases=new WeakSet();
+            }
             lastPage=tab;
             enter(document.getElementById('view-'+tab),[{opacity:.78,transform:'translateY(5px)'},{opacity:1,transform:'none'}]);
         },
@@ -41,11 +126,8 @@
             cancelWithin(previous);
             enter(next);
         },
-        chartsChanged(){
-            for(const section of document.querySelectorAll('#view-dashboard :is(.dashboard-default-charts, #dynamicChartsContainer)')){
-                if(section.getClientRects().length)enter(section,[{opacity:.92},{opacity:1}]);
-            }
-        },
+        finishChart(canvasId){finishChartEntry(Chart.getChart(canvasId));},
+        finishVisibleCharts,
         retireAlert(id){
             if(reduced.matches||document.getElementById('alertFilterView')?.value!=='unread')return;
             const card=[...document.querySelectorAll('[data-alert-id]')].find(c=>c.dataset.alertId===id);if(!card)return;
@@ -53,7 +135,7 @@
             visualExit(card,[{opacity:.65},{opacity:0}]);
         },
         retireModal(modal){if(modal&&!modal.classList.contains('hidden'))visualExit(modal,[{opacity:1},{opacity:0}]);},
-        themeChanged(icon){clearTimeout(themeTimer);if(reduced.matches)return;document.body.classList.add('theme-transition');enter(icon,[{opacity:.6,transform:'rotate(-12deg)'},{opacity:1,transform:'rotate(0)'}]);themeTimer=setTimeout(()=>document.body.classList.remove('theme-transition'),duration('--motion-medium')+30);},
+        themeChanged(icon){finishVisibleCharts();clearTimeout(themeTimer);if(reduced.matches)return;document.body.classList.add('theme-transition');enter(icon,[{opacity:.6,transform:'rotate(-12deg)'},{opacity:1,transform:'rotate(0)'}]);themeTimer=setTimeout(()=>document.body.classList.remove('theme-transition'),duration('--motion-medium')+30);},
         aiState(state){const body=document.getElementById('aiResponseBody');if(!body)return;if(state==='loading'){const skeleton=document.createElement('div');skeleton.className='motion-ai-skeleton';skeleton.setAttribute('aria-hidden','true');skeleton.innerHTML='<span></span><span></span><span></span>';body.append(skeleton);}else{body.querySelector('.motion-ai-skeleton')?.remove();enter(body);}},
         get activeCount(){return active.size;}
     };
@@ -63,6 +145,7 @@
         if(sync&&save){const update=()=>{save.dataset.state=sync.dataset.state;save.setAttribute('aria-busy',String(sync.dataset.state==='loading'));};new MutationObserver(update).observe(sync,{attributes:true,attributeFilter:['data-state']});update();}
         for(const modal of document.querySelectorAll('div.fixed[id^="modal"]')){let visible=!modal.classList.contains('hidden');new MutationObserver(()=>{const next=!modal.classList.contains('hidden');if(next&&!visible)enter(modal.firstElementChild);if(!next)active.get(modal.firstElementChild)?.cancel();visible=next;}).observe(modal,{attributes:true,attributeFilter:['class']});}
         Chart.register({ id: 'dgranel-motion-presentation', beforeUpdate: styleChart });
+        Chart.register(chartEntryPlugin);
     });
 
     function styleChart(chart) {

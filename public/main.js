@@ -141,6 +141,7 @@ function wrapCanvasForScroll(canvas) {
     inner.appendChild(canvas);
 
     const setZoom = (value, reset = false) => {
+        window.DGranelMotion?.finishChart(canvas.id);
         const zoom = Math.min(CHART_ZOOM_MAX, Math.max(CHART_ZOOM_MIN, value));
         const centerRatio = (scroller.scrollLeft + scroller.clientWidth / 2) / (inner.scrollWidth || 1);
         chartZoomState[canvas.id] = zoom;
@@ -191,6 +192,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('saveStateButton').addEventListener('click', saveCurrentState);
     document.getElementById('dashboardMonthOptions')?.addEventListener('change', event => {
         if (event.target.type !== 'checkbox') return;
+        window.DGranelMotion?.finishVisibleCharts();
         const availableMonths = getDashboardMonthLabels();
         const checkedMonths = [...document.querySelectorAll('#dashboardMonthOptions input:checked')]
             .map(input => input.value);
@@ -199,23 +201,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderCharts();
         renderDynamicCharts();
         renderIntelligenceDashboard();
-        window.DGranelMotion?.chartsChanged();
     });
     document.getElementById('selectAllDashboardMonths')?.addEventListener('click', () => {
+        window.DGranelMotion?.finishVisibleCharts();
         selectedDashboardMonths = null;
         renderDashboardMonthFilter();
         renderCharts();
         renderDynamicCharts();
         renderIntelligenceDashboard();
-        window.DGranelMotion?.chartsChanged();
     });
     document.getElementById('clearDashboardMonths')?.addEventListener('click', () => {
+        window.DGranelMotion?.finishVisibleCharts();
         selectedDashboardMonths = [];
         renderDashboardMonthFilter();
         renderCharts();
         renderDynamicCharts();
         renderIntelligenceDashboard();
-        window.DGranelMotion?.chartsChanged();
     });
     ['intelligenceSectorFilter', 'intelligenceIndicatorFilter', 'intelligencePeriodFilter', 'intelligenceSeverityFilter', 'intelligenceCategoryFilter']
         .forEach(id => document.getElementById(id)?.addEventListener('change', () => {
@@ -562,6 +563,7 @@ function showAlert(title, text, icon = 'info') {
 function downloadChart(chartCanvasId, fileName) {
     const canvas = document.getElementById(chartCanvasId);
     if (!canvas) return;
+    window.DGranelMotion?.finishChart(chartCanvasId);
 
     const safeFileName = String(fileName || 'grafico').replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_');
     const card = canvas.closest('.glass-card') || canvas.closest('article') || canvas.parentElement;
@@ -1515,6 +1517,7 @@ function initSystem() {
 }
 
 function toggleDataLabels() {
+    window.DGranelMotion?.finishVisibleCharts();
     showDataLabels = !showDataLabels;
     markStateDirty();
     updateDataLabelsButton();
@@ -3606,6 +3609,7 @@ function indicatorGoalAnnotations(item) {
         yScaleID: 'y',
         yMin: goal,
         yMax: goal,
+        drawTime: 'afterDraw',
         borderColor: () => themeColor('--ds-brand'),
         borderWidth: 2,
         borderDash: [5, 4],
@@ -3645,6 +3649,7 @@ function refreshDetailModal(index) {
     if (!canvas) return;
 
     if (modalChartInst) {
+        window.DGranelMotion?.finishChart(canvas.id);
         modalChartInst.data.labels = chartLabels;
         modalChartInst.data.datasets[0].label = item.indicador;
         modalChartInst.data.datasets[0].data = chartMonthData.values;
