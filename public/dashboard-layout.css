@@ -1,0 +1,93 @@
+.dashboard-layout-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+#dashboardLayoutActions { display: flex; flex-wrap: wrap; gap: 8px; }
+#dashboardLayoutHelp { color: var(--ds-muted); }
+.workspace-v3 :is(#dashboardLayoutToolbar, #dashboardLayoutActions)[hidden] { display: none; }
+.dashboard-layout-toolbar:has(#dashboardLayoutActions:not([hidden])) {
+    position: sticky;
+    top: calc(var(--report-topbar-height, 60px) + 8px);
+    z-index: 12;
+    padding: 8px 12px;
+    background: var(--ds-surface);
+    border: 1px solid var(--ds-control-border);
+    border-radius: var(--ds-radius);
+}
+@media (max-width: 767px) {
+    .dashboard-layout-toolbar:has(#dashboardLayoutActions:not([hidden])) {
+        top: calc(var(--report-topbar-height, 60px) + 36px);
+    }
+}
+#dynamicChartsContainer[data-arranged] {
+    --chart-grid-gap: 16px;
+    --chart-grid-row: 48px;
+    position: relative;
+    display: grid;
+    gap: var(--chart-grid-gap);
+}
+#dynamicChartsContainer[data-arranged] > [data-layout-chart]:not(.hidden) {
+    display: flex;
+    position: relative;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+#dynamicChartsContainer[data-arranged] .dashboard-chart-plot,
+#dynamicChartsContainer[data-arranged] .chart-scroller { flex: 1 1 0; min-height: 0; }
+#dynamicChartsContainer[data-arranged] :is(.chart-scroll-box, .chart-scroll-inner) { height: 100%; }
+#dynamicChartsContainer[data-arranged] .dashboard-chart-plot { min-width: 0; overflow: hidden; }
+#dynamicChartsContainer[data-arranged] .chart-scroller { box-sizing: border-box; }
+.dashboard-chart-handles {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+.workspace-v3 .dashboard-chart-handles button {
+    min-height: 36px;
+    padding: 4px 8px;
+    font-size: var(--ds-font-caption);
+    touch-action: none;
+    user-select: none;
+}
+.dashboard-chart-handles [data-layout-action="move"] { cursor: grab; }
+.dashboard-chart-handles [data-layout-action="size"] {
+    position: absolute;
+    right: 12px;
+    bottom: 8px;
+    cursor: nwse-resize;
+}
+#dynamicChartsContainer[data-editing] > [data-layout-chart]:not(.hidden) {
+    padding-bottom: 50px;
+    border-style: dashed;
+    border-color: var(--ds-control-border);
+}
+.dashboard-layout-preview {
+    position: absolute;
+    z-index: 4;
+    pointer-events: none;
+    border: 2px dashed var(--ds-brand);
+    border-radius: var(--ds-radius);
+    background: color-mix(in srgb, var(--ds-brand) 14%, transparent);
+}
+#view-dashboard:has(#dynamicChartsContainer[data-editing]) { padding-bottom: clamp(160px, 35vh, 320px); }
+@media (min-width: 1024px) {
+    #dynamicChartsContainer[data-arranged] {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        grid-auto-rows: var(--chart-grid-row);
+    }
+    #dynamicChartsContainer[data-arranged] > [data-layout-chart] {
+        grid-column: var(--chart-x) / span var(--chart-w);
+        grid-row: var(--chart-y) / span var(--chart-h);
+    }
+}
+@media (max-width: 1023px) {
+    #dynamicChartsContainer[data-arranged] { grid-template-columns: minmax(0, 1fr); }
+    #dynamicChartsContainer[data-arranged] > [data-layout-chart] {
+        height: calc(var(--chart-h) * (var(--chart-grid-row) + var(--chart-grid-gap)) - var(--chart-grid-gap));
+    }
+}

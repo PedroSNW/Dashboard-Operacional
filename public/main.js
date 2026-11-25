@@ -1391,12 +1391,12 @@ async function carregarDadosCompartilhados(silencioso = false) {
     const loadingEpoch=sessionEpoch;
     refreshPendingState();
     if(isSavingState)return;
-    if (silencioso && hasUnsavedChanges) return;
+    if (silencioso && (hasUnsavedChanges || window.DGranelChartLayout?.hasDraft())) return;
     try {
         const sharedState = await carregarDadosSupabase(silencioso);
         if(loadingEpoch!==sessionEpoch)return;
         refreshPendingState();
-        if (silencioso && hasUnsavedChanges) return;
+        if (silencioso && (hasUnsavedChanges || window.DGranelChartLayout?.hasDraft())) return;
         const remoteSavedAt = sharedState?.updated_at
             ? new Date(sharedState.updated_at).getTime()
             : null;
@@ -3158,6 +3158,7 @@ function renderCharts() {
         }
     });
     renderConfiguredDefaultCharts();
+    window.DGranelChartLayout?.refresh();
 }
 
 // ================= SISTEMA DE GRÁFICOS PERSONALIZADOS =================
@@ -3302,9 +3303,7 @@ function renderDynamicCharts() {
     });
     dynamicChartInstances = {};
 
-    container.innerHTML = '';
-
-    if (customCharts.length === 0) return;
+    container.querySelectorAll('.dashboard-custom-chart').forEach(card => card.remove());
 
     customCharts.forEach(c => {
         if (!dashboardHasWidget('custom-chart', c.id)) return;
@@ -3322,7 +3321,8 @@ function renderDynamicCharts() {
         const usesIndependentAxes = (c.axisMode === 'independent' || new Set(indicatorObjects.map(i=>i.und)).size > 1) && ['line','bar','horizontalBar','area'].includes(c.type) && indicatorObjects.length > 1;
 
         const wrapper = document.createElement('div');
-        wrapper.className = `lg:col-span-${c.span} glass-card rounded-2xl p-5 flex flex-col`;
+        wrapper.className = `dashboard-custom-chart lg:col-span-${c.span} glass-card rounded-2xl p-5 flex flex-col`;
+        wrapper.dataset.chartSpan = c.span;
         
         wrapper.innerHTML = `
             <div class="flex justify-between items-center mb-4">
@@ -3441,6 +3441,7 @@ function renderDynamicCharts() {
         });
     });
     initPXStyleAnimations(container);
+    window.DGranelChartLayout?.refresh();
 }
 
 // POPULAR DROPDOWN SETORES

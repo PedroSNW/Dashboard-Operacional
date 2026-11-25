@@ -162,7 +162,7 @@ const scripts = [setup, optionalTailwind, optionalChart, 'const smokeFleet='+JSO
     await read('public/vendor/jspdf-4.2.1.umd.min.js'),
     await read('public/vendor/jspdf-autotable-5.0.8.min.js'),
     await read('public/report-pdf.js'), checks];
-const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css','workspace-ui.css'].map(file => read('public/' + file)));
+const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css','workspace-ui.css','dashboard-layout.css'].map(file => read('public/' + file)));
 html = html.replace('<head>', () => "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:\"><style>" + styles.join('\n') + '</style>');
 html = html.replace('</body>', () => scripts.map(script => '<script>'+script.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n')+'</body>');
 await Deno.mkdir('.validation-tools', { recursive: true });

@@ -671,9 +671,9 @@ body.workspace-v3.light-theme :is(.intelligence-analysis, .alert-card, #view-gov
 #v3Overview [data-status="unclassified"] { --status-color: var(--workspace-status-empty); }
 .workspace-v3 #kpiContainer { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--ds-gap); }
 .workspace-v3 :is(#kpiContainer, #dynamicChartsContainer):empty,
-.workspace-v3 .dashboard-default-charts:not(:has(article:not(.hidden))),
+.workspace-v3 .dashboard-default-charts:not(:has(> :not(.hidden))),
 .workspace-v3 #kpiContainer:not(:empty) + .dashboard-empty-kpis,
-.workspace-v3 #view-dashboard:has(.dashboard-default-charts article:not(.hidden), #dynamicChartsContainer:not(:empty)) .dashboard-empty-charts { display: none; }
+.workspace-v3 #view-dashboard:has(.dashboard-default-charts > :not(.hidden)) .dashboard-empty-charts { display: none; }
 .kpi-card { display: grid; gap: 8px; }
 .kpi-card :is(.kpi-label, .kpi-value) { overflow-wrap: anywhere; }
 .kpi-label { color: var(--ds-muted); font-size: var(--ds-font-caption); font-weight: 500; }
