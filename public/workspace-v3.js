@@ -272,10 +272,20 @@
             </div>`;
         home.prepend(overview);
         ['intelligence','attention','bell','governance'].forEach((name,index)=>icon(overview.querySelectorAll('[data-metric] i')[index],name));
-        for(const [label,action,className] of [['Abrir painéis',()=>switchTab('dashboard'),'v3-button workspace-primary'],['Gerar relatório',()=>switchTab('reports'),'v3-button']]){
+        for(const [label,action,className] of [['Abrir painéis',()=>switchTab('dashboard'),'v3-button workspace-primary'],['Abrir relatórios',()=>switchTab('reports'),'v3-button']]){
             const button=element('button',label,className);button.type='button';button.onclick=action;$('v3QuickActions').append(button);
         }
-        const filters=element('div','','v3-filter-status');const active=element('span');active.id='v3ActiveFilters';const clear=element('button','Limpar filtros','v3-button');clear.onclick=()=>{$('searchInput').value='';for(const id of ['setorFilter','statusFilter','unitFilter'])$(id).value='TODOS';renderTable();window.refreshOperationalUI();};filters.append(active,clear);$('searchInput').closest('section').append(filters);
+        const filters=element('div','','v3-filter-status');
+        const results=element('div','','indicator-filter-summary');
+        const active=element('p');active.id='v3ActiveFilters';
+        const clear=element('button','Limpar filtros','v3-button');clear.type='button';
+        clear.onclick=()=>{
+            $('searchInput').value='';
+            for(const id of ['setorFilter','statusFilter','unitFilter'])$(id).value='TODOS';
+            renderTable();window.refreshOperationalUI();$('searchInput').focus();
+        };
+        const count=$('filteredCount').parentElement;
+        count.before(filters);results.append(count,active);filters.append(results,clear);
         ['searchInput','setorFilter','statusFilter','unitFilter'].forEach(id=>$(id).addEventListener('input',()=>window.refreshOperationalUI()));
         const suggestions=element('div','','v3-query-suggestions');['Qual foi a média de acidentes com culpa?','Analise acidentes e acidentes com culpa','Analise todos os indicadores'].forEach(q=>{const b=element('button',q,'v3-button');b.onclick=()=>{$('aiPromptInput').value=q;$('aiPromptInput').focus();};suggestions.append(b);});$('aiPromptInput').parentElement.before(suggestions);
         $('aiPromptInput').setAttribute('aria-describedby','v3AIDisclaimer');const disclaimer=element('p','A interpretação usa indicadores agregados autorizados; não consulta registros individuais.','v3-help');disclaimer.id='v3AIDisclaimer';$('aiPromptInput').parentElement.after(disclaimer);

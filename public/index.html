@@ -31,7 +31,7 @@
     <link rel="stylesheet" href="pending-changes.css?v=1">
         <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
-    <link rel="stylesheet" href="workspace-ui.css?v=paleta-1">
+    <link rel="stylesheet" href="workspace-ui.css?v=hierarquia-1">
     <!-- Painéis: largura integral e alinhamento com a barra lateral. -->
     <style id="dashboard-full-width-fix">
         body main:has(> #view-dashboard:not(.hidden)) {
@@ -246,14 +246,14 @@
 
             <!-- Subabas da Central de Inteligência -->
             <nav aria-label="Navegação interna de Inteligência" class="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-2">
-                <button type="button" onclick="switchIntelligenceSubtab('alerts')" id="subtab-btn-alerts" class="intelligence-subtab-btn active flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition">
+                <button type="button" onclick="switchIntelligenceSubtab('alerts')" id="subtab-btn-alerts" aria-pressed="true" aria-controls="subtab-content-alerts" class="intelligence-subtab-btn active flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-white transition">
                     <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Central de Notificações &amp; Alertas
                     <span id="subtabAlertsBadge" class="ml-1 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-extrabold text-rose-300">0</span>
                 </button>
-                <button type="button" onclick="switchIntelligenceSubtab('analyses')" id="subtab-btn-analyses" class="intelligence-subtab-btn flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:text-white">
+                <button type="button" onclick="switchIntelligenceSubtab('analyses')" id="subtab-btn-analyses" aria-pressed="false" aria-controls="subtab-content-analyses" class="intelligence-subtab-btn flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:text-white">
                     <i class="fa-solid fa-chart-pie text-amber-400"></i> Diagnóstico por Indicador
                 </button>
-                <button type="button" onclick="switchIntelligenceSubtab('pilot')" id="subtab-btn-pilot" class="intelligence-subtab-btn flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:text-white">
+                <button type="button" onclick="switchIntelligenceSubtab('pilot')" id="subtab-btn-pilot" aria-pressed="false" aria-controls="subtab-content-pilot" class="intelligence-subtab-btn flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:text-white">
                     <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Piloto Central de IA
                 </button>
             </nav>
@@ -261,28 +261,22 @@
             <!-- CONTEÚDO SUBABA 1: CENTRAL DE ALERTAS E NOTIFICAÇÕES -->
             <div id="subtab-content-alerts" class="space-y-6">
                 <!-- Sumário de Alertas -->
-                <section class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div class="intelligence-summary intelligence-summary-critical cursor-pointer transition hover:opacity-90" onclick="filterAlertsBySeverityQuick('CRITICO')">
-                        <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-triangle-exclamation text-base"></i>
-                            <span>Crítico</span>
-                        </div>
+                <section class="alert-severity-grid" aria-label="Filtrar alertas por gravidade">
+                    <button type="button" class="intelligence-summary intelligence-summary-critical alert-severity-filter" data-alert-severity="CRITICO" aria-pressed="false" aria-controls="alertsContainer" onclick="filterAlertsBySeverityQuick('CRITICO')">
+                        <span class="alert-severity-label"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Críticos</span>
                         <strong id="alertsCountCritical">0</strong>
-                    </div>
-                    <div class="intelligence-summary intelligence-summary-attention cursor-pointer transition hover:opacity-90" onclick="filterAlertsBySeverityQuick('ATENCAO')">
-                        <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-circle-exclamation text-base"></i>
-                            <span>Atenção</span>
-                        </div>
+                        <span class="alert-severity-action">Filtrar</span>
+                    </button>
+                    <button type="button" class="intelligence-summary intelligence-summary-attention alert-severity-filter" data-alert-severity="ATENCAO" aria-pressed="false" aria-controls="alertsContainer" onclick="filterAlertsBySeverityQuick('ATENCAO')">
+                        <span class="alert-severity-label"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> Atenção</span>
                         <strong id="alertsCountAttention">0</strong>
-                    </div>
-                    <div class="intelligence-summary intelligence-summary-info cursor-pointer transition hover:opacity-90" onclick="filterAlertsBySeverityQuick('INFORMATIVO')">
-                        <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-circle-info text-base"></i>
-                            <span>Informativo</span>
-                        </div>
+                        <span class="alert-severity-action">Filtrar</span>
+                    </button>
+                    <button type="button" class="intelligence-summary intelligence-summary-info alert-severity-filter" data-alert-severity="INFORMATIVO" aria-pressed="false" aria-controls="alertsContainer" onclick="filterAlertsBySeverityQuick('INFORMATIVO')">
+                        <span class="alert-severity-label"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Informativos</span>
                         <strong id="alertsCountInfo">0</strong>
-                    </div>
+                        <span class="alert-severity-action">Filtrar</span>
+                    </button>
                 </section>
 
                 <!-- Barra de Filtros e Visualização de Alertas -->
@@ -499,9 +493,16 @@
         <div id="view-datagrid" class="page-view hidden space-y-6">
             <section class="glass-card space-y-4 rounded-2xl p-5">
                 <div class="grid grid-cols-2 gap-4 border-b border-slate-800/80 pb-4 sm:grid-cols-4"><div class="rounded-xl border border-slate-800 bg-[#0A1329]/80 p-3"><div class="text-[11px] text-slate-400">Total de Indicadores</div><div id="statTotalRows" class="text-xl font-bold text-white">0</div></div><div class="rounded-xl border border-slate-800 bg-[#0A1329]/80 p-3"><div class="text-[11px] text-emerald-400">Dentro da Meta (em %)</div><div id="statMetaOk" class="text-xl font-bold text-emerald-400">0</div></div><div class="rounded-xl border border-slate-800 bg-[#0A1329]/80 p-3"><div class="text-[11px] text-rose-400">Fora da meta</div><div id="statMetaOff" class="text-xl font-bold text-rose-400">0</div></div><div class="rounded-xl border border-slate-800 bg-[#0A1329]/80 p-3"><div class="text-[11px] text-amber-400">Setores Mapeados</div><div id="statSetoresCount" class="text-xl font-bold text-amber-300">0</div></div></div>
-                <div class="flex flex-wrap items-center justify-between gap-3"><div class="flex w-full flex-1 flex-wrap items-center gap-3 lg:w-auto"><div class="relative min-w-[220px] flex-1"><i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i><input id="searchInput" type="search" placeholder="Buscar por indicador ou setor..." oninput="renderTableDebounced()" class="w-full rounded-xl border border-slate-700 bg-[#070D1E] py-2.5 pl-9 pr-3 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"></div><select id="setorFilter" onchange="renderTable()" class="min-w-[160px] rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todos os Setores</option></select><select id="statusFilter" onchange="renderTable()" class="min-w-[150px] rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todos os Status</option><option value="OK">Meta OK</option><option value="ACOMPANHAR">Fora da meta</option><option value="N/A">Sem classificação</option></select><select id="unitFilter" onchange="renderTable()" class="min-w-[130px] rounded-xl border border-slate-700 bg-[#070D1E] px-3 py-2.5 text-xs text-slate-200"><option value="TODOS">Todas Unidades</option><option value="%">% (Percentual)</option><option value="Qtd">Qtd</option><option value="R$">R$ (Valor)</option></select></div><div class="text-xs text-slate-400">Exibindo <span id="filteredCount" class="font-bold text-white">0</span> resultados</div></div>
+                <fieldset class="indicator-filters">
+                    <legend>Filtrar indicadores</legend>
+                    <label for="searchInput">Indicador ou setor<input id="searchInput" type="search" placeholder="Ex. acidentes ou frota" oninput="renderTableDebounced()"></label>
+                    <label for="setorFilter">Setor<select id="setorFilter" onchange="renderTable()"><option value="TODOS">Todos os setores</option></select></label>
+                    <label for="statusFilter">Situação da meta<select id="statusFilter" onchange="renderTable()"><option value="TODOS">Todas as situações</option><option value="OK">Na meta</option><option value="ACOMPANHAR">Fora da meta</option><option value="N/A">Sem classificação</option></select></label>
+                    <label for="unitFilter">Unidade<select id="unitFilter" onchange="renderTable()"><option value="TODOS">Todas as unidades</option><option value="%">% (Percentual)</option><option value="Qtd">Qtd</option><option value="R$">R$ (Valor)</option></select></label>
+                </fieldset>
+                <p class="indicator-filter-count" role="status" aria-atomic="true"><strong id="filteredCount">0</strong> de <span id="indicatorResultTotal">0</span> indicadores exibidos</p>
             </section>
-            <div id="dropZone" class="cursor-pointer rounded-xl border-2 border-dashed border-amber-500/30 bg-[#0A1329]/40 p-4 text-center transition hover:border-amber-400" onclick="document.getElementById('csvFileInput').click()"><i class="fa-solid fa-cloud-arrow-up mb-1 text-lg text-amber-400"></i><p class="text-xs font-medium text-slate-300">Arraste e solte seu arquivo CSV atualizado aqui para carregar instantaneamente</p></div>
+            <button id="dropZone" type="button" onclick="document.getElementById('csvFileInput').click()" aria-labelledby="csvDropLabel" aria-describedby="csvDropHelp"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><strong id="csvDropLabel">Selecionar arquivo CSV</strong><span id="csvDropHelp">Você também pode arrastar o arquivo até aqui.</span></button>
             <section class="glass-card overflow-hidden rounded-2xl border border-slate-800"><div class="overflow-x-auto"><table class="w-full border-collapse text-left text-xs"><thead><tr id="tableHeaderRow" class="border-b border-amber-500/20 bg-[#0A1329] font-semibold text-amber-400"></tr></thead><tbody id="tableBody" class="divide-y divide-slate-800/60 text-slate-300"></tbody></table></div></section>
         </div>
 
@@ -781,17 +782,17 @@
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
         <script src="pending-state.js?v=1"></script>
-        <script src="main.js?v=paleta-1"></script>
+        <script src="main.js?v=hierarquia-1"></script>
         <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=6.1"></script>
         <script src="report-executive.js?v=6.1"></script>
         <script src="report-evidence.js?v=propostas"></script>
         <script src="reports.js?v=propostas"></script>
-    <script src="workspace-v3.js?v=visual-4"></script>
+    <script src="workspace-v3.js?v=hierarquia-1"></script>
     <script src="motion-v3-1.js?v=paleta-1"></script>
     <script src="pending-changes.js?v=visual-4"></script>
-    <script src="workspace-v3-2.js?v=interface"></script>
+    <script src="workspace-v3-2.js?v=hierarquia-1"></script>
         <script src="report-authoring.js?v=propostas"></script>
 </body>
 </html>

@@ -2541,6 +2541,7 @@ function switchIntelligenceSubtab(subtabName) {
 
         if (btn) {
             btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-pressed', String(isActive));
             btn.classList.toggle('border-amber-500/30', isActive);
             btn.classList.toggle('bg-amber-500/15', isActive);
             btn.classList.toggle('text-white', isActive);
@@ -2596,7 +2597,7 @@ function resetAlertsReadState() {
 function filterAlertsBySeverityQuick(severity) {
     const select = document.getElementById('alertFilterSeverity');
     if (select) {
-        select.value = severity;
+        select.value = select.value === severity ? 'TODOS' : severity;
         renderAlertsList();
     }
 }
@@ -3253,17 +3254,27 @@ function saveCustomChart(e) {
     renderDynamicCharts();
 }
 
-function deleteCustomChart(chartId) {
-    if (confirm('Deseja realmente remover este gráfico personalizado?')) {
-        customCharts = customCharts.filter(c => c.id !== chartId);
-        dashboards.forEach(dashboard => {
-            dashboard.widgets = dashboard.widgets.filter(widget => !(widget.type === 'custom-chart' && widget.ref === chartId));
-        });
-        saveCustomChartsStorage();
-        saveDashboards();
-        renderDashboardTabs();
-        renderDynamicCharts();
-    }
+async function deleteCustomChart(chartId) {
+    const chart = customCharts.find(c => c.id === chartId);
+    if (!chart) return;
+    const decision = await fireThemedAlert({
+        titleText: 'Excluir gráfico personalizado?',
+        text: `“${chart.title}” será removido dos painéis onde aparece. Os indicadores associados ficam disponíveis.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Excluir gráfico',
+        cancelButtonText: 'Manter gráfico',
+        focusCancel: true,
+    });
+    if (!decision.isConfirmed || !customCharts.includes(chart)) return;
+    customCharts = customCharts.filter(c => c.id !== chartId);
+    dashboards.forEach(dashboard => {
+        dashboard.widgets = dashboard.widgets.filter(widget => !(widget.type === 'custom-chart' && widget.ref === chartId));
+    });
+    saveCustomChartsStorage();
+    saveDashboards();
+    renderDashboardTabs();
+    renderDynamicCharts();
 }
 
 function renderDynamicCharts() {
@@ -3496,10 +3507,25 @@ function renderTable() {
     document.getElementById('statMetaOk').textContent = `${((okCount / (currentData.length || 1)) * 100).toFixed(0)}%`;
     document.getElementById('statMetaOff').textContent = offCount;
     document.getElementById('filteredCount').textContent = filtered.length;
+    document.getElementById('indicatorResultTotal').textContent = currentData.length;
     if (!filtered.length) {
         const row = document.createElement('tr'), cell = document.createElement('td');
         cell.colSpan = mesesLabels.length + 8;
-        cell.textContent = supabaseStateLoaded ? 'Nenhum indicador corresponde aos filtros. Limpe a pesquisa ou escolha outro setor.' : 'Indicadores indisponíveis. Aguarde ou refaça a leitura do Supabase.';
+        const empty = document.createElement('div');
+        empty.className = 'indicator-empty';
+        const title = document.createElement('strong'), detail = document.createElement('p');
+        if (!supabaseStateLoaded || !supabaseReady) {
+            title.textContent = 'Indicadores indisponíveis';
+            detail.textContent = 'Aguarde a leitura da base ou tente atualizá-la.';
+        } else if (!currentData.length) {
+            title.textContent = 'Nenhum indicador cadastrado';
+            detail.textContent = 'Adicione um indicador ou importe um CSV.';
+        } else {
+            title.textContent = 'Nenhum resultado para estes filtros';
+            detail.textContent = 'Tente outro termo ou limpe os filtros para ver todos os indicadores.';
+        }
+        empty.append(title, detail);
+        cell.append(empty);
         row.appendChild(cell);tbody.appendChild(row);
     }
 
@@ -3717,7 +3743,17 @@ async function saveIndicatorForm(e) {
 
 async function deleteIndicator(index) {
     const item = currentData[index];
-    if (!item || !confirm(`Tem certeza que deseja excluir o indicador "${item.indicador}"?`)) return;
+    if (!item) return;
+    const decision = await fireThemedAlert({
+        titleText: 'Excluir indicador?',
+        text: `“${item.indicador}” e seu histórico serão removidos da base compartilhada ao salvar as alterações.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Excluir indicador',
+        cancelButtonText: 'Manter indicador',
+        focusCancel: true,
+    });
+    if (!decision.isConfirmed || currentData[index] !== item) return;
 
     const indicatorName = item.indicador;
     currentData.splice(index, 1);

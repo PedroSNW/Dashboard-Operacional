@@ -294,7 +294,7 @@ body.workspace-v3.v3-sidebar-collapsed { --ds-sidebar: var(--ds-rail); }
 .workspace-v3 .v3-nav .tab-btn.active {
     background: color-mix(in srgb, var(--ds-brand) 12%, var(--ds-surface));
     color: var(--ds-brand);
-    box-shadow: none;
+    box-shadow: inset 3px 0 0 var(--ds-brand);
     font-weight: 600;
 }
 .workspace-v3 .v3-nav .tab-btn.active::after { content: none; }
@@ -374,14 +374,15 @@ body.workspace-v3 .glass-card:hover { border-color: var(--ds-border); box-shadow
 .workspace-v3 .page-view { min-width: 0; }
 .workspace-v3 .page-view:not(#view-home) > section:first-child h2,
 .workspace-v3 .report-panel-heading h2 { font-size: var(--ds-font-lg); font-weight: 600; letter-spacing: -.02em; }
-.workspace-v3 .workspace-panel h2,
-.workspace-v3 #view-dashboard .glass-card h3 {
-    color: var(--ds-muted);
-    font-size: var(--ds-font-caption);
+.workspace-v3 :is(.workspace-panel h2, #view-dashboard .glass-card h3) {
+    color: var(--ds-text);
+    font-size: 16px;
     font-weight: 600;
-    letter-spacing: .08em;
-    text-transform: uppercase;
+    line-height: 1.35;
+    letter-spacing: -.015em;
+    text-transform: none;
 }
+.workspace-v3 :is(.report-panel-heading p, .report-context > p, .report-actions-status p, .ux-action-hint, #aiResponseBody p) { max-inline-size: 68ch; }
 .workspace-v3 :is(button, summary, input, select, textarea, label[for="csvFileInput"]) {
     transition: background-color var(--ds-speed), color var(--ds-speed), border-color var(--ds-speed), box-shadow var(--ds-speed);
 }
@@ -438,15 +439,47 @@ body.workspace-v3.light-theme :is(input, select, textarea):focus-visible {
 .workspace-v3 :is(input[type="checkbox"], input[type="radio"], progress) { accent-color: var(--ds-accent); }
 .workspace-v3 :is(.report-panel, .report-review-body, .v3-indicator-picker, .ux-alert-group) { border-radius: var(--ds-radius); }
 .workspace-v3 .intelligence-subtab-btn { box-shadow: none; }
-.workspace-v3 .intelligence-subtab-btn.active { background: var(--ds-raised); border-color: var(--ds-border); color: var(--ds-text); }
+.workspace-v3 .intelligence-subtab-btn.active {
+    background: color-mix(in srgb, var(--ds-brand) 10%, var(--ds-surface));
+    border-color: var(--ds-brand);
+    color: var(--ds-brand);
+    font-weight: 600;
+}
 .workspace-v3 .dashboard-tab.active,
 .workspace-v3 #modalChartConfig label:has(input[name="chartAxisMode"]:checked) {
     background: var(--ds-raised);
     color: var(--ds-text);
     border-color: var(--ds-brand);
 }
-.workspace-v3 #view-datagrid #dropZone { border-width: 1px; border-color: var(--ds-control-border); background: var(--ds-bg); }
+.workspace-v3 #view-datagrid #dropZone {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 12px;
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px dashed var(--ds-control-border);
+    border-radius: var(--ds-radius);
+    background: var(--ds-surface);
+    text-align: start;
+}
 .workspace-v3 #view-datagrid #dropZone:hover { background: var(--ds-raised); border-color: var(--ds-brand); }
+#dropZone i { grid-row: span 2; color: var(--ds-brand); font-size: 18px; }
+#csvDropHelp { color: var(--ds-subtle); font-size: var(--ds-font-caption); }
+.indicator-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+    gap: 12px;
+    min-inline-size: 0;
+}
+.indicator-filters legend { padding: 0 0 8px; font-weight: 600; }
+.indicator-filters label { display: grid; align-content: end; gap: 4px; min-width: 0; color: var(--ds-muted); font-size: var(--ds-font-sm); }
+.workspace-v3 .indicator-filters :is(input, select) { width: 100%; min-width: 0; padding: 8px 10px; }
+.workspace-v3 .v3-filter-status { padding: 0; align-items: center; flex-flow: row wrap; }
+.indicator-filter-summary { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.indicator-filter-count { color: var(--ds-text); }
+.workspace-v3 .indicator-empty { position: sticky; left: 0; width: min(100%, 440px, calc(100vw - 64px)); padding: 16px; }
+.indicator-empty p { margin-top: 4px; color: var(--ds-muted); }
 .workspace-v3 :is(.intelligence-analysis, .alert-card, .intelligence-summary, .governance-stat),
 body.workspace-v3.light-theme :is(.intelligence-analysis, .alert-card, #view-governance .glass-card) {
     background: var(--ds-surface);
@@ -480,6 +513,25 @@ body.workspace-v3.light-theme :is(.intelligence-analysis, .alert-card, #view-gov
 .workspace-v3 .intelligence-summary-attention { background: var(--ds-warning-bg); color: var(--ds-warning); }
 .workspace-v3 .intelligence-summary-critical { background: var(--ds-error-bg); color: var(--ds-error); }
 .workspace-v3 .intelligence-summary-info { color: var(--ds-brand); }
+.alert-severity-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(6px, 2vw, 12px);
+}
+.workspace-v3 .alert-severity-filter {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    justify-items: start;
+    gap: 4px;
+    min-width: 0;
+    padding: clamp(8px, 2vw, 16px);
+    text-align: start;
+}
+.alert-severity-label { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.alert-severity-action { color: var(--ds-text); font-size: var(--ds-font-caption); text-decoration: underline; text-underline-offset: 3px; }
+.workspace-v3 .alert-severity-filter:hover { border-color: currentColor; }
+.workspace-v3 .alert-severity-filter[aria-pressed="true"] { border-color: currentColor; box-shadow: inset 0 -3px 0 currentColor; }
+@media (max-width: 430px) { .alert-severity-label i { display: none; } }
 .workspace-v3 .intelligence-analysis-critical > div:first-child { color: var(--ds-error); }
 .workspace-v3 .intelligence-analysis-attention > div:first-child { color: var(--ds-warning); }
 .workspace-v3 .intelligence-analysis-info > div:first-child { color: var(--ds-brand); }
@@ -502,7 +554,7 @@ body.workspace-v3.light-theme :is(.intelligence-analysis, .alert-card, #view-gov
     border-radius: var(--ds-radius);
     background: var(--ds-surface);
 }
-.workspace-intro-copy { align-content: center; padding: 24px; }
+.workspace-intro-copy { align-content: center; padding: clamp(20px, 3vw, 32px); }
 .workspace-v3 .workspace-intro h2 { font-size: var(--ds-font-display); font-weight: 600; letter-spacing: -.035em; line-height: 1.2; }
 .workspace-v3 .v3-eyebrow { color: var(--ds-subtle); font-size: var(--ds-font-caption); font-weight: 600; letter-spacing: .08em; }
 .workspace-intro img { width: 100%; height: 100%; min-height: 160px; object-fit: cover; }
@@ -518,11 +570,37 @@ body.workspace-v3.light-theme :is(.intelligence-analysis, .alert-card, #view-gov
 .workspace-v3 .home-unified-canvas .text-transparent { color: var(--ds-text); }
 .workspace-intro .v3-quick-actions { padding: 16px 0 0; gap: 8px; }
 .workspace-v3 .v3-metric-grid { gap: var(--ds-gap); margin-block: var(--ds-gap); }
-.workspace-v3 .v3-metric-grid article { gap: 4px; }
-.workspace-v3 .v3-metric-grid i { color: var(--ds-subtle); height: 20px; display: flex; align-items: center; }
+.workspace-v3 .v3-metric-grid article {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto 1fr;
+    align-items: start;
+    gap: 6px 8px;
+}
+.workspace-v3 .v3-metric-grid i {
+    grid-column: 2;
+    grid-row: 1;
+    display: grid;
+    place-items: center;
+    align-self: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--ds-control-radius);
+    background: var(--ds-raised);
+    color: var(--ds-muted);
+}
+.workspace-v3 .v3-metric-grid article > span {
+    grid-column: 1;
+    grid-row: 1;
+    display: grid;
+    align-content: center;
+    min-block-size: 2lh;
+    font-weight: 500;
+}
+.workspace-v3 .v3-metric-grid [data-metric="attention"] i { background: var(--ds-warning-bg); color: var(--ds-warning); }
 .workspace-v3 .v3-metric-grid i svg { height: 16px; width: 16px; }
-.workspace-v3 .v3-metric-grid strong { font-size: var(--ds-font-display); font-weight: 600; line-height: 1.15; margin-top: 4px; }
-.workspace-v3 .v3-metric-grid article p { color: var(--ds-subtle); }
+.workspace-v3 .v3-metric-grid strong { grid-column: 1 / -1; font-size: var(--ds-font-display); font-weight: 600; line-height: 1.15; }
+.workspace-v3 .v3-metric-grid article p { grid-column: 1 / -1; color: var(--ds-subtle); }
 .workspace-v3 .v3-home-columns { grid-template-columns: minmax(0, 3fr) minmax(248px, 2fr); gap: var(--ds-gap); align-items: start; }
 .workspace-home-main { display: grid; gap: var(--ds-gap); min-width: 0; }
 .workspace-panel :is(#v3Priority, #v3RecentAlerts) { display: grid; }

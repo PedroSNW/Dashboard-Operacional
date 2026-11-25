@@ -22,6 +22,9 @@
             populate($('alertFilterIndicator'),currentData.map((i,n)=>[String(n),i.indicador+' · '+i.setor]));
             populate($('alertFilterCompetency'),[...new Set(alerts.map(a=>a.competency))].map(c=>[c,c]));
             const filters=Object.fromEntries(['View','Severity','Sector','Indicator','Competency','Category'].map(k=>[k,$('alertFilter'+k).value]));
+            document.querySelectorAll('[data-alert-severity]').forEach(button => {
+                button.setAttribute('aria-pressed', String(button.dataset.alertSeverity === filters.Severity));
+            });
             const signature=JSON.stringify([currentSession?.user?.id,filters]);if(signature!==alertSignature){alertSignature=signature;alertLimit=20;}
             const filtered=alerts.filter(a=>(filters.View!=='unread'||!a.isRead)&&(filters.View!=='read'||a.isRead)&&(filters.Severity==='TODOS'||a.severity===filters.Severity)&&(filters.Sector==='TODOS'||a.sector===filters.Sector)&&(filters.Indicator==='TODOS'||String(a.indicatorIndex)===filters.Indicator)&&(filters.Competency==='TODOS'||a.competency===filters.Competency)&&(filters.Category==='TODOS'||a.category===filters.Category));
             filtered.sort((a,b)=>({CRITICO:0,ATENCAO:1,INFORMATIVO:2}[a.severity]-{CRITICO:0,ATENCAO:1,INFORMATIVO:2}[b.severity]));
