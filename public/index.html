@@ -34,7 +34,7 @@
         <link rel="stylesheet" href="workspace-v3-2.css?v=analysis">
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
     <link rel="stylesheet" href="workspace-ui.css?v=layout-1">
-    <link rel="stylesheet" href="dashboard-layout.css?v=1">
+    <link rel="stylesheet" href="dashboard-layout.css?v=2">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
@@ -660,8 +660,16 @@
                     <div>
                         <label for="chartConfigSpan" class="block text-xs text-slate-400 mb-1">Largura no Dashboard</label>
                         <select id="chartConfigSpan" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
-                            <option value="6">Metade da Tela (50%)</option>
-                            <option value="12">Largura Total (100%)</option>
+                            <option value="3">25%</option>
+                            <option value="4">33%</option>
+                            <option value="5">42%</option>
+                            <option value="6" selected>50%</option>
+                            <option value="7">58%</option>
+                            <option value="8">67%</option>
+                            <option value="9">75%</option>
+                            <option value="10">83%</option>
+                            <option value="11">92%</option>
+                            <option value="12">100%</option>
                         </select>
                     </div>
                 </div>
@@ -760,8 +768,8 @@
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
         <script src="pending-state.js?v=1"></script>
-        <script src="main.js?v=layout-1"></script>
-        <script src="dashboard-layout.js?v=2"></script>
+        <script src="main.js?v=layout-2"></script>
+        <script src="dashboard-layout.js?v=3"></script>
         <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
         <script src="report-content.js?v=6.1"></script>

@@ -74,8 +74,13 @@
     border-radius: var(--ds-radius);
     background: color-mix(in srgb, var(--ds-brand) 14%, transparent);
 }
+#dynamicChartsContainer > [data-layout-chart] > div:first-child { flex-wrap: wrap; gap: 6px; }
+#dynamicChartsContainer .chart-zoom-bar { flex-wrap: wrap; }
 #view-dashboard:has(#dynamicChartsContainer[data-editing]) { padding-bottom: clamp(160px, 35vh, 320px); }
 @media (min-width: 1024px) {
+    #dynamicChartsContainer:not([data-arranged]) > [data-layout-chart] {
+        grid-column: auto / span var(--chart-w);
+    }
     #dynamicChartsContainer[data-arranged] {
         grid-template-columns: repeat(12, minmax(0, 1fr));
         grid-auto-rows: var(--chart-grid-row);

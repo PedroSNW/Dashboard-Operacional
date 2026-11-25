@@ -1078,6 +1078,11 @@ function loadStoredDefaultCharts() {
     defaultChartConfigs = {};
 }
 
+function normalizeChartSpan(value, fallback = 6) {
+    const span = Number(value);
+    return Number.isInteger(span) && span >= 3 && span <= 12 ? span : fallback;
+}
+
 function getDefaultChartConfig(chartId) {
     const findIndicator = text => currentData.findIndex(item => item.indicador.includes(text));
     const defaults = {
@@ -1086,7 +1091,9 @@ function getDefaultChartConfig(chartId) {
         chart3: { title: 'Matriz de Eficiência (%)', desc: 'Comparativo Mês Inicial vs Mais Recente', type: 'radar', ind1: findIndicator('% CRLV LIBERADOS'), ind2: findIndicator('Cronotacógrafo'), ind3: findIndicator('40% de desconto') },
         chart4: { title: 'Evolução comparativa: sinistros e velocidade', desc: 'Séries descritivas; não demonstram causalidade.', type: 'line', ind1: findIndicator('velocidade permitida'), ind2: findIndicator('Total de acidentes') }
     };
-    return { ...defaults[chartId], ...(defaultChartConfigs[chartId] || {}) };
+    const saved = defaultChartConfigs[chartId];
+    const usualSpan = { chart1: 8, chart3: 4 }[chartId] ?? 6;
+    return { ...defaults[chartId], ...saved, span: normalizeChartSpan(saved?.layoutSpan, usualSpan) };
 }
 
 function getChartJsType(type) {
@@ -1146,7 +1153,7 @@ function getChartTypeOptions(type, scales) {
 
 function openDefaultChartModal(chartId) {
     editingDefaultChartId = chartId;
-    const config = { ...getDefaultChartConfig(chartId), id: `default_${chartId}`, span: '6' };
+    const config = { ...getDefaultChartConfig(chartId), id: `default_${chartId}` };
     customCharts.push(config);
     openChartModal(config.id);
     customCharts = customCharts.filter(chart => chart.id !== config.id);
@@ -1186,7 +1193,10 @@ function renderConfiguredDefaultCharts() {
     ['chart1', 'chart2', 'chart3', 'chart4'].forEach(chartId => {
         const config = getDefaultChartConfig(chartId);
         const card = document.getElementById(`defaultChartCard${chartId.slice(-1)}`);
-        if (card) card.classList.toggle('hidden', config.deleted === true || !dashboardHasWidget('default-chart', chartId));
+        if (card) {
+            card.dataset.chartSpan = config.span;
+            card.classList.toggle('hidden', config.deleted === true || !dashboardHasWidget('default-chart', chartId));
+        }
         if (config.deleted) return;
         if (!defaultChartConfigs[chartId]) return;
 
@@ -3166,6 +3176,7 @@ function openChartModal(chartId = null) {
     if (!chartId) editingDefaultChartId = null;
     populateChartConfigDropdowns();
 
+    const spanField = document.getElementById('chartConfigSpan');
     if (chartId) {
         const chartObj = customCharts.find(c => c.id === chartId);
         if (!chartObj) return;
@@ -3174,7 +3185,10 @@ function openChartModal(chartId = null) {
         document.getElementById('chartConfigTitle').value = chartObj.title;
         document.getElementById('chartConfigDesc').value = chartObj.desc || '';
         document.getElementById('chartConfigType').value = chartObj.type;
-        document.getElementById('chartConfigSpan').value = chartObj.span;
+        const key = editingDefaultChartId || `canvas_${chartId}`;
+        const baseSpan = normalizeChartSpan(chartObj.span);
+        spanField.dataset.baseWidth = baseSpan;
+        spanField.value = normalizeChartSpan(getActiveDashboard()?.chartLayout?.[key]?.w, baseSpan);
         document.getElementById('chartConfigInd1').value = chartObj.ind1;
         document.getElementById('chartConfigInd2').value = chartObj.ind2 || '';
         document.getElementById('chartConfigInd3').value = chartObj.ind3 ?? '';
@@ -3186,7 +3200,8 @@ function openChartModal(chartId = null) {
         document.getElementById('chartConfigTitle').value = '';
         document.getElementById('chartConfigDesc').value = '';
         document.getElementById('chartConfigType').value = 'line';
-        document.getElementById('chartConfigSpan').value = '6';
+        spanField.dataset.baseWidth = '6';
+        spanField.value = '6';
         document.getElementById('chartConfigInd1').selectedIndex = 0;
         document.getElementById('chartConfigInd2').value = '';
         document.getElementById('chartConfigInd3').value = '';
@@ -3194,6 +3209,7 @@ function openChartModal(chartId = null) {
         document.querySelector('input[name="chartAxisMode"][value="single"]').checked = true;
     }
 
+    spanField.dataset.initialWidth = spanField.value;
     document.getElementById('modalChartConfig').classList.remove('hidden');
 }
 
@@ -3230,7 +3246,12 @@ function saveCustomChart(e) {
     const title = document.getElementById('chartConfigTitle').value;
     const desc = document.getElementById('chartConfigDesc').value;
     const type = document.getElementById('chartConfigType').value;
-    const span = document.getElementById('chartConfigSpan').value;
+    const spanField = document.getElementById('chartConfigSpan');
+    const selectedSpan = normalizeChartSpan(spanField.value);
+    const widthChanged = String(selectedSpan) !== spanField.dataset.initialWidth;
+    const layoutKey = editingDefaultChartId || `canvas_${id}`;
+    const changeBaseWidth = widthChanged && !getActiveDashboard()?.chartLayout?.[layoutKey];
+    const span = String(changeBaseWidth ? selectedSpan : normalizeChartSpan(spanField.dataset.baseWidth));
     const ind1 = parseInt(document.getElementById('chartConfigInd1').value);
     const ind2Val = document.getElementById('chartConfigInd2').value;
     const ind2 = ind2Val !== '' ? parseInt(ind2Val) : null;
@@ -3242,8 +3263,12 @@ function saveCustomChart(e) {
 
     const chartObject = { id, title, desc, type, span, ind1, ind2, ind3, ind4, axisMode };
 
+    if (widthChanged) window.DGranelChartLayout?.setWidth(layoutKey, selectedSpan);
     if (editingDefaultChartId) {
-        defaultChartConfigs[editingDefaultChartId] = { ...chartObject, deleted: false };
+        const previousSpan = defaultChartConfigs[editingDefaultChartId]?.layoutSpan;
+        defaultChartConfigs[editingDefaultChartId] = {
+            ...chartObject, layoutSpan: changeBaseWidth ? selectedSpan : previousSpan, deleted: false,
+        };
         markStateDirty();
         editingDefaultChartId = null;
         closeModal('modalChartConfig');
@@ -3321,8 +3346,8 @@ function renderDynamicCharts() {
         const usesIndependentAxes = (c.axisMode === 'independent' || new Set(indicatorObjects.map(i=>i.und)).size > 1) && ['line','bar','horizontalBar','area'].includes(c.type) && indicatorObjects.length > 1;
 
         const wrapper = document.createElement('div');
-        wrapper.className = `dashboard-custom-chart lg:col-span-${c.span} glass-card rounded-2xl p-5 flex flex-col`;
-        wrapper.dataset.chartSpan = c.span;
+        wrapper.className = 'dashboard-custom-chart glass-card rounded-2xl p-5 flex flex-col';
+        wrapper.dataset.chartSpan = normalizeChartSpan(c.span);
         
         wrapper.innerHTML = `
             <div class="flex justify-between items-center mb-4">

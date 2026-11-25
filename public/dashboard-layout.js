@@ -8,6 +8,7 @@
     const desktop = matchMedia('(min-width: 1024px)');
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
     const columns = 12;
+    const minColumns = 3;
     const rowLimit = 2000;
     const defaults = new Map([['chart1', [8, 7]], ['chart3', [4, 7]], ['chart2', [6, 7]], ['chart4', [6, 7]]]);
     const drafts = new Map();
@@ -38,7 +39,7 @@
             const { key, width, rows } = card;
             const item = known.get(key);
             if (item && ['x', 'y', 'w', 'h'].every(field => Number.isInteger(item[field]))) {
-                const w = clamp(item.w, 4, columns);
+                const w = clamp(item.w, minColumns, columns);
                 const slot = { x: clamp(item.x, 0, columns - w), y: clamp(item.y, 0, rowLimit), w, h: clamp(item.h, 5, 16) };
                 fixed.push([key, slot]);
             } else {
@@ -80,7 +81,8 @@
             if (!key) return [];
             const standard = defaults.get(key);
             if (!dashboardHasWidget(standard ? 'default-chart' : 'custom-chart', standard ? key : key.slice(7))) return [];
-            const [width, rows] = standard ?? [clamp(Number(node.dataset.chartSpan) || 6, 4, columns), 7];
+            const [fallbackWidth, rows] = standard ?? [6, 7];
+            const width = normalizeChartSpan(node.dataset.chartSpan, fallbackWidth);
             return [{ key, node, width, rows }];
         }).sort((a, b) => (defaultOrder.get(a.key) ?? customOrder.get(a.key)) - (defaultOrder.get(b.key) ?? customOrder.get(b.key)));
     }
@@ -182,7 +184,7 @@
         draft().changed = true;
         show(true);
         const slot = layout.get(key);
-        status.textContent = `Gráfico ajustado. Coluna ${slot.x+1}, linha ${slot.y+1}, ${slot.w} colunas de largura e ${slot.h} linhas de altura.`;
+        status.textContent = `Gráfico ajustado. Coluna ${slot.x+1}, linha ${slot.y+1}, largura de ${Math.round(slot.w / columns * 100)}% e ${slot.h} linhas de altura.`;
     }
 
     function mobilePosition(key, target, after) {
@@ -192,7 +194,10 @@
     }
 
     function adjusted(slot, action, dx, dy) {
-        if (action === 'size') return { ...slot, w: clamp(slot.w + dx, 4, columns - slot.x), h: clamp(slot.h + dy, 5, 16) };
+        if (action === 'size') {
+            const w = clamp(slot.w + dx, minColumns, columns);
+            return { ...slot, x: Math.min(slot.x, columns - w), w, h: clamp(slot.h + dy, 5, 16) };
+        }
         return { ...slot, x: clamp(slot.x + dx, 0, columns - slot.w), y: clamp(slot.y + dy, 0, Math.min(rowLimit, height(layout))) };
     }
 
@@ -316,5 +321,15 @@
         else close(false);
     });
     desktop.addEventListener('change', () => { endDrag(); updateChartSizes(); });
-    window.DGranelChartLayout = { refresh, hasDraft: () => epoch === sessionEpoch && drafts.size > 0 };
+    function setWidth(key, w) {
+        const stored = owner?.chartLayout?.[key];
+        if (owner !== getActiveDashboard() || !layout.has(key)) return;
+        const resized = slot => ({ ...slot, x: Math.min(slot.x, columns - w), w });
+        if (stored) {
+            const slots = { ...owner.chartLayout, [key]: resized(stored) };
+            owner.chartLayout = { ...slots, ...Object.fromEntries(arrange(slots, key)) };
+        }
+        if (draft()) change(key, resized(layout.get(key)));
+    }
+    window.DGranelChartLayout = { refresh, setWidth, hasDraft: () => epoch === sessionEpoch && drafts.size > 0 };
 })();
