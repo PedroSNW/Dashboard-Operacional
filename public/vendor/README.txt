@@ -11,3 +11,9 @@ Licença preservada em autotable.LICENSE.
 Carregadas sob demanda somente ao exportar. Geração via APIs de texto/tabela
 e PNGs criados localmente, sem conversão HTML, fontes remotas ou serviços PDF.
 Atualizações devem ser revisadas e acompanhadas pelos testes PDF do projeto.
+
+PptxGenJS 4.0.1 — https://github.com/gitbrent/PptxGenJS/releases/tag/v4.0.1
+Distribuição: pptxgenjs@4.0.1/dist/pptxgen.bundle.js do registro npm.
+Licença preservada em pptxgenjs.LICENSE. O bundle inclui JSZip 3.10.1,
+distribuído sob a licença MIT em jszip.LICENSE.
+Carregada sob demanda para gerar objetos, tabelas e gráficos editáveis em PowerPoint.

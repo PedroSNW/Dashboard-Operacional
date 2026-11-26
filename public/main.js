@@ -1411,7 +1411,7 @@ async function carregarDadosCompartilhados(silencioso = false) {
         const remoteSavedAt = sharedState?.updated_at
             ? new Date(sharedState.updated_at).getTime()
             : null;
-        if (silencioso && Number.isFinite(remoteSavedAt) && remoteSavedAt <= lastSupabaseSavedAt) return;
+        if (silencioso && supabaseStateLoaded && Number.isFinite(remoteSavedAt) && remoteSavedAt <= lastSupabaseSavedAt) return;
 
         const remoteData = sharedState?.data;
         const remoteIndicators = Array.isArray(remoteData) ? remoteData : remoteData?.indicadores;
@@ -1480,6 +1480,7 @@ async function carregarDadosCompartilhados(silencioso = false) {
         if(loadingEpoch!==sessionEpoch)return;
         supabaseReady = false;
         supabaseStateLoaded = false;
+        window.OnePage?.refresh();
         console.error('Erro ao carregar dados compartilhados:', error);
         if (!silencioso) showAlert('Indicadores indisponíveis', 'Não foi possível carregar os indicadores reais. Os dados padrão não serão usados. Recarregue a página para tentar novamente.', 'error');
         initSystem();

@@ -13,7 +13,7 @@
     const percent = new Intl.NumberFormat('pt-BR', {maximumFractionDigits:1, signDisplay:'exceptZero'});
     const blankSource = {months:[], items:[], version:null};
     const unset = '';
-    let owner, page, selected, source = blankSource, frame, printHost, deleteId, aiDraft;
+    let owner, page, selected, source = blankSource, frame, printHost, deleteId, aiDraft, pptxJob;
     let pages = new Map(), storageError = false;
 
     function node(tag, text, className) {
@@ -228,6 +228,7 @@
         $('opDelete').disabled = !pages.has(page.id);
         $('opAiOpen').disabled = !source.version || !source.items.length;
         $('opPresent').disabled = $('opPrint').disabled = page.blocks.length === 0;
+        $('opPptx').disabled = Boolean(pptxJob) || page.blocks.length === 0;
     }
 
     function orientationField(value, update, id) {
@@ -379,17 +380,26 @@
         return table;
     }
 
-    function chartImage(block,item,points) {
+    function chartImage(block,item,points,exportCharts) {
         const landscape = page.orientation === 'landscape';
+        const width = {third:430,half:570,full:900}[block.width] ?? 900;
+        const height = landscape ? (block.width === 'full' ? 160 : 236) : 290;
+        const data = points.map(p => valueAt(item,p));
+        const target = block.target && Number.isFinite(item.meta) && (item.meta !== 0 || item.zeroConfirmed);
+        if (exportCharts) {
+            const chart = node('div',undefined,'op-chart-image');
+            chart.style.aspectRatio = width+' / '+height;
+            exportCharts.set(chart,{type:block.chart,name:item.name,values:data,labels:points.map(p=>p.label),
+                target:target?item.meta:null,showValues:block.labels});
+            return chart;
+        }
         const chart = node('canvas');
-        chart.width = {third:430,half:570,full:900}[block.width] ?? 900;
-        chart.height = landscape ? (block.width === 'full' ? 160 : 236) : 290;
+        chart.width = width;
+        chart.height = height;
         const palette = landscape ? landscapeColors : colors;
         const color = palette[page.accent] ?? palette.blue;
         const axisColor = landscape ? '#D9E5F9' : '#435572';
         const tickFont = {size:landscape ? 15 : 14};
-        const data = points.map(p => valueAt(item,p));
-        const target = block.target && Number.isFinite(item.meta) && (item.meta !== 0 || item.zeroConfirmed);
         const datasets = [{label:item.name, data, borderColor:color, backgroundColor:block.chart === 'bar' ? color : '#0000',
             borderWidth:2, pointRadius:data.length <= 18 ? 3 : 0, spanGaps:false}];
         if (target) datasets.push({type:'line',label:'Meta',data:data.map(() => item.meta),borderColor:landscape?'#B1D5FF':'#825008',borderDash:[7,5],
@@ -441,7 +451,7 @@
         return true;
     }
 
-    function renderDonut(card, item, point) {
+    function renderDonut(card, item, point, exportCharts) {
         const value = valueAt(item,point);
         card.append(node('p',point.label,'op-paper-meta'));
         if (item.unit?.trim() !== '%' || value === null || value < 0 || value > 100) {
@@ -451,11 +461,12 @@
         }
         const donut = node('div',undefined,'op-donut');
         donut.style.setProperty('--op-donut-value',value+'%');
+        exportCharts?.set(donut,{type:'donut',name:item.name,value});
         donut.append(node('strong',valueText(value,'%')));
         card.append(donut);
     }
 
-    function renderData(block, card) {
+    function renderData(block, card, exportCharts) {
         const points = period(block);
         const keys = block.type === 'table' ? block.indicators : [block.indicator];
         const items = keys.map(key => source.items.find(item => item.key === key)).filter(Boolean);
@@ -475,7 +486,7 @@
         }
         const item = items[0];
         if (block.type === 'chart' && block.chart === 'donut') {
-            renderDonut(card,item,points.at(-1));
+            renderDonut(card,item,points.at(-1),exportCharts);
             if (block.target) meta('Meta · ' + targetText(item));
             return;
         }
@@ -491,7 +502,7 @@
             if (block.target && page.orientation === 'landscape') targetBarsShown = renderTargetBars(card,result,item);
         } else {
             meta((item.unit || 'Valor') + ' · ' + periodText(points));
-            const image = points.some(p => valueAt(item,p) !== null) ? chartImage(block,item,points) : null;
+            const image = points.some(p => valueAt(item,p) !== null) ? chartImage(block,item,points,exportCharts) : null;
             if (image) {
                 card.append(image);
                 chartShown = true;
@@ -544,7 +555,7 @@
         sheet.append(top,body);
     }
 
-    function paper(editable = false) {
+    function paper(editable = false, exportCharts) {
         const sheet = node('article',undefined,'op-paper');
         sheet.dataset.orientation = page.orientation;
         const landscape = page.orientation === 'landscape';
@@ -576,7 +587,7 @@
             card.append(heading);
             if (block.type === 'text' || block.type === 'note') card.append(node('p',block.text || 'Adicione o conteúdo do bloco.','op-copy'));
             else {
-                renderData(block,card);
+                renderData(block,card,exportCharts);
                 if (block.note.trim()) card.append(node('aside',block.note,'op-callout'));
             }
             const side = landscape && (block.placement === 'side' ||
@@ -610,21 +621,50 @@
         document.body.classList.remove('op-printing');
     }
 
+    function mountExportSheet(charts) {
+        const host = node('div',undefined,'op-print-host');
+        const format = orientations[page.orientation];
+        host.dataset.orientation = page.orientation;
+        host.style.setProperty('--op-print-width',format.width + 'px');
+        host.setAttribute('aria-hidden','true');
+        const sheet = paper(false,charts);
+        host.append(sheet);
+        document.body.append(host);
+        return {host,sheet,format};
+    }
+
     function preparePrint() {
         clearPrint();
-        printHost = node('div',undefined,'op-print-host');
-        printHost.id = 'opPrintHost';
-        const format = orientations[page.orientation];
-        printHost.dataset.orientation = page.orientation;
-        printHost.style.setProperty('--op-print-width',format.width + 'px');
-        printHost.setAttribute('aria-hidden','true');
-        const sheet = paper();
-        printHost.append(sheet);
-        document.body.append(printHost);
+        const {host,sheet,format} = mountExportSheet();
+        printHost = host;
+        host.id = 'opPrintHost';
         const scale = Math.min(0.94, format.height / Math.max(sheet.offsetHeight,sheet.scrollHeight));
         sheet.style.setProperty('--op-print-scale',String(scale));
         document.body.classList.add('op-printing');
         return printHost;
+    }
+
+    async function exportPowerPoint() {
+        if (!page?.blocks.length || pptxJob || owner !== currentSession?.user?.id) return;
+        const charts = new WeakMap();
+        const {host,sheet} = mountExportSheet(charts);
+        const job = {host,owner,version:source.version};
+        pptxJob = job;
+        const slug = title(page).normalize('NFD').replace(/\p{M}/gu,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').slice(0,72);
+        $('opExportStatus').textContent = 'Gerando PowerPoint editável…';
+        syncButtons();
+        try {
+            const blob = await window.OnePagePptx.build(sheet,charts);
+            if (pptxJob !== job || job.owner !== currentSession?.user?.id) return;
+            if (source.version !== job.version) throw Error('A base foi atualizada durante a exportação. Gere o PowerPoint novamente.');
+            reportDownloadBlob(blob,(slug || 'OnePage')+'.pptx');
+            $('opExportStatus').textContent = 'Download do PowerPoint iniciado.';
+        } catch (error) {
+            if (pptxJob === job) $('opExportStatus').textContent = error.message || 'Não foi possível gerar o PowerPoint.';
+        } finally {
+            host.remove();
+            if (pptxJob === job) {pptxJob = null;syncButtons();}
+        }
     }
 
     function openAI() {
@@ -735,11 +775,13 @@
         source = blankSource;
         pages.clear();
         cancelAnimationFrame(frame);
+        pptxJob?.host.remove();
+        pptxJob = null;
         clearPrint();
         if ($('opPresentation')?.open) $('opPresentation').close();
         if ($('opConfirmDelete')?.open) $('opConfirmDelete').close();
         if ($('opAiDialog')?.open) $('opAiDialog').close();
-        for (const id of ['opPages','opSettings','opBlocks','opInspector','opPreview','opPresentationPage','opStatus','opAiFields','opAiStatus']) $(id)?.replaceChildren();
+        for (const id of ['opPages','opSettings','opBlocks','opInspector','opPreview','opPresentationPage','opStatus','opExportStatus','opAiFields','opAiStatus']) $(id)?.replaceChildren();
     }
 
     window.OnePage = {refresh,reset};
@@ -779,6 +821,7 @@
         $('opClose').onclick = () => $('opPresentation').close();
         $('opPresentation').addEventListener('close',() => $('opPresentationPage').replaceChildren());
         $('opAiOpen').onclick = openAI;
+        $('opPptx').onclick = exportPowerPoint;
         $('opAiCancel').onclick = () => $('opAiDialog').close();
         $('opAiForm').onsubmit = composeAI;
         $('opAiDialog').addEventListener('close',() => {

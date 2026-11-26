@@ -49,6 +49,17 @@ addEventListener('load',async()=>{
         window.__session=currentSession;
         document.body.classList.add('authenticated');
         confirmPersistedSnapshot(projectPersistedState(),smokeReport.snapshotUpdatedAt);
+        node('workspaceDataMenu').click();
+        const dataDialog=node('workspaceDataDialog');
+        assert(dataDialog.open&&node('workspaceDataState').textContent==='Base sincronizada'&&
+            node('workspaceDataCutoff').textContent.includes('(Brasília)'),'Origem e data de corte acessíveis pelo menu');
+        supabaseStateLoaded=false;
+        DGranelDataStatus.refresh();
+        assert(!node('workspaceDataRetry').hidden&&node('workspaceDataState').textContent==='Leitura indisponível','Estado de leitura e recuperação do painel');
+        assert(!document.querySelector('.workspace-data-notice').hidden,'Aviso de indisponibilidade nos módulos');
+        supabaseStateLoaded=true;
+        DGranelDataStatus.refresh();
+        dataDialog.close();
         let fail=true,onepageFailure=true,logoLoaded=false;const actions=[];
         window.fetch=async(url,options)=>{
             if(String(url).includes('/rest/v1/audit_logs?'))return Response.json([]);
@@ -262,17 +273,45 @@ addEventListener('load',async()=>{
         assert(preview.textContent.includes('Resultado para a reunião'),'Bloco gerado pela IA não editável');
         await tick();
         assert(document.documentElement.scrollWidth<=innerWidth+2,'Rolagem horizontal na OnePage');
-        if(location.hash.startsWith('#onepage-print')||location.hash==='#onepage-preview'){
+        const portraitPptx=location.hash==='#onepage-pptx-portrait';
+        if(portraitPptx){
+            node('opPages').value=originalId;
+            node('opPages').dispatchEvent(new Event('change'));
+            edit('opSettings','Orientação','portrait');
+        }else if(location.hash!=='#onepage-print'){
+            add('Gráfico');
+            edit('opInspector','Título do bloco','Índice da operação');
+            edit('opInspector','Indicador',indicators().options[4].value);
+            edit('opInspector','Tipo de gráfico','donut');
+        }
+        const outputPptx=async()=>{
+            let file;
+            let errorStack;
+            const build=OnePagePptx.build;
+            OnePagePptx.build=async (...args)=>{try{return await build(...args);}catch(error){errorStack=error.stack;throw error;}};
+            reportDownloadBlob=(blob,name)=>{if(name.endsWith('.pptx'))file=blob;};
+            await node('opPptx').onclick();
+            OnePagePptx.build=build;
+            assert(file?.size>4000&&node('opExportStatus').textContent.includes('iniciado'),'Falha no PowerPoint: '+node('opExportStatus').textContent+' '+(errorStack??''));
+            const zip=await JSZip.loadAsync(await file.arrayBuffer());
+            const slide=await zip.file('ppt/slides/slide1.xml').async('string');
+            const presentation=await zip.file('ppt/presentation.xml').async('string');
+            const objectIds=[...slide.matchAll(/<p:cNvPr id="(\\d+)"/g)].map(match=>match[1]);
+            const charts=Object.keys(zip.files).filter(path=>/^ppt\\/charts\\/chart\\d+.xml$/.test(path));
+            assert(slide.includes('<a:tbl>')&&slide.includes('<a:t>')&&!slide.includes('<p:pic>'),'Slide sem textos e tabela nativos');
+            assert(objectIds.length>10&&objectIds.length===new Set(objectIds).size,'IDs incompatíveis com o PowerPoint');
+            assert(!presentation.includes('<p:notesMasterIdLst>'),'Declaração de notas incompatível com o PowerPoint');
+            const shapes=Object.keys(zip.files).filter(path=>/^ppt\\/embeddings\\/.*\\.xlsx$/.test(path));
+            assert(charts.length>=1&&charts.length===shapes.length,'Gráficos sem planilha editável');
+            if(location.hash.startsWith('#onepage-pptx'))window.__onePagePptx=Array.from(new Uint8Array(await file.arrayBuffer()));
+        };
+        if(location.hash!=='#onepage-print')await outputPptx();
+        if(location.hash.startsWith('#onepage-print')||location.hash==='#onepage-preview'||location.hash.startsWith('#onepage-pptx')){
             if(location.hash.startsWith('#onepage-print')){
                 if(location.hash==='#onepage-print'){
                     node('opPages').value=originalId;
                     node('opPages').dispatchEvent(new Event('change'));
                     edit('opSettings','Orientação','portrait');
-                }else{
-                    add('Gráfico');
-                    edit('opInspector','Título do bloco','Índice da operação');
-                    edit('opInspector','Indicador',indicators().options[4].value);
-                    edit('opInspector','Tipo de gráfico','donut');
                 }
                 window.print=()=>{};
                 await node('opPrint').onclick();
@@ -286,11 +325,14 @@ addEventListener('load',async()=>{
         assert(search.querySelector('.workspace-search-result')?.textContent.includes('Autuações'),'Busca de indicador sem acentos');
         search.close();
         document.body.classList.add('developer-mode');
-        for(const module of ['home','dashboard','datagrid','intelligence','reports','onepage','governance','audit']){
-            switchTab(module);
-            await new Promise(resolve=>setTimeout(resolve,20));
-            assert(!node('view-'+module).classList.contains('hidden')&&node('tab-'+module).getAttribute('aria-current')==='page','Abertura de '+module);
-            assert(document.documentElement.scrollWidth<=innerWidth+2,'Rolagem horizontal em '+module+' com '+innerWidth+' px');
+        for(const theme of ['dark','light']){
+            applyTheme(theme);
+            for(const module of ['home','dashboard','datagrid','intelligence','reports','onepage','governance','audit']){
+                switchTab(module);
+                await new Promise(resolve=>setTimeout(resolve,20));
+                assert(!node('view-'+module).classList.contains('hidden')&&node('tab-'+module).getAttribute('aria-current')==='page','Abertura de '+module);
+                assert(document.documentElement.scrollWidth<=innerWidth+2,'Rolagem horizontal em '+module+' no tema '+theme+' com '+innerWidth+' px');
+            }
         }
         document.body.classList.remove('developer-mode');
         assert(!hasUnsavedChanges&&!window.__errors.length,window.__errors.join('; ')||'IA alterou o dashboard');
@@ -318,8 +360,9 @@ const scripts = [setup, optionalTailwind, optionalChart, 'const smokeFleet='+JSO
     ...await Promise.all(localScripts.map(file => read('public/' + file))),
     await read('public/vendor/jspdf-4.2.1.umd.min.js'),
     await read('public/vendor/jspdf-autotable-5.0.8.min.js'),
+    await read('public/vendor/pptxgenjs-4.0.1.bundle.js'),
     await read('public/report-pdf.js'), checks];
-const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css','workspace-ui.css','dashboard-layout.css','onepage.css'].map(file => read('public/' + file)));
+const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css','workspace-ui.css','dashboard-layout.css','onepage.css','workspace-experience.css'].map(file => read('public/' + file)));
 html = html.replace('<head>', () => "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:\"><style>" + styles.join('\n') + '</style>');
 html = html.replace('</body>', () => scripts.map(script => '<script>'+script.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n')+'</body>');
 await Deno.mkdir('.validation-tools', { recursive: true });

@@ -66,7 +66,7 @@
         const focus=(attention.length?attention:currentData.filter(i=>getIntelligenceDirection(i))).slice(0,3);
         const signature=JSON.stringify([ready,currentSession?.user?.id,lastSupabaseSavedAt,counts,currentData.length,attention.length,onTarget,currentData.filter(i=>!getIntelligenceDirection(i)).length,focus,alerts.slice(0,4)]);if(homeSignature===signature)return;homeSignature=signature;
         for(const [id,n] of [['v3Count',currentData.length],['v3Attention',attention.length],['v3Alerts',alerts.length],['v3Directions',currentData.filter(i=>!getIntelligenceDirection(i)).length]])$(id).textContent=ready?String(n):'—';
-        $('v3OverviewStatus').textContent=ready?(lastSupabaseSavedAt?`Base sincronizada em ${new Date(lastSupabaseSavedAt).toLocaleString('pt-BR')}`:'Base autorizada carregada.'):'Aguardando dados do Supabase.';
+        $('v3OverviewStatus').textContent=ready?(lastSupabaseSavedAt?`Base sincronizada em ${new Date(lastSupabaseSavedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})} (Brasília)`:'Base autorizada carregada.'):'Aguardando dados do Supabase.';
         $('uxAlertBreakdown').textContent=ready?`${counts.CRITICO} críticos · ${counts.unread} não lidos`:'Contagens indisponíveis';
         const bar=$('workspacePerformanceBar'),legend=$('workspacePerformanceLegend');
         bar.replaceChildren();legend.replaceChildren();
