@@ -6,7 +6,7 @@ export const ONEPAGE_INDICATOR_LIMIT = 12;
 type Orientation = 'portrait' | 'landscape';
 const types = ['kpi', 'chart', 'table', 'note', 'text'] as const;
 const widths = ['full', 'half', 'third'] as const;
-const chartTypes = ['line', 'bar'] as const;
+const chartTypes = ['line', 'bar', 'donut'] as const;
 const tones = ['accent', 'neutral', 'attention'] as const;
 type IndicatorId = string | number;
 type Report = {
@@ -40,7 +40,7 @@ const prompt = [
     'Defina título, subtítulo, ordem, larguras, tipos e opções dos blocos. Use de um a dez blocos.',
     'kpi e chart referenciam um indicador cada; table referencia um ou mais; note e text usam refs vazio.',
     'Inclua todos os indicadores selecionados em blocos de dados. Use tabela para agrupar resultados e gráfico para evolução comparável. Evite repetir indicadores sem motivo.',
-    'Adapte o arranjo à orientação. Reserve larguras maiores para gráficos e tabelas. Use half ou third para destaques compactos.',
+    'No horizontal, monte um painel modular: agrupe a pauta em um balão curto e combine KPIs e gráficos lado a lado com half ou third. Use full para tabelas extensas. Na vertical, dê largura aos gráficos. Use donut apenas para um percentual recente entre zero e cem.',
     'Use balões e textos para contexto ou pauta útil. Em bloco de dados, text é um balão opcional. Títulos de bloco podem ficar vazios. Nunca escreva números, metas, datas, percentuais ou afirmações causais nos textos: os valores serão renderizados pelo Dashboard.',
 ].join(' ');
 

@@ -41,7 +41,7 @@ addEventListener('load',async()=>{
             image.src=smokeFleet[image.getAttribute('src')];
         }
         document.querySelectorAll('img[src="dgranel-mark.png"]').forEach(image=>{image.srcset=smokeBrand;});
-        currentData=smokeReport.indicators.map(i=>({...i,und:i.unidade}));
+        currentData=smokeReport.indicators.map((i,n)=>({...i,und:n===3?'%':i.unidade}));
         mesesLabels=smokeReport.competencias;
         sectors=[...new Set(currentData.map(i=>i.setor))];
         supabaseStateLoaded=supabaseReady=true;
@@ -74,8 +74,8 @@ addEventListener('load',async()=>{
                     title:'OnePage da reunião',subtitle:'Indicadores escolhidos',mode:'adjusted',blocks:[
                         {...options,type:'kpi',width:'half',indicators:[ids[0]],comparison:true},
                         {...options,type:'note',title:'Pauta',text:'Revisar a evolução na próxima reunião.',width:'half',indicators:[]},
-                        {...options,type:'chart',indicators:[ids[1]],chart:'bar',target:true},
-                        {...options,type:'table',indicators:ids},
+                        {...options,type:'chart',width:'half',indicators:[ids[1]],chart:'bar',target:true},
+                        {...options,type:'table',width:'half',indicators:ids},
                     ],
                 }});
             }
@@ -156,11 +156,21 @@ addEventListener('load',async()=>{
         const indicators=()=>[...node('opInspector').querySelectorAll('select')].find(item=>item.options[0].textContent==='Selecione o indicador');
         edit('opInspector','Indicador',indicators().options[1].value);
         edit('opInspector','Comparar com a competência anterior',true);
+        edit('opInspector','Exibir meta cadastrada',true);
         edit('opInspector','Balão de observação','Conferir na reunião.');
         add('Gráfico');
         edit('opInspector','Indicador',indicators().options[1].value);
         edit('opInspector','Tipo de gráfico','bar');
         edit('opInspector','Exibir meta cadastrada',true);
+        const preview=node('opPreview');
+        edit('opInspector','Indicador',indicators().options[4].value);
+        edit('opInspector','Tipo de gráfico','donut');
+        await tick();
+        assert(preview.querySelector('.op-donut')?.textContent==='81%','Rosca percentual da competência final');
+        edit('opInspector','Indicador',indicators().options[1].value);
+        await tick();
+        assert(!preview.querySelector('.op-donut')&&preview.textContent.includes('A rosca requer'),'Rosca sem denominador percentual');
+        edit('opInspector','Tipo de gráfico','bar');
         add('Tabela');
         node('opInspector').querySelector('.op-indicator-list input').click();
         add('Balão');
@@ -171,11 +181,21 @@ addEventListener('load',async()=>{
         add('Texto');
         edit('opInspector','Conteúdo','Próximos passos.');
         await tick();
-        const preview=node('opPreview');
         assert(preview.querySelectorAll('.op-card').length===5&&preview.textContent.includes('Conferir na reunião.'),'Balão em indicador ou blocos ausentes');
         assert(preview.querySelector('.op-paper').dataset.orientation==='landscape','Prévia horizontal');
-        assert(preview.querySelectorAll('.op-card')[2].dataset.tone==='attention','Ordem ou estilo do balão');
+        assert([...node('opBlocks').children][2].textContent.includes('Ponto de atenção')&&
+            preview.querySelector('.op-paper-sidebar .op-card').dataset.tone==='attention','Ordem, coluna ou estilo do balão');
+        assert(preview.querySelectorAll('.op-timeline-list li').length===6&&preview.querySelector('.op-timeline-list [aria-current]').textContent==='Dez/2026','Faixa automática da OnePage');
+        assert(preview.querySelectorAll('.op-target-row').length===2,'Barras comparáveis de realizado e meta');
+        const sheet=preview.querySelector('.op-paper');
+        assert(getComputedStyle(sheet).aspectRatio==='16 / 9','Proporção de apresentação horizontal');
+        edit('opSettings','Marcos da faixa superior','Revisão | Nov/2026\\nEntrega | Dez/2026');
+        edit('opInspector','Posição no painel','main');
+        await tick();
+        assert(preview.querySelectorAll('.op-timeline-list li').length===2&&preview.querySelector('.op-timeline-list').textContent.includes('Entrega'),'Marcos editáveis da OnePage');
+        assert(preview.querySelector('.op-paper-grid').textContent.includes('Próximos passos.'),'Posição do bloco no painel');
         assert(preview.querySelector('.op-data-table tbody tr')&&preview.querySelector('.op-kpi-value').textContent===fmtVal(smokeReport.indicators[0].valores.at(-1)),'Tabela ou valor da competência');
+        assert(getComputedStyle(preview.querySelector('.op-data-table thead th')).color==='rgb(231, 239, 255)','Contraste do cabeçalho da tabela horizontal');
         if(typeof Chart.version==='string')assert(preview.querySelector('.op-chart-image')?.src.startsWith('data:image/png'),'Gráfico OnePage não renderizado');
         const draftValues=currentData[0].valores;
         currentData[0].valores=draftValues.map(()=>9999);
@@ -248,6 +268,11 @@ addEventListener('load',async()=>{
                     node('opPages').value=originalId;
                     node('opPages').dispatchEvent(new Event('change'));
                     edit('opSettings','Orientação','portrait');
+                }else{
+                    add('Gráfico');
+                    edit('opInspector','Título do bloco','Índice da operação');
+                    edit('opInspector','Indicador',indicators().options[4].value);
+                    edit('opInspector','Tipo de gráfico','donut');
                 }
                 window.print=()=>{};
                 await node('opPrint').onclick();

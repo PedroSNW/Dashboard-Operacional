@@ -2,6 +2,7 @@
     const $ = id => document.getElementById(id);
     const types = {kpi:'Indicador', chart:'Gráfico', table:'Tabela', note:'Balão', text:'Texto'};
     const colors = {blue:'#174D92', teal:'#067064', amber:'#825008', rose:'#9C3151'};
+    const landscapeColors = {blue:'#F4CF83', teal:'#76E2D0', amber:'#FFC27B', rose:'#FFAAC4'};
     const orientations = {
         portrait:{label:'Vertical', width:760, height:1030},
         landscape:{label:'Horizontal', width:1100, height:702},
@@ -59,7 +60,7 @@
     const storagePrefix = () => 'dgranel.onepage.v1.' + owner + '.';
     function newPage() {
         return {version:1, id:crypto.randomUUID(), title:'Nova OnePage', subtitle:'', accent:'blue',
-            orientation:'portrait', start:'', end:'', blocks:[], updated:0};
+            orientation:'portrait', start:'', end:'', milestones:'', blocks:[], updated:0};
     }
 
     function loadPages() {
@@ -155,7 +156,8 @@
     }
 
     function newBlock(type) {
-        return {id:crypto.randomUUID(), type, title:'', text:'', note:'', width:type === 'kpi' ? 'half' : 'full',
+        const compact = type === 'kpi' || (type === 'chart' && page?.orientation === 'landscape');
+        return {id:crypto.randomUUID(), type, title:'', text:'', note:'', width:compact ? 'half' : 'full', placement:'auto',
             indicator:unset, indicators:[], start:'', end:'', chart:'line', target:false, comparison:false, labels:false, tone:'accent'};
     }
 
@@ -191,11 +193,19 @@
         $('opSettings').replaceChildren(
             field('Título',page.title,update('title')),
             field('Subtítulo',page.subtitle,update('subtitle'),{rows:2}),
-            orientationField(page.orientation,update('orientation')),
+            orientationField(page.orientation,value => {
+                change(page,'orientation',value,true);
+                $('opOrientation')?.focus();
+            },'opOrientation'),
             field('Cor de destaque',page.accent,update('accent'),{choices:[['blue','Azul'],['teal','Verde'],['amber','Âmbar'],['rose','Vinho']]}),
             node('p', source.months.length ? 'Período padrão dos blocos de dados' : 'Dados sincronizados indisponíveis.', 'op-field-hint'),
             dateFields(page,months,['Primeira competência','Última competência'])
         );
+        if (page.orientation === 'landscape') {
+            const milestones = field('Marcos da faixa superior',page.milestones,update('milestones'),{rows:3});
+            milestones.append(node('small','Até seis marcos, um por linha, no formato Título | Data. Se ficar vazio, a faixa mostra as competências da página.','op-field-hint'));
+            $('opSettings').append(milestones);
+        }
         $('opBlocks').replaceChildren(...page.blocks.map((b, i) => {
             const li = node('li');
             const select = button('', () => {selected = b.id;renderEditor();$('opBlocks').querySelector('[aria-pressed="true"]')?.focus();schedulePreview();});
@@ -220,8 +230,10 @@
         $('opPresent').disabled = $('opPrint').disabled = page.blocks.length === 0;
     }
 
-    function orientationField(value, update) {
-        return field('Orientação',value,update,{choices:Object.entries(orientations).map(([id,setting])=>[id,setting.label])});
+    function orientationField(value, update, id) {
+        const control = field('Orientação',value,update,{choices:Object.entries(orientations).map(([id,setting])=>[id,setting.label])});
+        if (id) control.querySelector('select').id = id;
+        return control;
     }
 
     function dateFields(target, months, defaults, update = (key,value) => change(target,key,value)) {
@@ -272,6 +284,8 @@
             node('h4','Editar ' + types[block.type].toLowerCase()),
             field('Título do bloco',block.title,update('title')),
             field('Largura',block.width,update('width'),{choices:[['full','Página inteira'],['half','Metade'],['third','Um terço']]}));
+        if (page.orientation === 'landscape') inspector.append(field('Posição no painel',block.placement ?? 'auto',update('placement'),
+            {choices:[['auto','Automática'],['side','Coluna lateral'],['main','Painel principal']]}));
         if (block.type === 'text' || block.type === 'note') {
             inspector.append(field('Conteúdo',block.text,update('text'),{rows:4}));
             if (block.type === 'note') inspector.append(field('Estilo do balão',block.tone,update('tone'),
@@ -282,8 +296,12 @@
                 {choices:[['','Selecione o indicador'],...source.items.map(i => [i.key,i.name + (i.sector ? ' · ' + i.sector : '')])],missing:'Indicador indisponível'}));
             inspector.append(dateFields(block,months,['Período da página','Período da página']));
             if (block.type === 'chart') {
-                inspector.append(field('Tipo de gráfico',block.chart,update('chart'),{choices:[['line','Linha'],['bar','Colunas']]}),
-                    toggle('Exibir valores no gráfico',block.labels,update('labels')));
+                const labels = toggle('Exibir valores no gráfico',block.labels,update('labels'));
+                labels.hidden = block.chart === 'donut';
+                inspector.append(field('Tipo de gráfico',block.chart,value => {
+                    labels.hidden = value === 'donut';
+                    change(block,'chart',value);
+                },{choices:[['line','Linha'],['bar','Colunas'],['donut','Rosca (% da competência final)']]}),labels);
             } else inspector.append(toggle('Comparar com a competência anterior',block.comparison,update('comparison')));
             inspector.append(toggle('Exibir meta cadastrada',block.target,update('target')),
                 field('Balão de observação',block.note,update('note'),{rows:2}));
@@ -362,15 +380,19 @@
     }
 
     function chartImage(block,item,points) {
+        const landscape = page.orientation === 'landscape';
         const chart = node('canvas');
         chart.width = {third:430,half:570,full:900}[block.width] ?? 900;
-        chart.height = page.orientation === 'landscape' && block.width === 'full' ? 204 : 290;
-        const color = colors[page.accent] ?? colors.blue;
+        chart.height = landscape ? (block.width === 'full' ? 160 : 236) : 290;
+        const palette = landscape ? landscapeColors : colors;
+        const color = palette[page.accent] ?? palette.blue;
+        const axisColor = landscape ? '#D9E5F9' : '#435572';
+        const tickFont = {size:landscape ? 15 : 14};
         const data = points.map(p => valueAt(item,p));
         const target = block.target && Number.isFinite(item.meta) && (item.meta !== 0 || item.zeroConfirmed);
         const datasets = [{label:item.name, data, borderColor:color, backgroundColor:block.chart === 'bar' ? color : '#0000',
             borderWidth:2, pointRadius:data.length <= 18 ? 3 : 0, spanGaps:false}];
-        if (target) datasets.push({type:'line',label:'Meta',data:data.map(() => item.meta),borderColor:'#825008',borderDash:[7,5],
+        if (target) datasets.push({type:'line',label:'Meta',data:data.map(() => item.meta),borderColor:landscape?'#B1D5FF':'#825008',borderDash:[7,5],
             borderWidth:1.5,backgroundColor:'#0000',pointRadius:0,datalabels:{display:false}});
         let instance;
         try {
@@ -380,10 +402,10 @@
                 options:{responsive:false,animation:false,devicePixelRatio:2,layout:{padding:{top:block.labels?16:2,right:12}},
                     plugins:{legend:{display:false},tooltip:{enabled:false},datalabels:{display:ctx => block.labels &&
                         (ctx.dataIndex % Math.ceil(data.length/16) === 0 || ctx.dataIndex === data.length - 1),
-                        color:'#192e4d',anchor:'end',align:'top',clamp:true,formatter:v=>v == null ? '' : number.format(v)}},
-                    scales:{x:{ticks:{color:'#435572',font:{size:14},maxTicksLimit:8,maxRotation:0},grid:{display:false}},
-                        y:{beginAtZero:block.chart === 'bar',ticks:{color:'#435572',font:{size:14},maxTicksLimit:6,callback:v=>number.format(v)},
-                            grid:{color:'#dae4f3'}}}}
+                        color:landscape?'#F5F8FF':'#192e4d',anchor:'end',align:'top',clamp:true,formatter:v=>v == null ? '' : number.format(v)}},
+                    scales:{x:{ticks:{color:axisColor,font:tickFont,maxTicksLimit:8,maxRotation:0},grid:{display:false}},
+                        y:{beginAtZero:block.chart === 'bar',ticks:{color:axisColor,font:tickFont,maxTicksLimit:landscape?4:6,callback:v=>number.format(v)},
+                            grid:{color:landscape?'#B4C9EC44':'#dae4f3'}}}}
             });
             const image = node('img');
             image.alt = 'Gráfico de ' + item.name + '. ' + points.map((p,n) => p.label + ', ' + valueText(data[n],item.unit)).join('; ');
@@ -397,6 +419,40 @@
         } finally {
             instance?.destroy();
         }
+    }
+
+    function renderTargetBars(card, value, item) {
+        if (value === null || value < 0 || !Number.isFinite(item.meta) || item.meta < 0 ||
+            (item.meta === 0 && !item.zeroConfirmed)) return false;
+        const maximum = Math.max(value,item.meta);
+        if (!maximum) return false;
+        const bars = node('div',undefined,'op-target-bars');
+        for (const [label,result] of [['Realizado',value],['Meta',item.meta]]) {
+            const row = node('div',undefined,'op-target-row');
+            const track = node('span',undefined,'op-target-track');
+            const fill = node('span');
+            fill.style.width = (result / maximum * 100) + '%';
+            track.setAttribute('aria-hidden','true');
+            track.append(fill);
+            row.append(node('span',label),track,node('strong',valueText(result,item.unit)));
+            bars.append(row);
+        }
+        card.append(bars);
+        return true;
+    }
+
+    function renderDonut(card, item, point) {
+        const value = valueAt(item,point);
+        card.append(node('p',point.label,'op-paper-meta'));
+        if (item.unit?.trim() !== '%' || value === null || value < 0 || value > 100) {
+            card.append(node('strong',valueText(value,item.unit),'op-kpi-value'),
+                node('p','A rosca requer um valor percentual entre 0% e 100%.','op-paper-meta'));
+            return;
+        }
+        const donut = node('div',undefined,'op-donut');
+        donut.style.setProperty('--op-donut-value',value+'%');
+        donut.append(node('strong',valueText(value,'%')));
+        card.append(donut);
     }
 
     function renderData(block, card) {
@@ -418,13 +474,21 @@
             return;
         }
         const item = items[0];
+        if (block.type === 'chart' && block.chart === 'donut') {
+            renderDonut(card,item,points.at(-1));
+            if (block.target) meta('Meta · ' + targetText(item));
+            return;
+        }
         let chartShown = false;
+        let targetBarsShown = false;
         if (block.type === 'kpi') {
             const current = points.at(-1);
-            card.append(node('strong',valueText(valueAt(item,current),item.unit),'op-kpi-value'));
+            const result = valueAt(item,current);
+            card.append(node('strong',valueText(result,item.unit),'op-kpi-value'));
             meta(current.label + (item.sector ? ' · ' + item.sector : ''));
             const previous = previousMonth(points);
             if (block.comparison) meta(comparison(item,points) + (previous ? ' vs. ' + previous.label : ''));
+            if (block.target && page.orientation === 'landscape') targetBarsShown = renderTargetBars(card,result,item);
         } else {
             meta((item.unit || 'Valor') + ' · ' + periodText(points));
             const image = points.some(p => valueAt(item,p) !== null) ? chartImage(block,item,points) : null;
@@ -437,26 +501,66 @@
                 card.append(fallback);
             }
         }
-        if (block.target) meta((chartShown && Number.isFinite(item.meta) && (item.meta !== 0 || item.zeroConfirmed) ? 'Linha tracejada · ' : '') + 'Meta · ' + targetText(item));
+        if (block.target && !targetBarsShown) meta((chartShown && Number.isFinite(item.meta) && (item.meta !== 0 || item.zeroConfirmed) ? 'Linha tracejada · ' : '') + 'Meta · ' + targetText(item));
     }
 
     function periodText(points) {
         return points.length === 1 ? points[0].label : points.length ? points[0].label + ' a ' + points.at(-1).label : '';
     }
 
+    function timeline(points) {
+        const custom = (page.milestones ?? '').split(/\r?\n/).map(line => {
+            const [label,...detail] = line.split('|');
+            return {label:label.trim() || detail.join('|').trim(),detail:label.trim() ? detail.join('|').trim() : ''};
+        }).filter(stop => stop.label).slice(0,6);
+        const count = Math.min(6,points.length);
+        const milestones = custom.length ? custom : Array.from({length:count},(_,index) => {
+            const point = points[count === 1 ? 0 : Math.round(index * (points.length - 1) / (count - 1))];
+            return {label:point.label,current:index === count - 1};
+        });
+        if (!milestones.length) return null;
+        const band = node('section',undefined,'op-paper-timeline');
+        band.setAttribute('aria-label',custom.length?'Marcos':'Competências do recorte');
+        const list = node('ol',undefined,'op-timeline-list');
+        list.style.setProperty('--op-stops',String(milestones.length));
+        for (const stop of milestones) {
+            const entry = node('li');
+            if (stop.current) entry.setAttribute('aria-current','date');
+            entry.append(node('span',undefined,'op-timeline-dot'),node('strong',stop.label));
+            if (stop.detail) entry.append(node('span',stop.detail,'op-timeline-detail'));
+            list.append(entry);
+        }
+        band.append(node('h3',custom.length?'Marcos':'Competências do recorte'),list);
+        return band;
+    }
+
+    function landscapeLayout(sheet, head, grid, sidebar, band) {
+        const top = node('div',undefined,'op-landscape-top');
+        top.append(head);
+        if (band) top.append(band);
+        const body = node('div',undefined,'op-landscape-body');
+        if (sidebar.childElementCount) body.append(sidebar);
+        if (grid.childElementCount) body.append(grid);
+        sheet.append(top,body);
+    }
+
     function paper(editable = false) {
         const sheet = node('article',undefined,'op-paper');
         sheet.dataset.orientation = page.orientation;
-        const color = colors[page.accent] ?? colors.blue;
+        const landscape = page.orientation === 'landscape';
+        const palette = landscape ? landscapeColors : colors;
+        const color = palette[page.accent] ?? palette.blue;
         sheet.style.setProperty('--op-paper-accent',color);
         const head = node('header',undefined,'op-paper-header');
         const mark = node('span','D’GRANEL','op-paper-brand');
         head.append(mark,node('h2',title(page)));
         if (page.subtitle.trim()) head.append(node('p',page.subtitle,'op-paper-subtitle'));
-        const range = periodText(period());
-        if (range && page.blocks.some(b => ['kpi','chart','table'].includes(b.type))) head.append(node('p',range,'op-paper-range'));
-        sheet.append(head);
+        const points = period();
+        const range = periodText(points);
+        const hasData = page.blocks.some(b => ['kpi','chart','table'].includes(b.type));
+        if (range && hasData) head.append(node('p',range,'op-paper-range'));
         const grid = node('div',undefined,'op-paper-grid');
+        const sidebar = node('div',undefined,'op-paper-sidebar');
         for (const block of page.blocks) {
             const card = node('section',undefined,'op-card');
             card.dataset.width = block.width;
@@ -475,11 +579,14 @@
                 renderData(block,card);
                 if (block.note.trim()) card.append(node('aside',block.note,'op-callout'));
             }
-            grid.append(card);
+            const side = landscape && (block.placement === 'side' ||
+                (block.placement !== 'main' && (block.type === 'note' || block.type === 'text')));
+            (side ? sidebar : grid).append(card);
         }
         if (!page.blocks.length) grid.append(node('p','Adicione um bloco para montar sua página.','op-empty'));
-        sheet.append(grid);
-        if (page.blocks.some(b => ['kpi','chart','table'].includes(b.type))) {
+        if (landscape) landscapeLayout(sheet,head,grid,sidebar,timeline(hasData ? points : []));
+        else sheet.append(head,grid);
+        if (hasData) {
             const time = source.version != null ? new Date(source.version) : null;
             const cutoff = time && Number.isFinite(time.getTime())
                 ? ' · Corte ' + time.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) + ' (Brasília)' : '';
@@ -514,7 +621,7 @@
         const sheet = paper();
         printHost.append(sheet);
         document.body.append(printHost);
-        const scale = Math.min(0.94, format.height / sheet.offsetHeight);
+        const scale = Math.min(0.94, format.height / Math.max(sheet.offsetHeight,sheet.scrollHeight));
         sheet.style.setProperty('--op-print-scale',String(scale));
         document.body.classList.add('op-printing');
         return printHost;
