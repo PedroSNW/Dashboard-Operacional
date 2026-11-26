@@ -35,6 +35,7 @@
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
     <link rel="stylesheet" href="workspace-ui.css?v=layout-1">
     <link rel="stylesheet" href="dashboard-layout.css?v=2">
+    <link rel="stylesheet" href="onepage.css?v=1">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
@@ -91,6 +92,7 @@
                 <button onclick="switchTab('datagrid')" id="tab-datagrid" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-table"></i> Consulta &amp; Repositório</button>
                 <button onclick="switchTab('intelligence')" id="tab-intelligence" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-chart-line text-amber-400"></i> Análises e alertas</button>
                 <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-file-pdf text-amber-400"></i> Relatórios Gerenciais</button>
+                <button onclick="switchTab('onepage')" id="tab-onepage" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> OnePage</button>
                 <button onclick="switchTab('governance')" id="tab-governance" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i class="fa-solid fa-sliders text-amber-400"></i> Governança</button>
                 <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white"><i id="developerModeLockIcon" class="fa-solid fa-lock text-rose-400" aria-hidden="true"></i><span>Auditoria &amp; JSON Raw</span></button>
                 </nav>
@@ -431,6 +433,53 @@
                     <button id="reportExport" type="button" class="report-primary" disabled>Baixar PDF</button>
                 </div>
             </section>
+        </div>
+        <div id="view-onepage" class="page-view hidden">
+            <section class="op-toolbar" aria-labelledby="onePageTitle">
+                <div>
+                    <h2 id="onePageTitle">OnePage</h2>
+                    <p id="opStatus" role="status"></p>
+                </div>
+                <div class="op-toolbar-actions">
+                    <button type="button" id="opPresent">Apresentar</button>
+                    <button type="button" id="opPrint" class="op-primary">Imprimir / PDF</button>
+                </div>
+            </section>
+            <div class="op-workspace">
+                <div class="op-editor">
+                    <section class="op-panel" aria-labelledby="opDocumentTitle">
+                        <h3 id="opDocumentTitle">Minhas páginas</h3>
+                        <label class="op-field"><span class="sr-only">Selecionar página</span><select id="opPages"></select></label>
+                        <div class="op-actions">
+                            <button type="button" id="opNew">Nova</button>
+                            <button type="button" id="opDuplicate">Duplicar</button>
+                            <button type="button" id="opDelete">Excluir</button>
+                        </div>
+                        <div id="opSettings"></div>
+                    </section>
+                    <section class="op-panel" aria-labelledby="opBlocksTitle">
+                        <h3 id="opBlocksTitle">Blocos</h3>
+                        <div id="opAdd" class="op-add"></div>
+                        <ol id="opBlocks" class="op-blocks"></ol>
+                        <div id="opInspector"></div>
+                    </section>
+                </div>
+                <section class="op-preview" aria-labelledby="opPreviewTitle">
+                    <h3 id="opPreviewTitle">Prévia</h3>
+                    <div id="opPreview"></div>
+                </section>
+            </div>
+            <dialog id="opPresentation" class="op-dialog" aria-labelledby="opPresentationTitle">
+                <div class="op-dialog-bar"><h2 id="opPresentationTitle">Apresentação</h2><button type="button" id="opClose">Fechar</button></div>
+                <div id="opPresentationPage"></div>
+            </dialog>
+            <dialog id="opConfirmDelete" class="op-dialog op-confirm" aria-labelledby="opConfirmTitle">
+                <form method="dialog">
+                    <h2 id="opConfirmTitle">Excluir esta página?</h2>
+                    <p id="opDeleteName"></p>
+                    <div class="op-actions"><button value="cancel" autofocus>Cancelar</button><button value="delete" class="op-danger">Excluir página</button></div>
+                </form>
+            </dialog>
         </div>
         <div id="view-governance" class="page-view hidden space-y-6">
             <section class="glass-card flex flex-col justify-between gap-4 rounded-2xl p-5 lg:flex-row lg:items-center">
@@ -777,7 +826,7 @@
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
         <script src="pending-state.js?v=meta-zero"></script>
-        <script src="main.js?v=meta-zero"></script>
+        <script src="main.js?v=onepage"></script>
         <script src="dashboard-layout.js?v=3"></script>
         <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
@@ -785,11 +834,12 @@
         <script src="report-executive.js?v=reuniao"></script>
         <script src="report-evidence.js?v=reuniao"></script>
         <script src="reports.js?v=reuniao"></script>
-    <script src="workspace-v3.js?v=bibliotecas-1"></script>
+    <script src="workspace-v3.js?v=onepage"></script>
     <script src="motion-v3-1.js?v=legenda-graficos-1"></script>
     <script src="pending-changes.js?v=visual-4"></script>
     <script src="workspace-v3-2.js?v=hierarquia-1"></script>
         <script src="report-authoring.js?v=reuniao"></script>
+        <script src="onepage.js?v=1"></script>
 </body>
 </html>
 

@@ -2,11 +2,12 @@
 (() => {
     const $=id=>document.getElementById(id);
     const element=(tag,text='',cls='')=>{const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
-    const modules={home:'Visão geral',dashboard:'Painéis',datagrid:'Indicadores',intelligence:'Inteligência',reports:'Relatórios',governance:'Governança',audit:'Auditoria'};
+    const modules={home:'Visão geral',dashboard:'Painéis',datagrid:'Indicadores',intelligence:'Inteligência',reports:'Relatórios',onepage:'OnePage',governance:'Governança',audit:'Auditoria'};
     const paths={home:'M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10',dashboard:'M3 3h7v7H3zM14 3h7v11h-7zM3 14h7v7H3zM14 18h7v3h-7z',datagrid:'M3 4h18v16H3zM3 10h18M9 4v16',intelligence:'M4 20V10m8 10V4m8 16v-7M2 20h20',reports:'M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7',governance:'M4 7h16M4 17h16M9 4v6M15 14v6',audit:'M5 3h14v18H5zM8 8h8M8 12h8M8 16h5',bell:'M6 9a6 6 0 0 1 12 0v7l2 2H4l2-2zm4 12h4',save:'M4 3h13l4 4v14H3V3zM7 3v6h9V3M7 21v-8h10v8',theme:'M12 3a9 9 0 1 0 0 18z'};
     paths.search='M15.5 15.5 21 21M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0';
     paths.attention='M3 6l6 6 4-4 7 8m-6 0h6v-6';
     paths.menu='M3 5h18v14H3zM9 5v14';
+    paths.onepage='M5 3h14v18H5zM8 7h8M8 11h3v6H8zM14 11h2m-2 3h2m-2 3h2';
     function icon(node,name){if(!node)return;node.innerHTML=`<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name]}"></path></svg>`;}
     let sidebar,header,main,toggle,lastFocus,drawer=false;
     const mobile=()=>matchMedia('(max-width: 1023px)').matches;

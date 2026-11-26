@@ -124,12 +124,102 @@ addEventListener('load',async()=>{
         try{await exportManagementReport();}finally{window.requestAnimationFrame=scheduleFrame;}
         assert(logoLoaded&&downloaded,'Exportação do PDF com a logo: '+node('reportStatus').textContent);
         if(PdfProgress.dialog.open)PdfProgress.dialog.close();
+        switchTab('onepage');
+        const edit=(root,label,value)=>{
+            const input=[...node(root).querySelectorAll('label')].find(item=>item.querySelector('span')?.textContent===label)?.querySelector('input, select, textarea');
+            assert(input,'Campo OnePage ausente: '+label);
+            if(input.type==='checkbox')input.checked=value;
+            else input.value=value;
+            input.dispatchEvent(new Event(input.matches('select, [type=checkbox]')?'change':'input'));
+        };
+        const add=label=>[...node('opAdd').querySelectorAll('button')].find(item=>item.textContent==='+ '+label).click();
+        const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+        edit('opSettings','Título','Dados da operação');
+        add('Indicador');
+        const indicators=()=>[...node('opInspector').querySelectorAll('select')].find(item=>item.options[0].textContent==='Selecione o indicador');
+        edit('opInspector','Indicador',indicators().options[1].value);
+        edit('opInspector','Comparar com a competência anterior',true);
+        edit('opInspector','Balão de observação','Conferir na reunião.');
+        add('Gráfico');
+        edit('opInspector','Indicador',indicators().options[1].value);
+        edit('opInspector','Tipo de gráfico','bar');
+        edit('opInspector','Exibir meta cadastrada',true);
+        add('Tabela');
+        node('opInspector').querySelector('.op-indicator-list input').click();
+        add('Balão');
+        edit('opInspector','Título do bloco','Ponto de atenção');
+        edit('opInspector','Conteúdo','Acompanhar o próximo ciclo.');
+        edit('opInspector','Estilo do balão','attention');
+        node('opBlocks').querySelector('li:last-child button:nth-child(2)').click();
+        add('Texto');
+        edit('opInspector','Conteúdo','Próximos passos.');
+        await tick();
+        const preview=node('opPreview');
+        assert(preview.querySelectorAll('.op-card').length===5&&preview.textContent.includes('Conferir na reunião.'),'Balão em indicador ou blocos ausentes');
+        assert(preview.querySelectorAll('.op-card')[2].dataset.tone==='attention','Ordem ou estilo do balão');
+        assert(preview.querySelector('.op-data-table tbody tr')&&preview.querySelector('.op-kpi-value').textContent===fmtVal(smokeReport.indicators[0].valores.at(-1)),'Tabela ou valor da competência');
+        if(typeof Chart.version==='string')assert(preview.querySelector('.op-chart-image')?.src.startsWith('data:image/png'),'Gráfico OnePage não renderizado');
+        const draftValues=currentData[0].valores;
+        currentData[0].valores=draftValues.map(()=>9999);
+        OnePage.refresh();
+        await tick();
+        assert(preview.querySelector('.op-kpi-value').textContent===fmtVal(smokeReport.indicators[0].valores.at(-1)),'A OnePage usou valores ainda não sincronizados');
+        currentData[0].valores=draftValues;
+        node('opPresent').click();
+        assert(node('opPresentation').open&&node('opPresentationPage').textContent.includes('Dados da operação')&&!node('opPresentationPage').querySelector('button'),'Modo de apresentação');
+        node('opClose').click();
+        let printed=false;
+        const print=window.print;
+        window.print=()=>{
+            const host=node('opPrintHost');
+            printed=Boolean(host?.querySelectorAll('.op-card').length===5&&host.textContent.includes('Dados da operação'));
+            if(location.hash!=='#onepage-print')dispatchEvent(new Event('afterprint'));
+        };
+        await node('opPrint').onclick();
+        window.print=print;
+        assert(printed,'Composição para impressão');
+        const originalId=node('opPages').value;
+        node('opDuplicate').click();
+        const copyId=node('opPages').value;
+        assert(originalId!==copyId&&node('opPages').selectedOptions[0].text.includes('(cópia)'),'Duplicação de página');
+        node('opDelete').click();
+        const deleteDialog=node('opConfirmDelete');
+        const closed=new Promise(resolve=>deleteDialog.addEventListener('close',resolve,{once:true}));
+        deleteDialog.close('delete');
+        await closed;
+        assert(![...node('opPages').options].some(option=>option.value===copyId),'Exclusão da cópia');
+        for(const key of Object.keys(localStorage).filter(key=>key.startsWith('dgranel.onepage.v1.reviewer.'))){
+            const data=JSON.parse(localStorage.getItem(key));
+            assert(!JSON.stringify(data).includes('"valores"'),'Armazenamento local copiou valores do snapshot');
+        }
+        OnePage.reset();
+        OnePage.refresh();
+        assert(node('opPages').value===originalId,'Página não restaurada do armazenamento local');
+        const viewer=currentSession;
+        currentSession={...viewer,user:{...viewer.user,id:'outro-usuario'}};
+        OnePage.reset();
+        OnePage.refresh();
+        assert(![...node('opPages').options].some(option=>option.value===originalId),'OnePage apareceu para outra conta');
+        currentSession=viewer;
+        OnePage.reset();
+        OnePage.refresh();
+        await tick();
+        assert(document.documentElement.scrollWidth<=innerWidth+2,'Rolagem horizontal na OnePage');
+        if(location.hash==='#onepage-print'||location.hash==='#onepage-preview'){
+            if(location.hash==='#onepage-print'){
+                window.print=()=>{};
+                await node('opPrint').onclick();
+                window.print=print;
+            }
+            status.textContent='PASS OnePage isolada para validação visual.';
+            return;
+        }
         node('workspaceSearchTrigger').click();
         query.value='autuacoes';query.dispatchEvent(new Event('input'));
         assert(search.querySelector('.workspace-search-result')?.textContent.includes('Autuações'),'Busca de indicador sem acentos');
         search.close();
         document.body.classList.add('developer-mode');
-        for(const module of ['home','dashboard','datagrid','intelligence','reports','governance','audit']){
+        for(const module of ['home','dashboard','datagrid','intelligence','reports','onepage','governance','audit']){
             switchTab(module);
             await new Promise(resolve=>setTimeout(resolve,20));
             assert(!node('view-'+module).classList.contains('hidden')&&node('tab-'+module).getAttribute('aria-current')==='page','Abertura de '+module);
@@ -142,7 +232,7 @@ addEventListener('load',async()=>{
             switchTab('home');
             document.querySelectorAll('img[src="report-logo-dgranel.png"]').forEach(img=>{img.src='data:image/png;base64,'+smokeLogo;});
         }
-        status.textContent='PASS sete módulos, busca, Central, revisão e download dos relatórios.';
+        status.textContent='PASS oito módulos, relatórios e edição, apresentação, impressão e persistência da OnePage em '+innerWidth+' px.';
     }catch(error){status.textContent='FAIL '+error.message+' '+window.__errors.join('; ');}
 });
 `
@@ -162,7 +252,7 @@ const scripts = [setup, optionalTailwind, optionalChart, 'const smokeFleet='+JSO
     await read('public/vendor/jspdf-4.2.1.umd.min.js'),
     await read('public/vendor/jspdf-autotable-5.0.8.min.js'),
     await read('public/report-pdf.js'), checks];
-const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css','workspace-ui.css','dashboard-layout.css'].map(file => read('public/' + file)));
+const styles = await Promise.all(['style.css','workspace-v3.css','motion-v3-1.css','pending-changes.css','workspace-v3-2.css','report-authoring.css','workspace-ui.css','dashboard-layout.css','onepage.css'].map(file => read('public/' + file)));
 html = html.replace('<head>', () => "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:\"><style>" + styles.join('\n') + '</style>');
 html = html.replace('</body>', () => scripts.map(script => '<script>'+script.replace(/<\/script/gi,'<\\/script')+'</script>').join('\n')+'</body>');
 await Deno.mkdir('.validation-tools', { recursive: true });

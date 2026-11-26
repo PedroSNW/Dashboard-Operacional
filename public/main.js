@@ -57,7 +57,7 @@ function refreshPendingState(){
     const state=inspectPendingState();hasUnsavedChanges=state.loaded&&state.changes.length>0;
     window.PendingChangesUI?.update(state);return state;
 }
-function confirmPersistedSnapshot(data,version){pendingTracker.accept(data,version);refreshPendingState();}
+function confirmPersistedSnapshot(data,version){pendingTracker.accept(data,version);refreshPendingState();window.OnePage?.refresh();}
 function personalViewKey(){return `dgranel.view.${currentSession?.user?.id||'local'}`;}
 function savePersonalView(){try{localStorage.setItem(personalViewKey(),JSON.stringify({activeDashboardId,zoomGraficos:chartZoomState}));}catch{}}
 function restorePersonalView(){
@@ -489,6 +489,7 @@ async function handleAuthSession(session) {
     if(currentSession?.user?.id!==session?.user?.id){
         window.resetAIConversation?.();
         window.closeWorkspaceSearch?.();
+        window.OnePage?.reset();
     }
     currentSession = session;
     document.body.classList.toggle('authenticated', Boolean(session));
@@ -1572,7 +1573,7 @@ function switchTab(tabName) {
     if (currentView) currentView.classList.add('hidden');
     nextView.classList.remove('hidden');
 
-    ['home', 'dashboard', 'datagrid', 'intelligence', 'governance', 'reports', 'audit'].forEach(t => {
+    ['home', 'dashboard', 'datagrid', 'intelligence', 'governance', 'reports', 'onepage', 'audit'].forEach(t => {
         const button = document.getElementById(`tab-${t}`);
         if (button) button.classList.toggle('active', t === tabName);
     });
@@ -1581,6 +1582,8 @@ function switchTab(tabName) {
 
     if (tabName === 'reports') {
         window.refreshReportFilters?.();
+    } else if (tabName === 'onepage') {
+        window.OnePage?.refresh();
     } else if (tabName === 'dashboard') {
         renderCharts();
         renderDynamicCharts();
