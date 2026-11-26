@@ -3,13 +3,16 @@ let managementReport = null;
 let managementSignature = '';
 let managementCharts = [];
 let managementBusy = false;
+let previousReportExport = null;
 const reportChosenIds=new Set();let reportSelectionInitialized=false;
-window.resetManagementReport = function(){window.ReportAuthoring?.reset();managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';reportChosenIds.clear();reportSelectionInitialized=false;reportEl('reportIndicators')?.replaceChildren();clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
+window.resetManagementReport = function(){window.ReportAuthoring?.reset();managementCharts.forEach(c=>c.destroy());managementCharts=[];managementReport=null;managementSignature='';previousReportExport=null;reportChosenIds.clear();reportSelectionInitialized=false;reportEl('reportIndicators')?.replaceChildren();clearReportContext(false);updateReportContextUI();reportEl('reportPreview')?.replaceChildren();reportUpdateActions();};
 const reportEl = id => document.getElementById(id);
 const reportValue = value => value === null || value === undefined ? 'Ausente' : new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(value);
 const reportExportFormat=()=>window.ReportExecutive?.format(reportEl('reportFormat')?.value)??'complete';
-const reportFormatChartIds=r=>reportExportFormat() === "executive" ? window.ReportExecutive.build(r).chartIds : window.ReportContent.chartIds(r);
-const REPORT_CONTEXT_FIELDS=['actionsTaken','difficulties','achievements','priorities','goals','observations'];
+const reportFormatChartIds=r=>reportExportFormat()==='executive'
+    ? [...new Set([...window.ReportExecutive.meeting(r).chartIds,...window.ReportExecutive.build(r).chartIds])]
+    : window.ReportContent.chartIds(r);
+const REPORT_CONTEXT_FIELDS=['actionsTaken','difficulties','achievements','priorities','goals','observations','previousMeeting'];
 let reportContextScope='',reportContextDetached=false,reportContextOwner=null;
 function clearReportContext(notify=true){
     REPORT_CONTEXT_FIELDS.forEach(k=>{if(reportEl('reportContext-'+k))reportEl('reportContext-'+k).value='';});
@@ -150,7 +153,8 @@ function renderManagementReport(expanded=reportEl('reportPreviewToggle')?.getAtt
     if(window.ReportAuthoring?.renderCompact(preview,r,expanded))return;
     preview.append(reportNode('h2',`Relatório ${r.type}`,'text-lg font-bold'),reportNode('p',`${r.indicators.length} indicadores no relatório · ${r.selectedCount} selecionados · ${r.criticalCount} pontos de atenção`),reportNode('p',`${r.competencias[0]} a ${r.competencias.at(-1)} · ${r.sector==='TODOS'?'Todos os setores':r.sector??'Setor selecionado'}`,'text-sm text-slate-400'));
     if(reportExportFormat()==='executive'){
-        const e=ReportExecutive.build(r);preview.append(reportNode('p','Formato Executivo · síntese para reunião','text-sm'),reportNode('p',e.paragraph,'text-sm'),reportNode('p',`${e.chartIds.length} séries selecionadas para gráficos. Todos os pontos de atenção aparecem na prévia; o histórico integral está no formato Completo.`,'text-xs'));
+        const meeting=ReportExecutive.meeting(r);
+        for(const line of [meeting.headline,meeting.movement,meeting.exposure,meeting.agenda].filter(Boolean))preview.append(reportNode('p',line,'text-sm'));
     }else if(window.ReportContent.validIntelligence(r.intelligence,r)){
         const v=r.intelligence,grid=reportNode('div','','report-v6-summary');
         for(const [title,ids] of [['Avanços',v.achievements],['Desafios',v.challenges]]){const area=reportNode('section');area.append(reportNode('h3',title,'font-bold'));area.append(reportNode('p',ids.length?`${ids.length} indicadores · ${v.dimensions.find(d=>d.indicatorId===ids[0]).name}`:'Sem situação comprovável pelos critérios disponíveis.','text-sm'));grid.append(area);}preview.append(grid);
@@ -205,7 +209,7 @@ function renderManagementReportV6Details(){
     for(const section of window.ReportContent.v6Sections(r)){
         if(section.key==='priorities'&&!section.blocks.length||section.key==='panorama'&&!r.indicators.length)continue;
         const area=reportNode('section','','report-management-section space-y-3');area.dataset.reportSection=section.key;area.append(reportNode('h3',`${++number} ${section.title}`,'font-bold text-lg'));
-        if(section.key==='panorama')table(area,['Indicador / unidade','Resultado / meta atual','Desempenho / tendência','Criticidade operacional'],ReportContent.v6Overview(r,reportValue));
+        if(section.key==='panorama')table(area,['Indicador / unidade','Resultado / meta','Comparações','Criticidade operacional'],ReportContent.v6Overview(r,reportValue));
         if(section.key==='actions')v.actions.forEach(a=>{const card=reportNode('article','','glass-card p-4 rounded-xl space-y-2');card.append(reportNode('h4',a.ref+' · '+a.title,'font-bold'));[a.priority+' · '+a.status,a.problem,a.objective,...a.tasks,'Área sugerida: '+a.owner,'Prazo sugerido: '+a.timeline,'Monitorar: '+a.monitoring,a.criterion].forEach(line=>paragraph(card,line));area.append(card);});
         if(section.key==='evolution'){paragraph(area,'Horizontes sugeridos após a decisão de iniciar; não representam compromissos aprovados.');v.evolutionPlan.forEach(h=>{const block=reportNode('article','','glass-card p-4 rounded-xl');block.append(reportNode('h4',`Até ${h.days} dias`,'font-bold'));h.items.forEach(a=>paragraph(block,`${a.ref}: ${a.task} · ${a.goal}`));area.append(block);});}
         section.blocks.forEach(b=>{const article=reportNode('article','','space-y-2');article.append(reportNode('h4',b.title,'font-bold'));[...new Set(b.lines)].forEach(line=>paragraph(article,line));area.append(article);});
@@ -224,7 +228,7 @@ function renderManagementExecutiveDetails(){
     section('Resultados que orientam a reunião',e.detailIds.map(id=>ReportExecutive.narrative(r.indicators.find(i=>i.id===id),dimension(id))));
     if(e.observations.length)section('Leitura conjunta dos resultados',e.observations.map(o=>o.text));
     section('Pontos de atenção do recorte',e.criticalIds.length?e.criticalIds.map(id=>{const d=dimension(id);return name(id)+': '+(d?.operational?.validated&&d.operational.level==='Alta'?'avaliar o critério operacional aprovado: '+d.operational.reference:ReportExecutive.financial(r.indicators.find(i=>i.id===id),d).neutral?'validar a natureza dos valores.':d?.off?'avaliar a distância da meta.':d?.worse?'avaliar a piora no período.':'critério operacional validado; consultar a área responsável.');}):['Sem pontos sinalizados pelos critérios disponíveis; isso não comprova ausência de risco.']);
-    for(const id of e.chartIds){const i=r.indicators.find(i=>i.id===id),area=section(i.indicador,[]),box=reportNode('div','','h-56 relative'),canvas=document.createElement('canvas');canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Evolução de '+i.indicador);box.append(canvas);area.append(box);managementCharts.push(new Chart(canvas,{type:'line',data:managementChartSource(i,r).data,options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},datalabels:{display:false}},scales:{y:{beginAtZero:true}}}}));}
+    for(const id of reportFormatChartIds(r)){const i=r.indicators.find(i=>i.id===id),area=section(i.indicador,[]),box=reportNode('div','','h-56 relative'),canvas=document.createElement('canvas');canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Evolução de '+i.indicador);box.append(canvas);area.append(box);managementCharts.push(new Chart(canvas,{type:'line',data:managementChartSource(i,r).data,options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},datalabels:{display:false}},scales:{y:{beginAtZero:true}}}}));}
     section('Plano de ação — propostas para avaliação',e.actions.map(a=>`${a.ref} · ${a.title}. ${a.problem} ${a.tasks[0]??a.objective} Área sugerida: ${a.owner}. ${a.timeline} ${a.monitoring} Situação: ${a.status}.`));
     e.horizons.forEach(h=>section(h.days+' dias — '+h.title,h.lines));
     const context=ReportContent.v6Sections(r).find(s=>s.key==='context');if(context)section('Contexto informado pela gestão',context.blocks.flatMap(b=>[b.title+': '+b.lines.join(' ')]));
@@ -253,7 +257,7 @@ function renderManagementReportDetails() {
     section('2 Panorama de desempenho',['Todos os resultados por indicador constam dos apêndices abaixo, com unidade, competência, meta e direção.']);
     const overview=document.createElement('table');overview.className='w-full text-sm';
     const overviewHead=document.createElement('thead'),overviewHeader=document.createElement('tr');
-    ['Indicador / setor / unidade','Recente / competência','Meta / direção','Variação %','Situação'].forEach(label=>{const th=reportNode('th',label,'p-2 text-left');th.scope='col';overviewHeader.append(th);});overviewHead.append(overviewHeader);overview.append(overviewHead);
+    ['Indicador / setor / unidade','Resultado final','Meta / situação','Vs. mês anterior','Extremos válidos'].forEach(label=>{const th=reportNode('th',label,'p-2 text-left');th.scope='col';overviewHeader.append(th);});overviewHead.append(overviewHeader);overview.append(overviewHead);
     const overviewBody=document.createElement('tbody');window.ReportContent.panorama(r,reportValue).forEach(values=>{const row=document.createElement('tr');values.forEach(value=>row.append(reportNode('td',value,'p-2 border-b border-slate-700')));overviewBody.append(row);});overview.append(overviewBody);
     const overviewScroll=reportNode('div','','overflow-x-auto');overviewScroll.tabIndex=0;overviewScroll.setAttribute('role','region');overviewScroll.setAttribute('aria-label','Panorama de desempenho; role horizontalmente para ver todas as colunas');overviewScroll.append(overview);preview.append(overviewScroll);
     section('3 Análise dos indicadores prioritários',[editorial.selection]);
@@ -295,7 +299,7 @@ async function generateManagementReport({forAnalysis=false}={}) {
 }
 const reportLoadScript = src => new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(Error('Biblioteca PDF local indisponível.'));document.head.append(s);});
 let reportPdfLibraries;
-async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=propostas');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
+async function loadReportPdfLibraries(){if(!reportPdfLibraries)reportPdfLibraries=(async()=>{await reportLoadScript('vendor/jspdf-4.2.1.umd.min.js');await reportLoadScript('vendor/jspdf-autotable-5.0.8.min.js');await reportLoadScript('report-pdf.js?v=reuniao');})();try{await reportPdfLibraries;}catch(e){reportPdfLibraries=null;throw e;}}
 async function loadReportLogo(){
     try {
         const response=await fetch('report-logo-dgranel.png');
@@ -321,7 +325,11 @@ async function exportManagementReport(){
         PdfProgress.update('Carregando recursos do PDF',5);await reportPaint();
         const [,logo]=await Promise.all([loadReportPdfLibraries(),loadReportLogo()]);
         PdfProgress.update('Recursos carregados',10);await reportPaint();
-        const report=JSON.parse(JSON.stringify(source));report.exportFormat=reportExportFormat();const chartIds=reportFormatChartIds(report),selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report,true)),images=Array(report.indicators.length).fill(null);
+        const report=JSON.parse(JSON.stringify(source));report.exportFormat=reportExportFormat();
+        const meetingIds=report.exportFormat==='executive'?window.ReportExecutive.meeting(report).chartIds:[];
+        const chartIds=window.ReportContent.chartIds(report).filter(id=>!meetingIds.includes(id));
+        const selected=report.indicators.map((i,index)=>({i,index})).filter(({i})=>chartIds.includes(i.id)),charts=selected.map(({i})=>managementChartSource(i,report,true)),images=Array(report.indicators.length).fill(null);
+        const previousReport=previousReportExport?.owner===sourceOwner?previousReportExport.report:null;
         for(let n=0;n<charts.length;n++){
             images[selected[n].index]=managementChartImages([charts[n]])[0];
             PdfProgress.update('Preparando gráficos',10+35*(n+1)/Math.max(1,charts.length),n+1,charts.length);await reportPaint();
@@ -331,14 +339,16 @@ async function exportManagementReport(){
             const fraction=event.processed/Math.max(1,event.total);
             const stage={diagnosis:['Preparando diagnóstico',45,7],compose:['Compondo páginas do PDF',52,26],figures:['Preparando gráficos complementares',78,6],management:['Diagramando plano de ação',84,6],finalize:['Finalizando páginas',90,4]}[event.stage];
             PdfProgress.update(stage[0],stage[1]+stage[2]*fraction,event.processed,event.total);
-        },reportPaint,{logo});
+        },reportPaint,{logo,previousReport});
         PdfProgress.update('Finalizando o documento — serialização local',null);await reportPaint();
         const blob=doc.output('blob');
         if(!(blob instanceof Blob)||!blob.size)throw Error('O documento gerado está vazio.');
         PdfProgress.update('Preparando download',97);await reportPaint();
         reportReady();if(managementReport!==source||managementSignature!==signature||signature!==reportSignature()||currentSession?.user?.id!==sourceOwner)throw Error('A prévia ou sessão mudou durante a geração. Gere novamente.');
         const name=`DGranel-${report.type}-${report.exportFormat}-${new Date(report.generatedAt).toISOString().slice(0,10)}.pdf`;
-        reportDownloadBlob(blob,name);PdfProgress.finish(name);reportMessage('Download iniciado. A confirmação de gravação depende do navegador.');
+        reportDownloadBlob(blob,name);
+        previousReportExport={owner:sourceOwner,report};
+        PdfProgress.finish(name);reportMessage('Download iniciado. A confirmação de gravação depende do navegador.');
     }catch(e){if(window.PdfProgress?.dialog?.open)PdfProgress.error(e.message);reportMessage(`PDF não gerado: ${e.message}`);}
     finally{reportSetBusy(false);}
 }

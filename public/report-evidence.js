@@ -3,10 +3,10 @@
     const clone = value => JSON.parse(JSON.stringify(value));
     const normalize = text => text.normalize('NFKC').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
     function idKey(indicator) {
-        const {id,indicador,setor,unidade}=indicator;
+        const {id,indicador,setor,unidadeCadastro=indicator.unidade}=indicator;
         const stable=typeof id==='number'&&Number.isSafeInteger(id)
             || typeof id==='string'&&id.length>0&&!/^indice:\d+$/.test(id);
-        const identity=JSON.stringify(stable?['id',id]:['legacy',indicador,setor,unidade]);
+        const identity=JSON.stringify(stable?['id',id]:['legacy',indicador,setor,unidadeCadastro]);
         // Stable local identity, not a secret or an authorization mechanism.
         let hash=14695981039346656037n;
         for(const byte of new TextEncoder().encode(identity))hash=BigInt.asUintN(64,(hash^BigInt(byte))*1099511628211n);
@@ -33,11 +33,15 @@
             if (counts.get(key)!==1 || scope && !scope.has(key) || typeof indicator.indicador!=='string'
                 || privateData([indicator.indicador, indicator.setor, indicator.unidade].join(' '))) continue;
             const d = dimensions.get(indicator.id), s = indicator.estatisticas;
+            const recent = s.mensais.at(-1), previous = s.mensais.at(-2);
+            const last = s.mensais.findLast(p => p.valor !== null);
             const fact = {
                 key, id: indicator.id, name: indicator.indicador, sector: indicator.setor, unit: indicator.unidade,
-                period: [report.competencias[0], report.competencias.at(-1)], target: s.meta, direction: s.direcao,
-                latest: d?.recent ? {competency: d.recent.competencia, value: d.recent.valor} : null,
-                lastValid: d?.recent?.valor === null && d.last ? {competency: d.last.competencia, value: d.last.valor} : null,
+                period: [report.competencias[0], report.competencias.at(-1)], target: s.meta, targetStatus: indicator.targetStatus, direction: s.direcao,
+                latest: recent ? {competency: recent.competencia, value: recent.valor, state: recent.estado} : null,
+                lastValid: recent?.valor === null && last ? {competency: last.competencia, value: last.valor} : null,
+                monthChange: recent?.variacaoAnterior ? {from: previous.competencia, previous: previous.valor, ...recent.variacaoAnterior} : null,
+                targetDeviation: recent?.desvioMeta ?? null,
                 change: s.primeiroUltimo, performance: d?.performance ?? null, trend: d?.trend ?? null,
                 measurement: d?.measurement ?? null, governance: d?.operational?.validated ? d.operational : null,
                 limitations: d?.caveats ?? []
@@ -52,11 +56,14 @@
         if (!fact) return null;
         const latest = fact.latest;
         const change = fact.change;
+        const delta = d => fmt(d.absoluta)+(d.percentual==null?'':' ('+fmt(d.percentual)+'%)');
         return [
-            fact.name + (latest ? ' · '+latest.competency : '')+' · resultado '+fmt(latest?.value)+(fact.unit ? ' '+fact.unit : ''),
-            'meta atual '+fmt(fact.target), fact.performance,
+            fact.name + (latest ? ' · '+latest.competency : '')+' · '+(latest?.value===0?'zero registrado':'resultado '+fmt(latest?.value))+(latest?.value!=null&&fact.unit ? ' '+fact.unit : ''),
+            fact.targetStatus==='zero_unconfirmed'?'meta zero a confirmar':fact.target==null?'meta não cadastrada':fact.target===0?'meta zero confirmada':'meta atual '+fmt(fact.target),
+            fact.targetDeviation ? 'desvio da meta '+delta(fact.targetDeviation) : null, fact.performance,
             latest?.value == null && fact.lastValid ? 'último dado disponível em '+fact.lastValid.competency+': '+fmt(fact.lastValid.value)+(fact.unit ? ' '+fact.unit : '') : null,
-            change ? 'variação descritiva de '+change.de+' a '+change.ate+': '+fmt(change.absoluta) : null
+            fact.monthChange ? 'vs. mês anterior ('+fact.monthChange.from+') '+delta(fact.monthChange) : null,
+            change ? 'de '+change.de+' a '+change.ate+' '+delta(change) : null
         ].filter(Boolean).join(' · ');
     }
     function inspectText(text, refs, pack) {

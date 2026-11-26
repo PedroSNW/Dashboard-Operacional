@@ -1,8 +1,30 @@
 // Uma projeção de apresentação para prévia e PDF; não calcula estatísticas.
 window.ReportContent={
+    target(i,fmt){
+        if(i.targetStatus==='zero_unconfirmed')return 'Zero a confirmar';
+        if(i.estatisticas.meta==null)return 'Meta não cadastrada';
+        return i.estatisticas.meta===0?'Zero confirmado':fmt(i.estatisticas.meta);
+    },
+    comparison(delta,fmt){
+        if(delta?.absoluta==null)return 'Indisp.';
+        const signed=value=>(value>0?'+':'')+fmt(value);
+        return signed(delta.absoluta)+(delta.percentual==null?'':' ('+signed(delta.percentual)+'%)');
+    },
     panorama(r,fmt){
         const direction=i=>({menor_melhor:'Menor é melhor',maior_melhor:'Maior é melhor',neutro:'Neutra'}[i.direcaoDesempenho]??'Não definida');
-        return r.indicators.map(i=>{const s=i.estatisticas,last=s.mensais.at(-1);return [i.indicador+'\n'+i.setor+' / '+(i.unidade??'não informada'),`${fmt(last?.valor)}\n${last?.competencia??'—'}`,`${fmt(i.meta)}\n${direction(i)}`,fmt(s.primeiroUltimo?.percentual),i.critical?'Atenção':s.validos?'Sem sinalização':'Sem dados'];});
+        const dimensions=new Map((r.intelligence?.dimensions??[]).map(d=>[d.indicatorId,d]));
+        return r.indicators.map(i=>{
+            const s=i.estatisticas,recent=s.mensais.at(-1),previous=s.mensais.at(-2),last=s.mensais.findLast(p=>p.valor!==null),range=s.primeiroUltimo;
+            const result=recent?.valor==null?'Dado ausente':recent.valor===0?'0 registrado':fmt(recent.valor);
+            const availability=recent?.valor==null&&last?`\nÚltimo dado: ${fmt(last.valor)} (${last.competencia})`:'';
+            const status=recent?.valor==null?'Dado ausente':i.targetStatus==='zero_unconfirmed'?'Meta a confirmar':s.meta==null?'Sem meta':dimensions.get(i.id)?.performance??'Não avaliada';
+            const trend=delta=>delta==null?'Indisp.':delta===0?'Estável':delta>0?'Aumento':'Queda';
+            return [i.indicador+'\n'+(i.setor??'—')+' / '+(i.unidade??'não informada'),
+                result+'\n'+(recent?.competencia??'—')+availability,
+                this.target(i,fmt)+'\n'+direction(i)+'\n'+status+'\nDesvio: '+this.comparison(recent?.desvioMeta,fmt),
+                (previous?.competencia??'Sem mês anterior no recorte')+'\n'+this.comparison(recent?.variacaoAnterior,fmt)+'\n'+trend(recent?.variacaoAnterior?.absoluta),
+                range?range.de+' a '+range.ate+'\n'+this.comparison(range,fmt)+'\n'+trend(range.absoluta):'Indisp.'];
+        });
     },
     evolution(i){
         const p=i.estatisticas.primeiroUltimo,delta=p?.absoluta,direction=i.direcaoDesempenho;
@@ -49,7 +71,7 @@ window.ReportContent={
         const detailed=new Set([...v.achievements.slice(0,max),...v.challenges.slice(0,max)]);
         sections.push({key:'priorities',title:'Análise dos indicadores prioritários',blocks:v.priorityIds.map(id=>{const d=get(id),actions=v.actions.filter(a=>a.indicatorIds.includes(id));if(window.ReportExecutive)return {id,title:d.name,lines:[...(detailed.has(id)?[]:[window.ReportExecutive.narrative(r.indicators.find(i=>i.id===id),d)]),`Decisão sugerida: ${actions.map(a=>a.title).join('; ')||'confirmar o significado do indicador e quais registros faltam antes de propor uma ação.'}`,`Acompanhamento: conferir os novos registros com a área responsável, usando a mesma unidade e os critérios validados.`]};return {id,title:d.name,lines:[`O que aconteceu: ${d.performance}; ${d.trend}.`,...(detailed.has(id)?[]:[d.evidence]),`Significado gerencial: ${d.meaning}`,`O que avaliar: ${actions.map(a=>a.title).join('; ')||'validar cobertura, direção e escopo para definir uma tratativa específica.'}`,`Como acompanhar: rever as próximas competências do mesmo indicador, conferindo a referência atual e o escopo dos registros.`,...(detailed.has(id)?[]:d.caveats)]};})});
         if(v.context){const c=v.context,blocks=[];if(v.reportedActions.length)blocks.push({title:'Ações informadas pela gestão',lines:v.reportedActions.map(a=>`${a.status}: ${a.text}`)});
-            for(const [key,label] of [['difficulties','Dificuldades informadas'],['achievements','Conquistas informadas'],['priorities','Prioridades informadas'],['observations','Observações informadas']])if(c[key])blocks.push({title:label,lines:[c[key]]});
+            for(const [key,label] of [['difficulties','Dificuldades informadas'],['achievements','Conquistas informadas'],['priorities','Prioridades informadas'],['observations','Observações informadas'],['previousMeeting','Acordos e pendências da reunião anterior']])if(c[key])blocks.push({title:label,lines:[c[key]]});
             if(v.goals)blocks.push({title:v.goals.label,lines:[v.goals.text]});sections.push({key:'context',title:'Contexto operacional do período',blocks,note:'Relatos da gestão sem verificação independente. Não alteram valores ou metas oficiais; conciliar eventuais divergências com os indicadores.'});}
         if(v.actions.length)sections.push({key:'actions',title:'Plano de ação e recomendações',blocks:[]},{key:'evolution',title:'Plano de evolução — próximos 90 dias',blocks:[]});
         sections.push({key:'conclusion',title:'Conclusão executiva',blocks:[{title:'Decisões para o próximo ciclo',lines:[v.priorityIds.length?`Discutir as prioridades de ${v.priorityIds.slice(0,2).map(id=>get(id).name).join('; ')}. Avaliar as iniciativas propostas, pactuar objetivos e responsáveis por área e verificar a evolução no próximo ciclo.`:'Validar o recorte e os dados disponíveis antes de definir iniciativas.']} ]});
@@ -57,7 +79,12 @@ window.ReportContent={
     },
     v6Overview(r,fmt,compact=false){
         const v=r.intelligence,ids=compact&&r.indicators.length>15?new Set([...v.priorityIds,...v.achievements.slice(0,3)]):null;
-        return v.dimensions.filter(d=>!ids||ids.has(d.indicatorId)).map(d=>{const i=r.indicators.find(i=>i.id===d.indicatorId),last=i.estatisticas.mensais.at(-1);return [`${i.indicador}\n${i.setor} / ${i.unidade??'não informada'}`,`${fmt(last?.valor)} · ${last?.competencia??'—'}\nMeta atual: ${fmt(i.meta)}`,`${d.performance}\n${d.trend}`,d.operational.validated?`${d.operational.category} · ${d.operational.level}`:'Pendente de validação'];});
+        const byId=new Map(this.panorama(r,fmt).map((row,n)=>[r.indicators[n].id,row]));
+        return v.dimensions.filter(d=>!ids||ids.has(d.indicatorId)).map(d=>{
+            const [name,result,target,month,range]=byId.get(d.indicatorId);
+            return [name,result+'\n'+target,'Vs. mês anterior\n'+month+'\nExtremos válidos\n'+range,
+                d.operational.validated?`${d.operational.category} · ${d.operational.level}`:'Pendente de validação'];
+        });
     },
     valid(m,r){
         const text=s=>typeof s==='string'&&s.length<16000,strings=a=>Array.isArray(a)&&a.every(text),id=id=>r.indicators.some(i=>i.id===id);

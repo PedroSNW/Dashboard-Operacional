@@ -3,6 +3,64 @@ window.ReportExecutive={
     format(value){return value==='complete'?'complete':'executive';},
     financial(i,d){return d?.measurement??{monetary:/^(r\$|reais|brl)$/i.test(String(i.unidade??'').trim()),neutral:/^(r\$|reais|brl)$/i.test(String(i.unidade??'').trim()),canSum:!/^(r\$|reais|brl)$/i.test(String(i.unidade??'').trim())};},
     sum(r,i,fmt){const d=r.intelligence?.dimensions.find(d=>d.indicatorId===i.id),m=this.financial(i,d);return !m.canSum?'Não consolidar':i.estatisticas.somaAplicavel?fmt(i.estatisticas.soma):'N/A';},
+    meeting(r){
+        const fmt=value=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(value);
+        const percent=value=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1,signDisplay:'exceptZero'}).format(value)+'%';
+        const month=value=>{
+            if(!value)return '';
+            const [short,year]=value.split('/');
+            const names={Jan:'janeiro',Fev:'fevereiro',Mar:'março',Abr:'abril',Mai:'maio',Jun:'junho',Jul:'julho',Ago:'agosto',Set:'setembro',Out:'outubro',Nov:'novembro',Dez:'dezembro'};
+            return names[short]&&year?names[short]+' de '+year:value;
+        };
+        const byId=id=>r.indicators.find(i=>i.id===id);
+        const {volumeId,rateId,distanceId,severityId}=r.roadSafety??{};
+        const [volume,rate,distance,severity]=[volumeId,rateId,distanceId,severityId].map(byId);
+        const recent=i=>i?.estatisticas.mensais.at(-1);
+        const value=i=>recent(i)?.valor;
+        const show=i=>value(i)==null?'Dado ausente':fmt(value(i));
+        const previous=volume?.estatisticas.mensais.at(-2),current=recent(volume),delta=current?.variacaoAnterior,desvio=current?.desvioMeta;
+        const competency=month(r.competencias.at(-1));
+        const cards=volume?[
+            [show(volume),'Total de acidentes'],
+            [show(rate),'Acidentes por milhão de km'],
+            [show(distance),'Quilometragem (km)'],
+            [show(severity),'Tombamento próprio']
+        ]:[...new Set([...this.build(r).detailIds,...r.indicators.map(i=>i.id)])].slice(0,4).map(byId).map(i=>[show(i),i.indicador+(i.unidade?' ('+i.unidade+')':'')]);
+        const direction=delta?.absoluta==null?'':delta.absoluta>0?'subiram':delta.absoluta<0?'caíram':'ficaram estáveis';
+        const targetSide=desvio?.absoluta==null?'':desvio.absoluta>0?'acima':desvio.absoluta<0?'abaixo':'';
+        const headline=volume
+            ? current?.valor==null?`Total de acidentes sem registro em ${competency}.`:`${competency.charAt(0).toUpperCase()+competency.slice(1)} teve ${show(volume)} ${current.valor===1?'acidente':'acidentes'}`+
+                (targetSide?`, ${fmt(Math.abs(desvio.absoluta))} ${targetSide} da meta de ${fmt(volume.estatisticas.meta)}${desvio.percentual==null?'':' ('+percent(desvio.percentual)+')'}.`:desvio?.absoluta===0?' e atingiu a meta cadastrada.':'.')
+            : 'Resultados da competência '+competency;
+        const movement=direction?`Os acidentes ${direction==='ficaram estáveis'?'se mantiveram em '+show(volume)+' frente a '+month(previous.competencia):`${direction} de ${fmt(previous.valor)} em ${month(previous.competencia)} para ${show(volume)} em ${competency}${delta.percentual==null?'':' ('+percent(delta.percentual)+')'}`}.`:'';
+        const exposure=value(rate)!=null&&value(distance)!=null
+            ? `A taxa foi de ${show(rate)} acidentes por milhão de km, com ${show(distance)} km rodados.`:'';
+        const chartIds=volume?[volume.id,rate?.id].filter(id=>id!=null):this.build(r).chartIds.slice(0,2);
+        const agenda=volume
+            ? 'Definir quem vai revisar os registros da última competência e qual medida preventiva será acompanhada até a próxima reunião.'
+            : 'Pactuar as prioridades do recorte, a área responsável e o critério de acompanhamento até a próxima reunião.';
+        const chartTitle=direction?`Acidentes ${direction} em ${competency}${targetSide?` e ficaram ${targetSide} da meta`:''}`:'Total de acidentes por competência';
+        return {cards,headline,movement,exposure,agenda,chartIds,chartTitle,volumeId,rateId};
+    },
+    revisions(r,previous){
+        if(!previous||!previous.snapshotUpdatedAt||previous.snapshotUpdatedAt===r.snapshotUpdatedAt
+            ||previous.type!==r.type||previous.sector!==r.sector)return null;
+        const before=new Map(previous.indicators.map(i=>[i.id,i])),changed=[];
+        const oldMonths=new Set(previous.competencias),overlap=r.competencias.filter(c=>oldMonths.has(c));
+        if(!overlap.length||before.size!==r.indicators.length||r.indicators.some(i=>{
+            const old=before.get(i.id);
+            return !old||old.indicador!==i.indicador||old.setor!==i.setor||old.unidade!==i.unidade;
+        }))return null;
+        for(const i of r.indicators){
+            const values=new Map(before.get(i.id).estatisticas.mensais.map(p=>[p.competencia,p.valor]));
+            for(const point of i.estatisticas.mensais){
+                if(values.has(point.competencia)&&values.get(point.competencia)!==point.valor){
+                    changed.push({name:i.indicador,competency:point.competencia,before:values.get(point.competencia),after:point.valor});
+                }
+            }
+        }
+        return {previousCutoff:previous.snapshotUpdatedAt,changed};
+    },
     narrative(i,d){
         const s=i.estatisticas,points=s.mensais.filter(p=>p.valor!==null),first=points[0],last=points.at(-1),final=s.mensais.at(-1),p=s.primeiroUltimo;
         const f=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(v),unit=i.unidade??'',m=this.financial(i,d);

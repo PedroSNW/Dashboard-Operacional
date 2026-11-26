@@ -75,7 +75,7 @@ allowRead = true;
 await invoke({ action: 'chat', question: 'Acidentes', values: [999] }, 400);
 assert(groqCalls === 0, 'Solicitação não autorizada chegou à Groq');
 
-const managementContext = context(false);
+const managementContext = { ...context(false), previousMeeting:'Acordo da reunião anterior para registrar na pauta.' };
 const preview = (await invoke({ action: 'preview', selection, managementContext })).result.report;
 const basis = { selection, managementContext, expectedUpdatedAt: updatedAt, expectedReportBasis: preview.basis };
 assert(preview.indicators.length === 15 && groqCalls === 0, 'Prévia consumiu IA ou perdeu indicadores');
@@ -83,6 +83,10 @@ await invoke({ action: 'generate', ...basis, expectedReportBasis: 'incorreto' },
 const generated = (await invoke({ action: 'generate', ...basis })).result;
 assert(groqCalls === 1 && captured.response_format.json_schema.strict, 'Contrato Groq');
 assert(!JSON.stringify(captured).includes(managementContext.observations), 'Contexto sem consentimento enviado');
+const firstEvidence = JSON.parse(captured.messages[1].content).indicators[0];
+assert(firstEvidence.latest.competency==='Dez/2026' && firstEvidence.monthChange[0]==='Nov/2026'
+    && firstEvidence.targetDeviation.length===2 && firstEvidence.change[0]==='Jan/2026',
+    'A Groq precisa receber as bases de comparação prontas');
 assert(generated.evidenceKeys.length === 8 && generated.coverage.partial && generated.document.sections.length === 4, 'Cobertura ou conteúdo');
 const suggestions=generated.document.sections.filter((section: {type: string})=>section.type==='action');
 assert(suggestions.map((section: {method: string})=>section.method).join(',')==='post,flyer'
@@ -100,10 +104,11 @@ await invoke(review, 409);
 updatedAt = basis.expectedUpdatedAt;
 assert(groqCalls === 1, 'Revisão acionou a Groq');
 
-const shared = context(true);
+const shared = { ...context(true), previousMeeting:managementContext.previousMeeting };
 const withContext = (await invoke({ action: 'preview', selection, managementContext: shared })).result.report;
 await invoke({ action: 'generate', ...basis, managementContext: shared, expectedReportBasis: withContext.basis });
 assert(JSON.stringify(captured).includes(shared.observations), 'Contexto autorizado ausente');
+assert(!JSON.stringify(captured).includes(shared.previousMeeting), 'Acordos anteriores pertencem à pauta do PDF');
 const chat = (await invoke({ action: 'chat', question: 'Acidentes' })).result;
 assert(chat.coverage.sent <= 6 && chat.response.includes('competências') && !captured.response_format, 'Central');
 assert(JSON.parse(captured.messages[1].content).indicators[0].name.startsWith('Acidentes'), 'Recorte da pergunta');

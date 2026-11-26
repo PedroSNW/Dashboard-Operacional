@@ -3736,6 +3736,7 @@ function openNewIndicatorModal() {
     populateSectorSelect();
     document.getElementById('editIndicador').value = '';
     document.getElementById('editMeta').value = '';
+    document.getElementById('editZeroTarget').checked = false;
     document.getElementById('editUnd').value = 'Qtd';
     document.getElementById('editDirection').value = '';
     
@@ -3751,6 +3752,7 @@ function openEditModal(index) {
     populateSectorSelect(item.setor);
     document.getElementById('editIndicador').value = item.indicador;
     document.getElementById('editMeta').value = item.meta ?? '';
+    document.getElementById('editZeroTarget').checked = item.meta === 0 && item.metaZeroConfirmada === true;
     document.getElementById('editUnd').value = item.und;
     document.getElementById('editDirection').value = getIntelligenceDirection(item) || '';
     
@@ -3774,12 +3776,14 @@ async function saveIndicatorForm(e) {
         setor: document.getElementById('editSetor').value,
         indicador: document.getElementById('editIndicador').value,
         meta: metaInput === '' ? null : Number(metaInput),
+        ...(metaInput !== '' && Number(metaInput) === 0 ? {metaZeroConfirmada: document.getElementById('editZeroTarget').checked} : {}),
         und: document.getElementById('editUnd').value,
         direcaoDesempenho: document.getElementById('editDirection').value || null,
         valores: vals
     };
 
     const previousItem = idx >= 0 ? currentData[idx] : null;
+    if(previousItem?.id!=null)newItem.id=previousItem.id;
     const updatedAt = new Date().toISOString();
     const competencyChanges = compareIndicatorCompetencies(previousItem, newItem, mesesLabels, mesesLabels);
     if (indicatorValuesChanged(previousItem, newItem.valores)) {

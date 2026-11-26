@@ -387,7 +387,15 @@
                 <button id="reportContextRebind" type="button" class="v3-button" hidden>Vincular este contexto ao recorte atual</button>
                 <fieldset id="reportContextFields" class="report-context-fields">
                 <legend class="sr-only">Informações da gestão para este relatório</legend>
-                <div class="report-context-grid"><label for="reportContext-actionsTaken">Ações realizadas no período<textarea id="reportContext-actionsTaken" rows="3" maxlength="320" placeholder="Quais ações foram realizadas pela equipe?" aria-describedby="reportContextCount-actionsTaken"></textarea><span id="reportContextCount-actionsTaken" class="text-xs">0/320</span></label><label for="reportContext-difficulties">Dificuldades encontradas<textarea id="reportContext-difficulties" rows="3" maxlength="320" placeholder="Quais foram os principais obstáculos?" aria-describedby="reportContextCount-difficulties"></textarea><span id="reportContextCount-difficulties" class="text-xs">0/320</span></label><label for="reportContext-achievements">Conquistas relevantes<textarea id="reportContext-achievements" rows="3" maxlength="320" placeholder="Quais resultados positivos merecem destaque?" aria-describedby="reportContextCount-achievements"></textarea><span id="reportContextCount-achievements" class="text-xs">0/320</span></label><label for="reportContext-priorities">Prioridades da gestão<textarea id="reportContext-priorities" rows="3" maxlength="320" placeholder="Quais resultados a equipe pretende priorizar?" aria-describedby="reportContextCount-priorities"></textarea><span id="reportContextCount-priorities" class="text-xs">0/320</span></label><label for="reportContext-goals">Metas propostas ou aprovadas<textarea id="reportContext-goals" rows="3" maxlength="320" placeholder="Informe objetivos gerenciais; as metas oficiais não serão alteradas." aria-describedby="reportContextCount-goals"></textarea><span id="reportContextCount-goals" class="text-xs">0/320</span></label><label for="reportContext-observations">Observações adicionais<textarea id="reportContext-observations" rows="3" maxlength="320" placeholder="Inclua apenas contexto necessário, sem informações identificáveis." aria-describedby="reportContextCount-observations"></textarea><span id="reportContextCount-observations" class="text-xs">0/320</span></label></div>
+                <div class="report-context-grid">
+                    <label for="reportContext-actionsTaken">Ações realizadas no período<textarea id="reportContext-actionsTaken" rows="3" maxlength="320" placeholder="Quais ações foram realizadas pela equipe?" aria-describedby="reportContextCount-actionsTaken"></textarea><span id="reportContextCount-actionsTaken" class="text-xs">0/320</span></label>
+                    <label for="reportContext-difficulties">Dificuldades encontradas<textarea id="reportContext-difficulties" rows="3" maxlength="320" placeholder="Quais foram os principais obstáculos?" aria-describedby="reportContextCount-difficulties"></textarea><span id="reportContextCount-difficulties" class="text-xs">0/320</span></label>
+                    <label for="reportContext-achievements">Conquistas relevantes<textarea id="reportContext-achievements" rows="3" maxlength="320" placeholder="Quais resultados positivos merecem destaque?" aria-describedby="reportContextCount-achievements"></textarea><span id="reportContextCount-achievements" class="text-xs">0/320</span></label>
+                    <label for="reportContext-priorities">Prioridades da gestão<textarea id="reportContext-priorities" rows="3" maxlength="320" placeholder="Quais resultados a equipe pretende priorizar?" aria-describedby="reportContextCount-priorities"></textarea><span id="reportContextCount-priorities" class="text-xs">0/320</span></label>
+                    <label for="reportContext-goals">Metas propostas ou aprovadas<textarea id="reportContext-goals" rows="3" maxlength="320" placeholder="Informe objetivos gerenciais; as metas oficiais não serão alteradas." aria-describedby="reportContextCount-goals"></textarea><span id="reportContextCount-goals" class="text-xs">0/320</span></label>
+                    <label for="reportContext-observations">Observações adicionais<textarea id="reportContext-observations" rows="3" maxlength="320" placeholder="Inclua apenas contexto necessário, sem informações identificáveis." aria-describedby="reportContextCount-observations"></textarea><span id="reportContextCount-observations" class="text-xs">0/320</span></label>
+                    <label for="reportContext-previousMeeting">Acordos e pendências da reunião anterior<textarea id="reportContext-previousMeeting" rows="3" maxlength="320" aria-describedby="reportContextCount-previousMeeting"></textarea><span id="reportContextCount-previousMeeting" class="text-xs">0/320</span></label>
+                </div>
                 <div class="report-context-grid">
                     <label for="reportContextActionStatus">Situação das ações informadas<select id="reportContextActionStatus"><option value="pending_validation">Pendente de validação</option><option value="reported_in_progress">Informadas como em execução</option><option value="reported_completed">Informadas como concluídas</option></select></label>
                     <label for="reportContextGoalKind">Tipo do objetivo gerencial<select id="reportContextGoalKind"><option value="suggested">Objetivo sugerido</option><option value="management">Objetivo informado pela gestão</option><option value="approved">Objetivo informado como aprovado</option></select></label>
@@ -589,6 +597,7 @@
                 <div class="w-1/2">
                     <label for="editMeta" class="block text-xs text-slate-400 mb-1">Meta Desejada</label>
                     <input type="number" step="any" id="editMeta" class="w-full bg-[#070D1E] border border-slate-700 text-slate-100 text-xs rounded-xl p-2.5 focus:outline-none focus:border-amber-500">
+                    <label class="mt-2 flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" id="editZeroTarget"> Confirmar zero como meta do indicador</label>
                 </div>
 
                 <div>
@@ -767,20 +776,20 @@
 
 
     <!-- ================= SCRIPT & LÓGICA AUTOMÁTICA ================= -->
-        <script src="pending-state.js?v=1"></script>
-        <script src="main.js?v=layout-2"></script>
+        <script src="pending-state.js?v=meta-zero"></script>
+        <script src="main.js?v=meta-zero"></script>
         <script src="dashboard-layout.js?v=3"></script>
         <script src="ai.js?v=1"></script>
         <script src="pdf-progress.js?v=3"></script>
-        <script src="report-content.js?v=6.1"></script>
-        <script src="report-executive.js?v=6.1"></script>
-        <script src="report-evidence.js?v=propostas"></script>
-        <script src="reports.js?v=propostas"></script>
+        <script src="report-content.js?v=reuniao"></script>
+        <script src="report-executive.js?v=reuniao"></script>
+        <script src="report-evidence.js?v=reuniao"></script>
+        <script src="reports.js?v=reuniao"></script>
     <script src="workspace-v3.js?v=bibliotecas-1"></script>
     <script src="motion-v3-1.js?v=legenda-graficos-1"></script>
     <script src="pending-changes.js?v=visual-4"></script>
     <script src="workspace-v3-2.js?v=hierarquia-1"></script>
-        <script src="report-authoring.js?v=propostas"></script>
+        <script src="report-authoring.js?v=reuniao"></script>
 </body>
 </html>
 

@@ -17,7 +17,7 @@
             }else{
                 const root=path[0],index=path[1];const item=after[root]?.[index]||before[root]?.[index];
                 const field=path.at(-1),monthly=root==='indicadores'&&path[2]==='valores';
-                const names={meta:'Meta',direcaoDesempenho:'Direção de desempenho',indicador:'Nome',setor:'Setor',und:'Unidade',title:'Título',name:'Nome',widgets:'Widgets',indicator:'Indicador de referência'};
+                const names={meta:'Meta',metaZeroConfirmada:'Confirmação de meta zero',direcaoDesempenho:'Direção de desempenho',indicador:'Nome',setor:'Setor',und:'Unidade',title:'Título',name:'Nome',widgets:'Widgets',indicator:'Indicador de referência'};
                 changes.push({category:root==='indicadores'&&field==='direcaoDesempenho'?'Governança':category,sector:root==='indicadores'?item?.setor:null,indicator:root==='indicadores'?item?.indicador:null,
                     subject:item?.indicador||item?.title||item?.name||item?.id||String(index??''),
                     competency:monthly?(after.mesesLabels?.[field]||before.mesesLabels?.[field]||`Posição ${Number(field)+1}`):null,

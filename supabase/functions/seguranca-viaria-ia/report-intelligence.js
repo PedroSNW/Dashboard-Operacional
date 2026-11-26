@@ -4,14 +4,18 @@ export const CONTEXT_LIMITS=Object.freeze({field:320,total:1200,bytes:2400});
 // Somente configuração revisada em código; jamais aceitar classificação do payload do cliente.
 // Entrada: {indicatorId,name,sector,category,level,approved:true,reference}. Vazia até validação da empresa.
 export const OPERATIONAL_POLICY=Object.freeze({version:1,criteria:Object.freeze([])});
-const FIELDS=['actionsTaken','difficulties','achievements','priorities','goals','observations'];
+const FIELDS=['actionsTaken','difficulties','achievements','priorities','goals','observations','previousMeeting'];
 const GOALS=['suggested','management','approved'],STATES=['pending_validation','reported_in_progress','reported_completed'];
 export function normalizeManagementContext(raw){
     if(raw===null||raw===undefined)return null;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some(k=>!['version',...FIELDS,'goalKind','approvalConfirmed','actionStatus','shareWithAI'].includes(k)))throw Error('REPORT: Contexto gerencial incompatível.');
     if(raw.version!==1||!GOALS.includes(raw.goalKind)||!STATES.includes(raw.actionStatus)||typeof raw.shareWithAI!=='boolean'||typeof raw.approvalConfirmed!=='boolean')throw Error('REPORT: Tipo, situação ou consentimento do contexto inválidos.');
     const result={version:1};let total=0;
-    for(const k of FIELDS){if(typeof raw[k]!=='string'||raw[k].length>CONTEXT_LIMITS.field)throw Error('REPORT: Cada campo do contexto admite até 320 caracteres.');result[k]=raw[k].replace(/\r\n?/g,'\n').trim();total+=result[k].length;}
+    for(const k of FIELDS){
+        if(k==='previousMeeting'&&raw[k]===undefined)continue;
+        if(typeof raw[k]!=='string'||raw[k].length>CONTEXT_LIMITS.field)throw Error('REPORT: Cada campo do contexto admite até 320 caracteres.');
+        result[k]=raw[k].replace(/\r\n?/g,'\n').trim();total+=result[k].length;
+    }
     if(total>CONTEXT_LIMITS.total||new TextEncoder().encode(JSON.stringify(result)).length>CONTEXT_LIMITS.bytes)throw Error('REPORT: O contexto excede 1200 caracteres ou o limite de bytes.');
     if(!total)return null;
     // Defesa auxiliar. A segurança depende também do isolamento em JSON e do contrato fechado da resposta.

@@ -135,7 +135,10 @@
     function preview(container){if(!managementReport?.authored)return;const doc=managementReport.authored.document;container.prepend(el('p',doc.title+' · revisão local pronta para exportação','ux-meta'));}
     function renderCompact(container,r,expanded){
         if(!r.authored)return false;const doc=r.authored.document,pack=packFor(r,r.authored.evidenceKeys);if(!C.validate(doc,pack).valid)throw Error('A revisão não corresponde à base atual.');
-        container.append(el('h2',doc.title,'v3-report-heading'),el('p',`${r.indicators.length} indicadores · ${r.competencias[0]} a ${r.competencias.at(-1)} · ${reportExportFormat()==='executive'?'Executivo':'Completo'}`,'ux-meta'),el('p',doc.sections[0].text),el('p','Revisão local validada. Propostas dependem de avaliação e aprovação da gestão.','ux-meta'));
+        const executive=reportExportFormat()==='executive',meeting=executive?ReportExecutive.meeting(r):null;
+        container.append(el('h2',doc.title,'v3-report-heading'),el('p',`${r.indicators.length} indicadores · ${r.competencias[0]} a ${r.competencias.at(-1)} · ${executive?'Executivo':'Completo'}`,'ux-meta'));
+        for(const line of (meeting?[meeting.headline,meeting.movement,meeting.exposure,meeting.agenda]:[doc.sections[0].text]).filter(Boolean))container.append(el('p',line));
+        container.append(el('p','Revisão local validada. Propostas dependem de avaliação e aprovação da gestão.','ux-meta'));
         const toggle=button('Ver prévia completa',()=>setManagementPreviewExpanded(toggle.getAttribute('aria-expanded')!=='true'));toggle.id='reportPreviewToggle';toggle.setAttribute('aria-controls','reportPreviewDetails');toggle.setAttribute('aria-expanded','false');const details=el('div','','report-preview-details space-y-5');details.id='reportPreviewDetails';details.hidden=true;details.setAttribute('role','region');details.setAttribute('aria-label','Conteúdo completo da revisão validada');container.append(toggle,details);if(expanded)setManagementPreviewExpanded(true);return true;
     }
     function renderDetails(){
