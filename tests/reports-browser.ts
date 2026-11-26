@@ -71,7 +71,7 @@ addEventListener('load',async()=>{
                 if(onepageFailure)return Response.json({success:false,error:'Montagem indisponível no teste'},{status:502});
                 const options={title:'',text:'',width:'full',chart:'line',tone:'neutral',target:false,comparison:false,labels:false};
                 return Response.json({success:true,snapshotUpdatedAt:smokeReport.snapshotUpdatedAt,composition:{
-                    title:'OnePage da reunião',subtitle:'Indicadores escolhidos',blocks:[
+                    title:'OnePage da reunião',subtitle:'Indicadores escolhidos',mode:'adjusted',blocks:[
                         {...options,type:'kpi',width:'half',indicators:[ids[0]],comparison:true},
                         {...options,type:'note',title:'Pauta',text:'Revisar a evolução na próxima reunião.',width:'half',indicators:[]},
                         {...options,type:'chart',indicators:[ids[1]],chart:'bar',target:true},
@@ -236,6 +236,7 @@ addEventListener('load',async()=>{
         assert(!aiDialog.open&&node('opPages').value!==originalId&&[...node('opPages').options].some(o=>o.value===originalId)&&
             preview.querySelectorAll('.op-card').length===4&&preview.textContent.includes('Revisar a evolução')&&
             preview.querySelector('.op-paper').dataset.orientation==='landscape','Composição da IA não criou página editável separada');
+        assert(document.querySelector('.workspace-toasts')?.textContent.includes('composição foi ajustada'),'Aviso de composição ajustada');
         edit('opInspector','Título do bloco','Resultado para a reunião');
         await tick();
         assert(preview.textContent.includes('Resultado para a reunião'),'Bloco gerado pela IA não editável');

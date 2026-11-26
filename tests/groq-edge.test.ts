@@ -12,7 +12,7 @@ let completion = 'stop';
 let groqCalls = 0;
 let captured: any;
 let requestBytes = 0;
-let invalidOnePage: 'foreign' | 'coverage' | null = null;
+let invalidOnePage: 'foreign' | 'coverage' | 'numeric' | 'json' | 'full' | null = null;
 const fetcher: typeof fetch = async (url, init) => {
     const endpoint = new URL(String(url));
     const headers = new Headers(init?.headers);
@@ -32,13 +32,14 @@ const fetcher: typeof fetch = async (url, init) => {
     if (input.orientation) {
         const refs = input.indicators.map((i: {ref:string}) => i.ref);
         const settings = { width:'full', title:'', text:'', chart:'line', tone:'accent', target:false, comparison:false, labels:false };
-        const ids = invalidOnePage === 'foreign' ? ['other'] : invalidOnePage === 'coverage' ? [] : refs.slice(1);
-        const onepage = { title:'Panorama da operação', subtitle:'Dados para a reunião', blocks:[
+        const ids = invalidOnePage === 'foreign' ? ['other', refs[1]] : invalidOnePage === 'coverage' ? [] : refs.slice(1);
+        const onepage = { title:invalidOnePage==='numeric'?'2026 em análise':'Panorama da operação', subtitle:'Dados para a reunião', blocks:[
             {...settings,type:'chart',refs:[refs[0]]},
             ...(ids.length ? [{...settings,type:'table',refs:ids}] : []),
-            {...settings,type:'note',refs:[],text:'Qual etapa da conferência será priorizada?'},
+            {...settings,type:'note',refs:[],text:invalidOnePage==='numeric'?'Resultado de 999 acidentes.':'Qual etapa da conferência será priorizada?'},
         ] };
-        return Response.json({ choices:[{finish_reason:completion,message:{content:JSON.stringify(onepage)}}] });
+        if(invalidOnePage==='full')onepage.blocks=refs.slice(0,10).map((ref:string)=>({...settings,type:'kpi',refs:[ref]}));
+        return Response.json({ choices:[{finish_reason:completion,message:{content:invalidOnePage==='json'?'{':JSON.stringify(onepage)}}] });
     }
     const refs = [input.indicators[0].key];
     const answer = input.question ? 'Confira as competências e os dados disponíveis.' : JSON.stringify({
@@ -171,14 +172,24 @@ const composed = (await invoke(onepage)).result;
 const onepageInput = JSON.parse(captured.messages[1].content);
 assert(captured.response_format.json_schema.strict && requestBytes<=6500 && onepageInput.orientation==='landscape' &&
     onepageInput.indicators.length===12 && !JSON.stringify(onepageInput).includes(database.indicadores[12].indicador) &&
-    composed.snapshotUpdatedAt===updatedAt && composed.composition.blocks[0].indicators[0]===onepageSelection.ids[0] &&
+    composed.snapshotUpdatedAt===updatedAt && composed.composition.mode==='ai' && composed.composition.blocks[0].indicators[0]===onepageSelection.ids[0] &&
     composed.composition.blocks[1].indicators.length===11,'Composição estruturada ou cobertura da OnePage');
-for(const failure of ['foreign','coverage'] as const){
+function hasOnlySelectedIndicators(composition: {blocks:{indicators:(string|number)[]}[]}){
+    const included = new Set(composition.blocks.flatMap(block=>block.indicators));
+    return included.size===onepageSelection.ids.length && onepageSelection.ids.every(id=>included.has(id));
+}
+for(const failure of ['foreign','coverage','numeric','full','json'] as const){
     invalidOnePage=failure;
-    await invoke(onepage,502);
+    const result=(await invoke(onepage)).result.composition;
+    assert(hasOnlySelectedIndicators(result)&&result.blocks.length<=10,'Ajuste perdeu cobertura ou extrapolou a seleção: '+failure);
+    assert(result.mode===(failure==='json'?'automatic':'adjusted'),'Modo de ajuste incorreto: '+failure);
+    if(failure==='numeric')assert(!JSON.stringify(result).includes('999 acidentes')&&result.title==='Panorama dos indicadores','Texto numérico sem evidência sobreviveu');
+    if(failure==='foreign'||failure==='coverage')assert(result.blocks[0].type==='chart','Composição válida da IA foi descartada');
 }
 invalidOnePage=null;
 completion = 'length';
+const truncated=(await invoke(onepage)).result.composition;
+assert(truncated.mode==='automatic'&&hasOnlySelectedIndicators(truncated),'Resposta truncada deixou a OnePage incompleta');
 await invoke({ action: 'generate', ...basis }, 502);
 completion = 'stop';
 groqStatus = 429;
@@ -186,6 +197,7 @@ const limited = await invoke({ action: 'chat', question: 'Acidentes' }, 429);
 assert(limited.response.headers.get('Retry-After') === '17' && !JSON.stringify(limited.result).includes('RAW_PRIVATE_ERROR'), 'Limite ou vazamento');
 const before = groqCalls;
 await invoke({ action: 'generate', ...basis }, 429);
+await invoke(onepage,429);
 await invoke({ action: 'preview', selection });
 assert(groqCalls === before, 'Cooldown ou prévia fizeram nova chamada');
-console.log('PASS Edge única, JWT/RLS, prévia, chat, geração com evidências, revisão, snapshot, privacidade e limite Groq.');
+console.log('PASS Edge, JWT/RLS, relatórios, chat, cobertura da OnePage, recuperação de respostas incompletas e limite Groq.');

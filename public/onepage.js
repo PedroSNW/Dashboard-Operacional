@@ -592,7 +592,11 @@
                 accent:draft.accent,start:draft.start,end:draft.end,blocks});
             persist();
             $('opPages').focus();
-            window.DGranelPresentation?.toast('OnePage criada com IA','Revise os blocos no editor antes de apresentar.');
+            const label = composition.mode === 'automatic' ? 'OnePage montada automaticamente' : 'OnePage criada com IA';
+            const detail = composition.mode === 'automatic' ? 'A resposta da Groq veio incompleta. A página usa os indicadores da base sincronizada.'
+                : composition.mode === 'adjusted' ? 'A composição foi ajustada para cobrir os indicadores selecionados.'
+                : 'Revise os blocos no editor antes de apresentar.';
+            window.DGranelPresentation?.toast(label,detail);
         } catch (error) {
             if (aiDraft === draft && $('opAiDialog').open) $('opAiStatus').textContent = error.message;
         } finally {

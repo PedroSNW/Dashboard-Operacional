@@ -18,6 +18,13 @@ type Block = {
     type: typeof types[number]; width: typeof widths[number]; refs: string[]; title: string; text: string;
     chart: typeof chartTypes[number]; tone: typeof tones[number]; target: boolean; comparison: boolean; labels: boolean;
 };
+type ResolvedBlock = Omit<Block, 'refs'> & { indicators: IndicatorId[] };
+type Draft = { title?: unknown; subtitle?: unknown; blocks?: unknown };
+const blockLimit = 10;
+const defaultTitle = 'Panorama dos indicadores';
+const blockDefaults = {
+    width: 'full', title: '', text: '', chart: 'line', tone: 'accent', target: false, comparison: false, labels: false,
+} satisfies Omit<ResolvedBlock, 'type' | 'indicators'>;
 const text = { type: 'string' };
 const bool = { type: 'boolean' };
 const enumOf = (values: readonly string[]) => ({ type: 'string', enum: values });
@@ -42,7 +49,6 @@ export async function generateOnePage(
     orientation: Orientation,
     complete: ReturnType<typeof createGroq>,
 ) {
-    const invalid = new ApiError(502, 'invalid_onepage', 'A IA retornou uma composição incompleta. Tente montar a página novamente.');
     const evidence = (globalThis as any).ReportEvidence;
     const allowed = new Set(evidence.evidence(report).items.map((fact: { id: IndicatorId }) => fact.id));
     if (allowed.size !== report.indicators.length) throw new ApiError(422, 'invalid_evidence', 'Revise os nomes e unidades dos indicadores selecionados antes de usar a IA.');
@@ -68,25 +74,122 @@ export async function generateOnePage(
     if (!groqRequestFits(prompt, payload, schema)) {
         throw new ApiError(422, 'context_too_large', 'Selecione menos indicadores para montar a OnePage com IA.');
     }
-    const response = await complete(prompt, payload, schema);
-    let value;
-    try { value = JSON.parse(response.content); } catch { throw invalid; }
-    const safeText = (content: unknown, limit: number): content is string => typeof content === 'string' &&
-        content.length <= limit && !/\d/.test(content) && !evidence.privateData(content);
-    if (!value || !safeText(value.title, 120) || !value.title.trim() || !safeText(value.subtitle, 240) ||
-        !Array.isArray(value.blocks) || !value.blocks.length || value.blocks.length > 10) throw invalid;
-    const covered = new Set<IndicatorId>();
-    const blocks = value.blocks.map((b: Block) => {
-        if (!b || !types.includes(b.type) || !widths.includes(b.width) || !chartTypes.includes(b.chart) || !tones.includes(b.tone) ||
-            !safeText(b.title, 120) || !safeText(b.text, 320) || !Array.isArray(b.refs) || new Set(b.refs).size !== b.refs.length ||
-            !b.refs.every(ref => ids.has(ref)) || ![b.target, b.comparison, b.labels].every(flag => typeof flag === 'boolean')) throw invalid;
-        const indicators = b.refs.map(ref => ids.get(ref)!);
-        const data = b.type === 'kpi' || b.type === 'chart' || b.type === 'table';
-        if (data ? (b.type === 'table' ? !indicators.length : indicators.length !== 1) : indicators.length || !b.text.trim()) throw invalid;
-        indicators.forEach(id => covered.add(id));
-        return {type:b.type, width:b.width, indicators, title:b.title.trim(), text:b.text.trim(), chart:b.chart, tone:b.tone,
-            target:b.target, comparison:b.comparison, labels:b.labels};
-    });
-    if (covered.size !== ids.size) throw invalid;
-    return { title: value.title.trim(), subtitle: value.subtitle.trim(), blocks };
+    let draft: Draft | null = null;
+    try {
+        const response = await complete(prompt, payload, schema);
+        try { draft = JSON.parse(response.content); } catch (error) {
+            if (!(error instanceof SyntaxError)) throw error;
+        }
+    } catch (error) {
+        if (!(error instanceof ApiError) || error.code !== 'invalid_groq_response') throw error;
+    }
+    return compose(report, orientation, ids, draft, evidence.privateData);
+}
+
+function compose(
+    report: Report, orientation: Orientation, ids: Map<string, IndicatorId>, draft: Draft | null,
+    privateData: (content: string) => boolean,
+) {
+    let adjusted = false;
+    function safeText(content: unknown, limit: number) {
+        if (typeof content === 'string' && content.length <= limit && !/\d/.test(content) && !privateData(content)) {
+            return content.trim();
+        }
+        adjusted = true;
+        return '';
+    }
+    function option<T>(allowed: readonly T[], value: unknown, fallback: T) {
+        const selected = allowed.find(item => item === value);
+        if (selected !== undefined) return selected;
+        adjusted = true;
+        return fallback;
+    }
+    const title = safeText(draft?.title, 120);
+    const subtitle = safeText(draft?.subtitle, 240);
+    if (!title) adjusted = true;
+    const candidates: unknown[] = Array.isArray(draft?.blocks) ? draft.blocks : [];
+    if (candidates.length > blockLimit) adjusted = true;
+    const blocks: ResolvedBlock[] = [];
+    for (const candidate of candidates.slice(0, blockLimit)) {
+        if (!candidate || typeof candidate !== 'object') {
+            adjusted = true;
+            continue;
+        }
+        const block = candidate as Partial<Record<keyof Block, unknown>>;
+        const type = types.find(type => type === block.type);
+        const body = safeText(block.text, 320);
+        const refs: unknown[] = Array.isArray(block.refs) ? block.refs : [];
+        const indicators = [...new Set(refs.flatMap(ref => typeof ref === 'string' && ids.has(ref) ? [ids.get(ref)!] : []))];
+        if (!Array.isArray(block.refs) || refs.length !== indicators.length) adjusted = true;
+        if (!type) {
+            adjusted = true;
+            continue;
+        }
+        const isText = type === 'note' || type === 'text';
+        const selection = isText ? [] : type === 'table' ? indicators : indicators.slice(0, 1);
+        if ((isText && !body) || (!isText && !selection.length)) {
+            adjusted = true;
+            continue;
+        }
+        if (selection.length !== indicators.length) adjusted = true;
+        blocks.push({
+            type, indicators: selection, title: safeText(block.title, 120), text: body,
+            width: option(widths, block.width, blockDefaults.width),
+            chart: option(chartTypes, block.chart, blockDefaults.chart),
+            tone: option(tones, block.tone, blockDefaults.tone),
+            target: option([true, false], block.target, false), comparison: option([true, false], block.comparison, false),
+            labels: option([true, false], block.labels, false),
+        });
+    }
+
+    if (!blocks.some(block => block.indicators.length)) {
+        const layout = defaultLayout(report.indicators, orientation);
+        return { title: title || defaultTitle, subtitle,
+            blocks: [...layout, ...blocks.slice(0, blockLimit - layout.length)], mode: 'automatic' };
+    }
+    const uncovered = () => {
+        const covered = new Set(blocks.flatMap(block => block.indicators));
+        return report.indicators.filter(item => !covered.has(item.id));
+    };
+    let missing = uncovered();
+    if (missing.length) {
+        adjusted = true;
+        const table = blocks.find(block => block.type === 'table');
+        if (table) {
+            const included = new Set([...table.indicators, ...missing.map(item => item.id)]);
+            Object.assign(table, resultsBlock(report.indicators.filter(item => included.has(item.id))));
+        } else {
+            if (blocks.length === blockLimit) {
+                const note = blocks.findLastIndex(block => !block.indicators.length);
+                blocks.splice(note < 0 ? blocks.length - 1 : note, 1);
+                missing = uncovered();
+            }
+            blocks.push(resultsBlock(missing));
+        }
+    }
+    return { title: title || defaultTitle, subtitle, blocks, mode: adjusted ? 'adjusted' : 'ai' };
+}
+
+function resultsBlock(indicators: Report['indicators']): ResolvedBlock {
+    return {
+        ...blockDefaults, type: 'table', title: 'Resultados dos indicadores',
+        indicators: indicators.map(item => item.id),
+        target: indicators.some(item => item.estatisticas.meta !== null),
+        comparison: indicators.some(item => item.estatisticas.mensais.at(-1)?.variacaoAnterior),
+    };
+}
+
+function defaultLayout(indicators: Report['indicators'], orientation: Orientation): ResolvedBlock[] {
+    const series = indicators.find(item => item.estatisticas.validos > 1 && item.estatisticas.minimo !== item.estatisticas.maximo);
+    const chart: ResolvedBlock[] = series ? [{
+        ...blockDefaults, type: 'chart', indicators: [series.id], target: series.estatisticas.meta !== null,
+        width: orientation === 'landscape' && indicators.length > 1 && indicators.length <= 4 ? 'half' : 'full',
+    }] : [];
+    if (indicators.length === 1 && !series) {
+        return [{...blockDefaults, type: 'kpi', indicators: [indicators[0].id], target: indicators[0].estatisticas.meta !== null}];
+    }
+    if (indicators.length === 1) return chart;
+    const table = resultsBlock(indicators);
+    if (chart[0]?.width === 'half') table.width = 'half';
+    return [...chart, table];
 }
