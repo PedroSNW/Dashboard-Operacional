@@ -12,6 +12,7 @@ let completion = 'stop';
 let groqCalls = 0;
 let captured: any;
 let requestBytes = 0;
+let invalidOnePage: 'foreign' | 'coverage' | null = null;
 const fetcher: typeof fetch = async (url, init) => {
     const endpoint = new URL(String(url));
     const headers = new Headers(init?.headers);
@@ -28,6 +29,17 @@ const fetcher: typeof fetch = async (url, init) => {
     const input = JSON.parse(captured.messages[1].content);
     assert(!JSON.stringify(input).includes('indice:'), 'Identificador interno enviado ao provedor');
     if (groqStatus !== 200) return Response.json({ error: 'RAW_PRIVATE_ERROR' }, { status: groqStatus, headers: { 'Retry-After': '17' } });
+    if (input.orientation) {
+        const refs = input.indicators.map((i: {ref:string}) => i.ref);
+        const settings = { width:'full', title:'', text:'', chart:'line', tone:'accent', target:false, comparison:false, labels:false };
+        const ids = invalidOnePage === 'foreign' ? ['other'] : invalidOnePage === 'coverage' ? [] : refs.slice(1);
+        const onepage = { title:'Panorama da operação', subtitle:'Dados para a reunião', blocks:[
+            {...settings,type:'chart',refs:[refs[0]]},
+            ...(ids.length ? [{...settings,type:'table',refs:ids}] : []),
+            {...settings,type:'note',refs:[],text:'Qual etapa da conferência será priorizada?'},
+        ] };
+        return Response.json({ choices:[{finish_reason:completion,message:{content:JSON.stringify(onepage)}}] });
+    }
     const refs = [input.indicators[0].key];
     const answer = input.question ? 'Confira as competências e os dados disponíveis.' : JSON.stringify({
         summary: { text: 'Priorize a revisão das barreiras que mantêm a operação distante da referência.', refs },
@@ -147,6 +159,25 @@ try {
     database.indicadores = originalIndicators;
 }
 await invoke({ action: 'chat', question: 'Contato pessoa@example.test' }, 422);
+const onepageSelection = {...selection,type:'executivo',ids:selection.ids.slice(0,12)};
+const onepage = {action:'onepage',selection:onepageSelection,orientation:'landscape',expectedUpdatedAt:updatedAt};
+const beforeOnePage = groqCalls;
+await invoke({...onepage,expectedUpdatedAt:'stale'},409);
+await invoke({...onepage,orientation:'square'},400);
+await invoke({...onepage,selection:{...onepageSelection,ids:selection.ids}},400);
+await invoke({...onepage,selection:{...onepageSelection,ids:['indicador não selecionável']}},422);
+assert(groqCalls===beforeOnePage,'Requisições inválidas de OnePage chegaram à Groq');
+const composed = (await invoke(onepage)).result;
+const onepageInput = JSON.parse(captured.messages[1].content);
+assert(captured.response_format.json_schema.strict && requestBytes<=6500 && onepageInput.orientation==='landscape' &&
+    onepageInput.indicators.length===12 && !JSON.stringify(onepageInput).includes(database.indicadores[12].indicador) &&
+    composed.snapshotUpdatedAt===updatedAt && composed.composition.blocks[0].indicators[0]===onepageSelection.ids[0] &&
+    composed.composition.blocks[1].indicators.length===11,'Composição estruturada ou cobertura da OnePage');
+for(const failure of ['foreign','coverage'] as const){
+    invalidOnePage=failure;
+    await invoke(onepage,502);
+}
+invalidOnePage=null;
 completion = 'length';
 await invoke({ action: 'generate', ...basis }, 502);
 completion = 'stop';

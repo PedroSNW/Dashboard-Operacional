@@ -1,12 +1,14 @@
 import { ApiError, createGroq, readJson } from './groq.ts';
 import { answerQuestion, generateReport, reviewReport } from './report-ai.ts';
 import { buildReport } from './reports.js';
+import { generateOnePage, ONEPAGE_INDICATOR_LIMIT } from './onepage-ai.ts';
 
 const actions = {
     chat: ['action', 'question'],
     preview: ['action', 'selection', 'managementContext'],
     generate: ['action', 'selection', 'managementContext', 'expectedUpdatedAt', 'expectedReportBasis'],
     review: ['action', 'selection', 'managementContext', 'expectedUpdatedAt', 'expectedReportBasis', 'document', 'reviewAcknowledged'],
+    onepage: ['action', 'selection', 'expectedUpdatedAt', 'orientation'],
 };
 
 export function createHandler(env = Deno.env.get, fetcher: typeof fetch = fetch) {
@@ -76,11 +78,18 @@ export function createHandler(env = Deno.env.get, fetcher: typeof fetch = fetch)
                 return json({ success: true, ...await answerQuestion(remote.data, question, complete) });
             }
 
-            const stale = new ApiError(409, 'stale_snapshot', 'Gere uma nova prévia com a base e os filtros atuais.');
+            const stale = body.action === 'onepage'
+                ? new ApiError(409, 'stale_snapshot', 'Atualize os dados do Dashboard antes de montar a OnePage.')
+                : new ApiError(409, 'stale_snapshot', 'Gere uma nova prévia com a base e os filtros atuais.');
             if (body.action !== 'preview' && remote.updated_at !== body.expectedUpdatedAt) throw stale;
+            if (body.action === 'onepage' &&
+                (!['portrait', 'landscape'].includes(body.orientation) || body.selection?.type !== 'executivo' ||
+                    !Array.isArray(body.selection.ids) || body.selection.ids.length > ONEPAGE_INDICATOR_LIMIT)) throw invalid;
             let report;
             try { report = buildReport(remote.data, body.selection, remote.updated_at, body.managementContext ?? null); }
             catch { throw new ApiError(422, 'invalid_selection', 'Confira o recorte e o contexto gerencial.'); }
+            if (body.action === 'onepage') return json({ success: true, snapshotUpdatedAt: remote.updated_at,
+                composition: await generateOnePage(report, body.orientation, complete) });
             const identity = JSON.stringify([remote.updated_at, report.type, report.sector, report.competencias, report.indicators, report.managementContext]);
             const basis = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity))),
                 byte => byte.toString(16).padStart(2, '0')).join('');

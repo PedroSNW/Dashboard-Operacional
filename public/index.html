@@ -35,7 +35,7 @@
         <link rel="stylesheet" href="report-authoring.css?v=analysis">
     <link rel="stylesheet" href="workspace-ui.css?v=layout-1">
     <link rel="stylesheet" href="dashboard-layout.css?v=2">
-    <link rel="stylesheet" href="onepage.css?v=1">
+    <link rel="stylesheet" href="onepage.css?v=2">
 </head>
 <body class="min-h-screen pb-12 flex flex-col bg-radial-glow antialiased selection:bg-amber-500 selection:text-slate-950">
     <script>document.body.classList.toggle('light-theme',document.documentElement.dataset.theme==='light');</script>
@@ -441,6 +441,7 @@
                     <p id="opStatus" role="status"></p>
                 </div>
                 <div class="op-toolbar-actions">
+                    <button type="button" id="opAiOpen">Montar com IA</button>
                     <button type="button" id="opPresent">Apresentar</button>
                     <button type="button" id="opPrint" class="op-primary">Imprimir / PDF</button>
                 </div>
@@ -478,6 +479,15 @@
                     <h2 id="opConfirmTitle">Excluir esta página?</h2>
                     <p id="opDeleteName"></p>
                     <div class="op-actions"><button value="cancel" autofocus>Cancelar</button><button value="delete" class="op-danger">Excluir página</button></div>
+                </form>
+            </dialog>
+            <dialog id="opAiDialog" class="op-dialog op-ai-dialog" aria-labelledby="opAiTitle">
+                <div class="op-dialog-bar"><h2 id="opAiTitle">Montar OnePage com IA</h2><button type="button" id="opAiCancel">Fechar</button></div>
+                <form id="opAiForm">
+                    <p class="op-field-hint">Escolha até 12 indicadores. A IA cria uma nova página com blocos que você pode editar.</p>
+                    <fieldset id="opAiFields"></fieldset>
+                    <p id="opAiStatus" role="status"></p>
+                    <button type="submit" id="opAiGenerate" class="op-primary">Criar página com IA</button>
                 </form>
             </dialog>
         </div>
@@ -839,7 +849,7 @@
     <script src="pending-changes.js?v=visual-4"></script>
     <script src="workspace-v3-2.js?v=hierarquia-1"></script>
         <script src="report-authoring.js?v=reuniao"></script>
-        <script src="onepage.js?v=1"></script>
+        <script src="onepage.js?v=2"></script>
 </body>
 </html>
 

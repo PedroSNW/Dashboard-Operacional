@@ -2,12 +2,17 @@
     const $ = id => document.getElementById(id);
     const types = {kpi:'Indicador', chart:'Gráfico', table:'Tabela', note:'Balão', text:'Texto'};
     const colors = {blue:'#174D92', teal:'#067064', amber:'#825008', rose:'#9C3151'};
+    const orientations = {
+        portrait:{label:'Vertical', width:760, height:1030},
+        landscape:{label:'Horizontal', width:1100, height:702},
+    };
+    const aiIndicatorLimit = 12;
     const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     const number = new Intl.NumberFormat('pt-BR', {maximumFractionDigits:2});
     const percent = new Intl.NumberFormat('pt-BR', {maximumFractionDigits:1, signDisplay:'exceptZero'});
     const blankSource = {months:[], items:[], version:null};
     const unset = '';
-    let owner, page, selected, source = blankSource, frame, printHost, deleteId;
+    let owner, page, selected, source = blankSource, frame, printHost, deleteId, aiDraft;
     let pages = new Map(), storageError = false;
 
     function node(tag, text, className) {
@@ -53,7 +58,8 @@
 
     const storagePrefix = () => 'dgranel.onepage.v1.' + owner + '.';
     function newPage() {
-        return {version:1, id:crypto.randomUUID(), title:'Nova OnePage', subtitle:'', accent:'blue', start:'', end:'', blocks:[], updated:0};
+        return {version:1, id:crypto.randomUUID(), title:'Nova OnePage', subtitle:'', accent:'blue',
+            orientation:'portrait', start:'', end:'', blocks:[], updated:0};
     }
 
     function loadPages() {
@@ -64,6 +70,7 @@
                 try { stored = JSON.parse(localStorage.getItem(key)); } catch { continue; }
                 if (stored?.version !== 1 || key !== prefix + stored.id || typeof stored.title !== 'string' ||
                     !Array.isArray(stored.blocks) || !stored.blocks.every(b => b && Object.hasOwn(types,b.type) && typeof b.id === 'string')) continue;
+                stored.orientation = stored.orientation === 'landscape' ? 'landscape' : 'portrait';
                 pages.set(stored.id, stored);
             }
         } catch {
@@ -102,13 +109,13 @@
         const snap = pendingTracker.reference;
         if (!supabaseReady || !supabaseStateLoaded || !snap) return blankSource;
         const counts = new Map();
-        const items = snap.indicadores.map(i => {
+        const items = snap.indicadores.map((i,index) => {
             const identity = typeof i.id === 'string' || typeof i.id === 'number'
                 ? ['id',i.id] : ['legacy',i.setor,i.indicador,i.und];
             const base = JSON.stringify(identity);
             const occurrence = counts.get(base) ?? 0;
             counts.set(base, occurrence + 1);
-            return {key:JSON.stringify([...identity,occurrence]), name:i.indicador, sector:i.setor, unit:i.und, meta:i.meta,
+            return {key:JSON.stringify([...identity,occurrence]), id:i.id??'indice:'+index, name:i.indicador, sector:i.setor, unit:i.und, meta:i.meta,
                 zeroConfirmed:i.metaZeroConfirmada === true, values:i.valores};
         });
         return {months:snap.mesesLabels, items, version:pendingTracker.version};
@@ -124,8 +131,8 @@
         return monthNames[month] ? {label:monthNames[month] + '/' + year,key:year*12+month} : {label,key:null};
     }
 
-    function period(block = {}) {
-        const first = block.start || page.start, last = block.end || page.end;
+    function period(block = {}, document = page) {
+        const first = block.start || document.start, last = block.end || document.end;
         const start = first ? source.months.indexOf(first) : 0;
         const end = last ? source.months.indexOf(last) : source.months.length - 1;
         if (!source.months.length || start < 0 || end < start) return [];
@@ -147,9 +154,13 @@
         schedulePreview();
     }
 
-    function addBlock(type) {
-        const block = {id:crypto.randomUUID(), type, title:'', text:'', note:'', width:type === 'kpi' ? 'half' : 'full',
+    function newBlock(type) {
+        return {id:crypto.randomUUID(), type, title:'', text:'', note:'', width:type === 'kpi' ? 'half' : 'full',
             indicator:unset, indicators:[], start:'', end:'', chart:'line', target:false, comparison:false, labels:false, tone:'accent'};
+    }
+
+    function addBlock(type) {
+        const block = newBlock(type);
         page.blocks.push(block);
         selected = block.id;
         persist();
@@ -180,6 +191,7 @@
         $('opSettings').replaceChildren(
             field('Título',page.title,update('title')),
             field('Subtítulo',page.subtitle,update('subtitle'),{rows:2}),
+            orientationField(page.orientation,update('orientation')),
             field('Cor de destaque',page.accent,update('accent'),{choices:[['blue','Azul'],['teal','Verde'],['amber','Âmbar'],['rose','Vinho']]}),
             node('p', source.months.length ? 'Período padrão dos blocos de dados' : 'Dados sincronizados indisponíveis.', 'op-field-hint'),
             dateFields(page,months,['Primeira competência','Última competência'])
@@ -204,33 +216,45 @@
 
     function syncButtons() {
         $('opDelete').disabled = !pages.has(page.id);
+        $('opAiOpen').disabled = !source.version || !source.items.length;
         $('opPresent').disabled = $('opPrint').disabled = page.blocks.length === 0;
     }
 
-    function dateFields(target, months, defaults) {
+    function orientationField(value, update) {
+        return field('Orientação',value,update,{choices:Object.entries(orientations).map(([id,setting])=>[id,setting.label])});
+    }
+
+    function dateFields(target, months, defaults, update = (key,value) => change(target,key,value)) {
         const row = node('div',undefined,'op-split');
         row.append(...['start','end'].map((key,n) => field(n ? 'Até' : 'De',target[key],
-            value => change(target,key,value),{choices:[['',defaults[n]],...months]})));
+            value => update(key,value),{choices:[['',defaults[n]],...months]})));
         return row;
     }
 
-    function indicatorPicker(block) {
+    function indicatorPicker(block, {label='Indicadores da tabela', limit=Infinity, update} = {}) {
         const wrapper = node('fieldset',undefined,'op-picker');
         const search = node('input');
         search.type = 'search';
         search.placeholder = 'Buscar por indicador ou setor';
-        search.setAttribute('aria-label','Filtrar indicadores da tabela');
+        search.setAttribute('aria-label','Filtrar ' + label.toLowerCase());
         const list = node('div',undefined,'op-indicator-list');
+        const save = update ?? (keys => change(block,'indicators',keys));
         const render = () => {
             const normalize = s => String(s).normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
             const items = source.items.filter(i => normalize(i.name + ' ' + i.sector).includes(normalize(search.value.trim())));
-            list.replaceChildren(...items.map(i => toggle(i.name + (i.sector ? ' · ' + i.sector : ''),block.indicators.includes(i.key),checked => {
-                change(block,'indicators',checked ? [...block.indicators,i.key] : block.indicators.filter(id => id !== i.key));
-            })));
+            list.replaceChildren(...items.map(i => {
+                const selected = block.indicators.includes(i.key);
+                const check = toggle(i.name + (i.sector ? ' · ' + i.sector : ''),selected,checked => {
+                    save(checked ? [...block.indicators,i.key] : block.indicators.filter(id => id !== i.key));
+                    for (const input of list.querySelectorAll('input')) input.disabled = !input.checked && block.indicators.length >= limit;
+                });
+                check.querySelector('input').disabled = !selected && block.indicators.length >= limit;
+                return check;
+            }));
             if (!items.length) list.append(node('p','Nenhum indicador encontrado.','op-field-hint'));
         };
         search.oninput = render;
-        wrapper.append(node('legend','Indicadores da tabela'),search,list);
+        wrapper.append(node('legend',label),search,list);
         const absent = block.indicators.filter(key => !source.items.some(i => i.key === key));
         if (absent.length) wrapper.append(button('Remover ' + absent.length + ' seleção(ões) indisponível(is)', () => {
             change(block,'indicators',block.indicators.filter(key => !absent.includes(key)),true);
@@ -340,7 +364,7 @@
     function chartImage(block,item,points) {
         const chart = node('canvas');
         chart.width = {third:430,half:570,full:900}[block.width] ?? 900;
-        chart.height = 290;
+        chart.height = page.orientation === 'landscape' && block.width === 'full' ? 204 : 290;
         const color = colors[page.accent] ?? colors.blue;
         const data = points.map(p => valueAt(item,p));
         const target = block.target && Number.isFinite(item.meta) && (item.meta !== 0 || item.zeroConfirmed);
@@ -422,6 +446,7 @@
 
     function paper(editable = false) {
         const sheet = node('article',undefined,'op-paper');
+        sheet.dataset.orientation = page.orientation;
         const color = colors[page.accent] ?? colors.blue;
         sheet.style.setProperty('--op-paper-accent',color);
         const head = node('header',undefined,'op-paper-header');
@@ -482,14 +507,100 @@
         clearPrint();
         printHost = node('div',undefined,'op-print-host');
         printHost.id = 'opPrintHost';
+        const format = orientations[page.orientation];
+        printHost.dataset.orientation = page.orientation;
+        printHost.style.setProperty('--op-print-width',format.width + 'px');
         printHost.setAttribute('aria-hidden','true');
         const sheet = paper();
         printHost.append(sheet);
         document.body.append(printHost);
-        const scale = Math.min(0.94, 1030 / sheet.offsetHeight);
+        const scale = Math.min(0.94, format.height / sheet.offsetHeight);
         sheet.style.setProperty('--op-print-scale',String(scale));
         document.body.classList.add('op-printing');
         return printHost;
+    }
+
+    function openAI() {
+        const available = new Set(source.items.map(item => item.key));
+        const currentKeys = new Set(page.blocks.flatMap(b => b.type === 'table' ? b.indicators : [b.indicator]).filter(key => available.has(key)));
+        const draft = {
+            indicators:currentKeys.size <= aiIndicatorLimit ? [...currentKeys] : [], orientation:page.orientation,
+            start:page.start, end:page.end, accent:page.accent, version:source.version, busy:false,
+        };
+        aiDraft = draft;
+        const update = (key,value) => {
+            draft[key] = value;
+            $('opAiStatus').textContent = '';
+            syncAI(draft);
+        };
+        $('opAiFields').replaceChildren(
+            orientationField(draft.orientation,value => update('orientation',value)),
+            dateFields(draft,source.months.map(m => [m,competency(m).label]),['Primeira competência','Última competência'],update),
+            indicatorPicker(draft,{label:'Indicadores da OnePage',limit:aiIndicatorLimit,update:keys => update('indicators',keys)})
+        );
+        $('opAiStatus').textContent = '';
+        syncAI(draft);
+        $('opAiDialog').showModal();
+    }
+
+    function syncAI(draft) {
+        $('opAiFields').disabled = draft.busy;
+        $('opAiGenerate').disabled = draft.busy || !draft.indicators.length || !period({},draft).length;
+        $('opAiForm').setAttribute('aria-busy',String(draft.busy));
+    }
+
+    async function composeAI(event) {
+        event.preventDefault();
+        const draft = aiDraft, user = owner;
+        if (!draft || draft.busy || $('opAiGenerate').disabled) return;
+        const points = period({},draft);
+        const chosen = new Set(draft.indicators);
+        const selectedItems = source.items.filter(item => chosen.has(item.key));
+        if (draft.version !== source.version || selectedItems.length !== chosen.size) {
+            $('opAiStatus').textContent = 'Os dados disponíveis mudaram. Feche e reabra a montagem para refazer a seleção.';
+            return;
+        }
+        draft.busy = true;
+        syncAI(draft);
+        $('opAiStatus').textContent = 'Montando a página com a Groq…';
+        try {
+            const result = await requestDashboardEdge({
+                action:'onepage', orientation:draft.orientation, expectedUpdatedAt:draft.version,
+                selection:{type:'executivo', sector:'TODOS', ids:selectedItems.map(item => item.id),
+                    start:source.months[points[0].index], end:source.months[points.at(-1).index]},
+            });
+            if (aiDraft !== draft || owner !== user || currentSession?.user?.id !== user || !$('opAiDialog').open) return;
+            if (source.version !== draft.version || result.snapshotUpdatedAt !== draft.version) {
+                throw Error('Atualize os dados do Dashboard e abra novamente a montagem com IA.');
+            }
+            const keys = new Map(selectedItems.map(item => [item.id,item.key]));
+            const composition = result.composition;
+            if (!composition || typeof composition.title !== 'string' || typeof composition.subtitle !== 'string' ||
+                !Array.isArray(composition.blocks) || !composition.blocks.length || composition.blocks.some(b =>
+                    !b || !Object.hasOwn(types,b.type) || !Array.isArray(b.indicators) || b.indicators.some(id => !keys.has(id)))) {
+                throw Error('A composição retornada é incompatível com os indicadores selecionados.');
+            }
+            const blocks = composition.blocks.map(b => {
+                const refs = b.indicators.map(id => keys.get(id));
+                const isNote = b.type === 'text' || b.type === 'note';
+                return {...newBlock(b.type),width:b.width,title:b.title,text:isNote?b.text:'',
+                    note:isNote?'':b.text,indicator:b.type==='table'?'':refs[0]??'',indicators:b.type==='table'?refs:[],
+                    chart:b.chart,tone:b.tone,target:b.target,comparison:b.comparison,labels:b.labels};
+            });
+            $('opAiDialog').close();
+            selectPage({...newPage(),title:composition.title,subtitle:composition.subtitle,orientation:draft.orientation,
+                accent:draft.accent,start:draft.start,end:draft.end,blocks});
+            persist();
+            $('opPages').focus();
+            window.DGranelPresentation?.toast('OnePage criada com IA','Revise os blocos no editor antes de apresentar.');
+        } catch (error) {
+            if (aiDraft === draft && $('opAiDialog').open) $('opAiStatus').textContent = error.message;
+        } finally {
+            if (aiDraft === draft) {
+                draft.busy = false;
+                syncAI(draft);
+            }
+        }
     }
 
     function refresh() {
@@ -509,14 +620,15 @@
     }
 
     function reset() {
-        owner = page = selected = deleteId = null;
+        owner = page = selected = deleteId = aiDraft = null;
         source = blankSource;
         pages.clear();
         cancelAnimationFrame(frame);
         clearPrint();
         if ($('opPresentation')?.open) $('opPresentation').close();
         if ($('opConfirmDelete')?.open) $('opConfirmDelete').close();
-        for (const id of ['opPages','opSettings','opBlocks','opInspector','opPreview','opPresentationPage','opStatus']) $(id)?.replaceChildren();
+        if ($('opAiDialog')?.open) $('opAiDialog').close();
+        for (const id of ['opPages','opSettings','opBlocks','opInspector','opPreview','opPresentationPage','opStatus','opAiFields','opAiStatus']) $(id)?.replaceChildren();
     }
 
     window.OnePage = {refresh,reset};
@@ -555,6 +667,15 @@
         };
         $('opClose').onclick = () => $('opPresentation').close();
         $('opPresentation').addEventListener('close',() => $('opPresentationPage').replaceChildren());
+        $('opAiOpen').onclick = openAI;
+        $('opAiCancel').onclick = () => $('opAiDialog').close();
+        $('opAiForm').onsubmit = composeAI;
+        $('opAiDialog').addEventListener('close',() => {
+            if ($('opAiDialog').open) return;
+            aiDraft = null;
+            $('opAiFields').replaceChildren();
+            $('opAiStatus').textContent = '';
+        });
         $('opPrint').onclick = async () => {
             const host = preparePrint(), user = owner;
             const ready = Promise.allSettled([...host.querySelectorAll('img')].map(image => image.decode()));

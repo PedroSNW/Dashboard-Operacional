@@ -49,7 +49,7 @@ addEventListener('load',async()=>{
         window.__session=currentSession;
         document.body.classList.add('authenticated');
         confirmPersistedSnapshot(projectPersistedState(),smokeReport.snapshotUpdatedAt);
-        let fail=true,logoLoaded=false;const actions=[];
+        let fail=true,onepageFailure=true,logoLoaded=false;const actions=[];
         window.fetch=async(url,options)=>{
             if(String(url).includes('/rest/v1/audit_logs?'))return Response.json([]);
             if(url==='report-logo-dgranel.png'){
@@ -63,6 +63,22 @@ addEventListener('load',async()=>{
                 return Response.json({success:true,response:'<b>Resposta como texto</b>',evidence:['Resultado oficial do teste.'],coverage:{sent:3,selected:4}});
             }
             if(body.action==='preview')return Response.json({success:true,report:smokeReport});
+            if(body.action==='onepage'){
+                assert(Object.keys(body).length===4&&body.orientation==='landscape'&&body.expectedUpdatedAt===smokeReport.snapshotUpdatedAt,
+                    'A OnePage enviou dados ou recorte incompatíveis');
+                const ids=body.selection.ids;
+                assert(ids.length===2&&ids[0]===smokeReport.indicators[0].id&&ids[1]===smokeReport.indicators[1].id,'Seleção da OnePage com IA');
+                if(onepageFailure)return Response.json({success:false,error:'Montagem indisponível no teste'},{status:502});
+                const options={title:'',text:'',width:'full',chart:'line',tone:'neutral',target:false,comparison:false,labels:false};
+                return Response.json({success:true,snapshotUpdatedAt:smokeReport.snapshotUpdatedAt,composition:{
+                    title:'OnePage da reunião',subtitle:'Indicadores escolhidos',blocks:[
+                        {...options,type:'kpi',width:'half',indicators:[ids[0]],comparison:true},
+                        {...options,type:'note',title:'Pauta',text:'Revisar a evolução na próxima reunião.',width:'half',indicators:[]},
+                        {...options,type:'chart',indicators:[ids[1]],chart:'bar',target:true},
+                        {...options,type:'table',indicators:ids},
+                    ],
+                }});
+            }
             assert(body.expectedReportBasis===smokeReport.basis,'Snapshot não vinculado');
             const identity={success:true,reportBasis:smokeReport.basis,snapshotUpdatedAt:smokeReport.snapshotUpdatedAt};
             if(body.action==='generate')return fail?Response.json({success:false,error:'Falha simulada'},{status:502})
@@ -135,6 +151,7 @@ addEventListener('load',async()=>{
         const add=label=>[...node('opAdd').querySelectorAll('button')].find(item=>item.textContent==='+ '+label).click();
         const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
         edit('opSettings','Título','Dados da operação');
+        edit('opSettings','Orientação','landscape');
         add('Indicador');
         const indicators=()=>[...node('opInspector').querySelectorAll('select')].find(item=>item.options[0].textContent==='Selecione o indicador');
         edit('opInspector','Indicador',indicators().options[1].value);
@@ -156,6 +173,7 @@ addEventListener('load',async()=>{
         await tick();
         const preview=node('opPreview');
         assert(preview.querySelectorAll('.op-card').length===5&&preview.textContent.includes('Conferir na reunião.'),'Balão em indicador ou blocos ausentes');
+        assert(preview.querySelector('.op-paper').dataset.orientation==='landscape','Prévia horizontal');
         assert(preview.querySelectorAll('.op-card')[2].dataset.tone==='attention','Ordem ou estilo do balão');
         assert(preview.querySelector('.op-data-table tbody tr')&&preview.querySelector('.op-kpi-value').textContent===fmtVal(smokeReport.indicators[0].valores.at(-1)),'Tabela ou valor da competência');
         if(typeof Chart.version==='string')assert(preview.querySelector('.op-chart-image')?.src.startsWith('data:image/png'),'Gráfico OnePage não renderizado');
@@ -166,14 +184,15 @@ addEventListener('load',async()=>{
         assert(preview.querySelector('.op-kpi-value').textContent===fmtVal(smokeReport.indicators[0].valores.at(-1)),'A OnePage usou valores ainda não sincronizados');
         currentData[0].valores=draftValues;
         node('opPresent').click();
-        assert(node('opPresentation').open&&node('opPresentationPage').textContent.includes('Dados da operação')&&!node('opPresentationPage').querySelector('button'),'Modo de apresentação');
+        assert(node('opPresentation').open&&node('opPresentationPage').querySelector('.op-paper').dataset.orientation==='landscape'&&
+            node('opPresentationPage').textContent.includes('Dados da operação')&&!node('opPresentationPage').querySelector('button'),'Modo de apresentação horizontal');
         node('opClose').click();
         let printed=false;
         const print=window.print;
         window.print=()=>{
             const host=node('opPrintHost');
-            printed=Boolean(host?.querySelectorAll('.op-card').length===5&&host.textContent.includes('Dados da operação'));
-            if(location.hash!=='#onepage-print')dispatchEvent(new Event('afterprint'));
+            printed=Boolean(host?.dataset.orientation==='landscape'&&host.querySelectorAll('.op-card').length===5&&host.textContent.includes('Dados da operação'));
+            dispatchEvent(new Event('afterprint'));
         };
         await node('opPrint').onclick();
         window.print=print;
@@ -203,10 +222,32 @@ addEventListener('load',async()=>{
         currentSession=viewer;
         OnePage.reset();
         OnePage.refresh();
+        assert(node('opSettings').querySelector('select').value==='landscape','Orientação horizontal não persistiu');
+        node('opAiOpen').click();
+        const aiDialog=node('opAiDialog'),aiForm=node('opAiForm'),aiChecks=node('opAiFields').querySelectorAll('.op-indicator-list input');
+        assert(aiDialog.open&&aiChecks[0].checked&&!aiChecks[1].checked,'Seleção inicial do assistente');
+        aiChecks[1].click();
+        await aiForm.onsubmit(new Event('submit'));
+        assert(aiDialog.open&&node('opAiStatus').textContent.includes('indisponível')&&node('opPages').value===originalId,
+            'Falha da IA alterou a página manual');
+        onepageFailure=false;
+        await aiForm.onsubmit(new Event('submit'));
+        await tick();
+        assert(!aiDialog.open&&node('opPages').value!==originalId&&[...node('opPages').options].some(o=>o.value===originalId)&&
+            preview.querySelectorAll('.op-card').length===4&&preview.textContent.includes('Revisar a evolução')&&
+            preview.querySelector('.op-paper').dataset.orientation==='landscape','Composição da IA não criou página editável separada');
+        edit('opInspector','Título do bloco','Resultado para a reunião');
+        await tick();
+        assert(preview.textContent.includes('Resultado para a reunião'),'Bloco gerado pela IA não editável');
         await tick();
         assert(document.documentElement.scrollWidth<=innerWidth+2,'Rolagem horizontal na OnePage');
-        if(location.hash==='#onepage-print'||location.hash==='#onepage-preview'){
-            if(location.hash==='#onepage-print'){
+        if(location.hash.startsWith('#onepage-print')||location.hash==='#onepage-preview'){
+            if(location.hash.startsWith('#onepage-print')){
+                if(location.hash==='#onepage-print'){
+                    node('opPages').value=originalId;
+                    node('opPages').dispatchEvent(new Event('change'));
+                    edit('opSettings','Orientação','portrait');
+                }
                 window.print=()=>{};
                 await node('opPrint').onclick();
                 window.print=print;
