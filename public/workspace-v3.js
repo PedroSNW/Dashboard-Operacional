@@ -10,6 +10,7 @@
     paths.search='M15.5 15.5 21 21M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0';
     paths.attention='M3 6l6 6 4-4 7 8m-6 0h6v-6';
     paths.menu='M3 5h18v14H3zM9 5v14';
+    paths.chevronUp='m6 15 6-6 6 6';
     paths.onepage='M5 3h14v18H5zM8 7h8M8 11h3v6H8zM14 11h2m-2 3h2m-2 3h2';
     function icon(node,name){if(!node)return;node.innerHTML=`<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name]}"></path></svg>`;}
     let sidebar,header,main,toggle,lastFocus,drawer=false;
@@ -70,7 +71,7 @@
         Object.values(Chart.instances || {}).forEach(chart => chart.update('none'));
     });
     function closeDrawer(){drawer=false;document.body.classList.remove('v3-drawer-open');if(main)main.inert=false;if(header)header.inert=false;sidebar?.removeAttribute('aria-modal');sidebar?.removeAttribute('role');toggle?.setAttribute('aria-expanded',String(!mobile()&&!document.body.classList.contains('v3-sidebar-collapsed')));if(mobile())sidebar.inert=true;lastFocus?.focus();}
-    function menu(){
+    function menu(syncSettingsPanel){
         if(mobile()){
             lastFocus=toggle;drawer=true;sidebar.inert=false;
             sidebar.setAttribute('role','dialog');sidebar.setAttribute('aria-modal','true');
@@ -80,6 +81,7 @@
         }
         const collapsed=document.body.classList.toggle('v3-sidebar-collapsed');
         toggle.setAttribute('aria-expanded',String(!collapsed));
+        syncSettingsPanel();
         const transition=document.body.getAnimations().find(animation=>animation.transitionProperty==='--workspace-sidebar-width');
         if(transition)transition.finished.then(resizeCharts,()=>{});
         else resizeCharts();
@@ -238,25 +240,36 @@
         settingsSummary.querySelector('span').textContent='Configurações';
         const gear=settingsSummary.querySelector('i');gear.className='fa-solid fa-gear';
         gear.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m9 3-.5 2-2 1.2-2-.5-2 3.5L4 10.7v2.6l-1.5 1.5 2 3.5 2-.5 2 1.2.5 2h4l.5-2 2-1.2 2 .5 2-3.5-1.5-1.5v-2.6L20 9.2l-2-3.5-2 .5L14 5l-.5-2Z"/><circle cx="11.5" cy="12" r="3"/></svg>';
+        const chevron = settingsSummary.querySelector('.fa-chevron-down');
+        chevron.className = 'v3-settings-chevron';
+        icon(chevron, 'chevronUp');
         settingsPanel.classList.add('v3-settings-panel');settingsPanel.id='v3SettingsPanel';settingsSummary.setAttribute('aria-controls',settingsPanel.id);
         const footer=element('footer','','v3-sidebar-footer');footer.append(settings);sidebar.append(footer);
-        // O recorte da sidebar recolhida cortaria o submenu. Move só o painel
-        // aberto para fora do recorte e o devolve ao mesmo details ao fechar.
-        const restoreSettingsPanel=()=>{settings.append(settingsPanel);settingsPanel.classList.remove('v3-settings-floating');settingsPanel.style.removeProperty('left');settingsPanel.style.removeProperty('bottom');settingsPanel.style.removeProperty('max-height');};
-        settings.addEventListener('toggle',()=>{
-            settingsSummary.setAttribute('aria-expanded',String(settings.open));
-            if(settings.open&&!mobile()&&document.body.classList.contains('v3-sidebar-collapsed')){
-                const rect=settingsSummary.getBoundingClientRect();document.body.append(settingsPanel);settingsPanel.classList.add('v3-settings-floating');
-                settingsPanel.style.left='calc(var(--workspace-sidebar-width) + 12px)';settingsPanel.style.bottom=`${Math.max(12,innerHeight-rect.bottom)}px`;settingsPanel.style.maxHeight=`${Math.max(120,innerHeight-32)}px`;
-                settingsPanel.querySelector('button')?.focus();
-            }else restoreSettingsPanel();
-        });
+        function syncSettingsPanel(focusPanel = false) {
+            settingsSummary.setAttribute('aria-expanded', String(settings.open));
+            const floating = settings.open && !mobile() && document.body.classList.contains('v3-sidebar-collapsed');
+            if (floating === settingsPanel.classList.contains('v3-settings-floating')) return;
+
+            const active = settingsPanel.contains(document.activeElement) ? document.activeElement : null;
+            settingsPanel.classList.toggle('v3-settings-floating', floating);
+            if (floating) {
+                const { bottom } = settingsSummary.getBoundingClientRect();
+                settingsPanel.style.bottom = `${Math.max(12, innerHeight - bottom)}px`;
+                document.body.append(settingsPanel);
+            } else {
+                settingsPanel.style.removeProperty('bottom');
+                settings.append(settingsPanel);
+            }
+            if (settings.open) (active ?? (focusPanel && floating ? settingsPanel.querySelector('button') : null))?.focus({ preventScroll: true });
+        }
+        syncSettingsPanel();
+        settings.addEventListener('toggle', () => syncSettingsPanel(true));
         const settingsEscape=e=>{if(e.key==='Escape'&&settings.open){e.preventDefault();e.stopPropagation();settings.open=false;settingsSummary.focus();}};
         settings.addEventListener('keydown',settingsEscape);settingsPanel.addEventListener('keydown',settingsEscape);
-        const closeSettings=()=>{if(settings.open){settings.open=false;restoreSettingsPanel();}};
+        const closeSettings=()=>{if(settings.open){settings.open=false;syncSettingsPanel();}};
         window.addEventListener('resize',closeSettings);
-        new MutationObserver(()=>{if(!document.body.classList.contains('authenticated')||(mobile()&&!drawer)||settingsPanel.classList.contains('v3-settings-floating')&&!document.body.classList.contains('v3-sidebar-collapsed'))closeSettings();}).observe(document.body,{attributes:true,attributeFilter:['class']});
-        toggle=element('button','','v3-menu-toggle');icon(toggle,'menu');toggle.id='v3MenuToggle';toggle.setAttribute('aria-label','Expandir ou recolher navegação');toggle.setAttribute('aria-controls','v3Sidebar');toggle.setAttribute('aria-expanded','true');toggle.onclick=menu;
+        new MutationObserver(()=>{if(!document.body.classList.contains('authenticated')||(mobile()&&!drawer))closeSettings();}).observe(document.body,{attributes:true,attributeFilter:['class']});
+        toggle=element('button','','v3-menu-toggle');icon(toggle,'menu');toggle.id='v3MenuToggle';toggle.setAttribute('aria-label','Expandir ou recolher navegação');toggle.setAttribute('aria-controls','v3Sidebar');toggle.setAttribute('aria-expanded','true');toggle.onclick=()=>menu(syncSettingsPanel);
         const titles=element('div','','v3-page-title');const breadcrumb=element('small','Segurança viária');breadcrumb.id='v3Breadcrumb';const title=element('h1','Visão geral');title.id='v3Title';title.tabIndex=-1;titles.append(breadcrumb,title);
         const sync=element('span','Aguardando dados','v3-sync');sync.id='v3Sync';sync.setAttribute('role','status');
         header.className='v3-topbar';header.replaceChildren(toggle,titles,sync,actions);document.body.prepend(sidebar);
